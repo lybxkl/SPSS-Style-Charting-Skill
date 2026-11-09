@@ -2,7 +2,7 @@
 
 ## 数据
 
-- [ ] `data/coded.jsonl`：逐份文书编码 + 证据
+- [ ] `data/coded.jsonl`：逐份资料编码 + 证据
 - [ ] `data/analysis.csv`：分析宽表
 - [ ] `data/analysis.sav`：SPSS 数据
 - [ ] `data/codebook.md`：编码手册

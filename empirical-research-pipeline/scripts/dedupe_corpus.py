@@ -7,7 +7,7 @@ script turns that into a reviewable plan, then moves duplicates into
 `<root>/_duplicates/` without deleting them.
 
 Usage:
-    python dedupe_corpus.py --audit output/audit/corpus_audit.csv --root "语料目录" --out-dir output/audit
+    python dedupe_corpus.py --audit output/audit/corpus_audit.csv --root "资料目录" --out-dir output/audit
     python dedupe_corpus.py ... --apply
 """
 from __future__ import annotations

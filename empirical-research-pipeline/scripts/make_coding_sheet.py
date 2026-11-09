@@ -1,14 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Extract full text and candidate evidence from PDFs into a coding worksheet.
+"""Extract text and candidate evidence from research materials into a coding worksheet.
 
-This script does NOT assign final legal codes. It produces one JSONL record per
-document with the text, metadata, and keyword-hit sentences so a human or an
-LLM can code against the codebook with traceable evidence.
+This script does NOT assign final codes. It produces one JSONL record per
+document with the extracted text, basic metadata, and keyword-hit sentences so a
+human or an LLM can code against the codebook with traceable evidence.
+
+Profiles:
+  generic (default) — any text-bearing material: PDF, DOCX, ODT, PPTX, HTML,
+                      TXT/MD/RTF and similar. No legal fields are assumed.
+  legal             — additionally extract court, docket number, province and
+                      case-type candidates from Chinese judgment-style text.
+
+Tabular files (CSV/TSV/JSON/XLSX) are skipped here; use auto_stats.py /
+csv_to_spss_syntax.py for those. Images and audio/video must be OCR'd or
+transcribed first.
 
 Usage:
-    python make_coding_sheet.py --root "语料目录" --out "output/coding" \\
+    python make_coding_sheet.py --root "资料目录" --out "output/coding" \\
         --keywords assets/coding-keywords.json
+    python make_coding_sheet.py --root "裁判文书目录" --out "output/coding" --profile legal
 """
 from __future__ import annotations
 
@@ -20,10 +31,10 @@ import re
 import sys
 from datetime import datetime
 
-try:
-    import fitz  # PyMuPDF
-except ImportError:  # pragma: no cover
-    fitz = None
+from text_extract import (
+    ARCHIVE_EXTS, IMAGE_EXTS, LEGACY_OFFICE_EXTS, MEDIA_EXTS,
+    STRUCTURED_EXTS, SUPPORTED_EXTS, TEXTUAL_EXTS, extract_text, ext_of, kind_of,
+)
 
 CASE_NO_RE = re.compile(
     r"[（(]\s*(?:19|20)\d{2}\s*[）)]\s*[\u4e00-\u9fa5A-Za-z0-9*＊×\s]{0,30}?"
@@ -45,41 +56,22 @@ PROVINCE_FULL_TO_SHORT = {
     "香港特别行政区": "香港", "澳门特别行政区": "澳门",
 }
 OWN_CASE_RE = re.compile(r"(?:本院|我院|本案)[^\n。]{0,40}?" + CASE_NO_RE.pattern)
-SENT_SPLIT_RE = re.compile(r"[。；;]")
+SENT_SPLIT_RE = re.compile(r"(?<=[。；;！？!?])|(?<=[.!?])\s+|\n+")
 
-
-def win_path(path: str) -> str:
-    path = os.path.abspath(path)
-    if os.name == "nt" and len(path) > 240 and not path.startswith("\\\\?\\"):
-        return "\\\\?\\" + path
-    return path
-
-
-def extract_text(path: str) -> str:
-    doc = fitz.open(win_path(path))
-    try:
-        return "\n".join(page.get_text("text") for page in doc)
-    finally:
-        doc.close()
+DOC_EXTS = TEXTUAL_EXTS - STRUCTURED_EXTS
 
 
 def sentences(text: str) -> list[str]:
     out = []
     for part in SENT_SPLIT_RE.split(text):
-        part = re.sub(r"\s+", " ", part).strip()
+        part = re.sub(r"\s+", " ", part or "").strip()
         if part:
             out.append(part)
     return out
 
 
 def detect_doc_type(text: str, name: str = "") -> str:
-    """Classify by title/filename first, then by dispositive language.
-
-    Evidence lists routinely mention 《扣押决定书》 or 《行政处罚决定书》, so a
-    title marker is only trusted in the first ~150 characters (or the filename).
-    A judgment can quote "裁定如下" and a ruling can quote "判决如下", so the
-    title still wins over dispositive language.
-    """
+    """Legal profile: classify by title/filename, then dispositive language."""
     title = text[:150]
     for marker, doc_type in (
         ("调解协议", "mediation"),
@@ -102,7 +94,6 @@ def detect_doc_type(text: str, name: str = "") -> str:
 
 
 def find_case_no(text: str, name: str) -> str:
-    """Prefer the docket in the filename, then the court's own docket."""
     m = CASE_NO_RE.search(name)
     if m:
         return m.group(0)
@@ -137,11 +128,11 @@ def infer_province(parts: list[str], court: str, name: str) -> str:
     return normalize_province(court) or normalize_province(name)
 
 
-def detect_crimes(text: str, name: str, crime_map: dict) -> list[str]:
+def detect_categories(text: str, name: str, category_map: dict) -> list[str]:
     """Filename hits win; text hits are only a fallback. Candidates, not codes."""
     def hits_in(source: str):
         found = []
-        for canon, variants in (crime_map or {}).items():
+        for canon, variants in (category_map or {}).items():
             if not isinstance(variants, list):
                 continue
             for variant in variants:
@@ -166,11 +157,19 @@ def detect_crimes(text: str, name: str, crime_map: dict) -> list[str]:
     return out
 
 
+def category_map_from(keywords: dict) -> dict:
+    for key in ("category", "crime", "categories"):
+        value = keywords.get(key)
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
 def find_signals(text: str, keywords: dict, limit_per_term: int = 3) -> dict:
     sents = sentences(text)
     signals = {}
     for category, terms in keywords.items():
-        if category == "crime" or not isinstance(terms, list):
+        if category.startswith("_") or not isinstance(terms, list):
             continue
         hits = []
         for term in terms:
@@ -201,22 +200,31 @@ def read_valid_paths(audit: str | None, dedupe_plan: str | None) -> tuple[set[st
     return keep, removed
 
 
+def first_title(text: str, name: str) -> str:
+    for line in (text or "").splitlines():
+        line = re.sub(r"\s+", " ", line).strip()
+        if len(line) >= 2:
+            return line[:120]
+    return os.path.splitext(name)[0][:120]
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build a coding worksheet from PDFs.")
+    parser = argparse.ArgumentParser(description="Build a coding worksheet from research materials.")
     parser.add_argument("--root", required=True)
     parser.add_argument("--out", default="output/coding")
     parser.add_argument("--keywords", default=None, help="JSON keyword dictionary")
     parser.add_argument("--audit", default=None, help="corpus_audit.csv (use valid rows)")
     parser.add_argument("--dedupe-plan", default=None, help="dedupe_plan.csv (skip moved rows)")
+    parser.add_argument("--profile", choices=["generic", "legal"], default="generic",
+                        help="generic = any text material; legal = also extract court/docket fields")
+    parser.add_argument("--doc-type", choices=["judgment", "all"], default="all",
+                        help="legal profile only: filter judgment/ruling/mediation/decision")
+    parser.add_argument("--ext", action="append", default=None,
+                        help="extension(s) to extract; default: all document-like text types")
     parser.add_argument("--min-chars", type=int, default=100)
     parser.add_argument("--max-files", type=int, default=0)
-    parser.add_argument("--doc-type", choices=["judgment", "all"], default="judgment",
-                        help="judgment = only 判决书/裁定书/调解书/决定书; all = keep every readable PDF")
     args = parser.parse_args()
 
-    if fitz is None:
-        print("ERROR: PyMuPDF not installed. Run: pip install pymupdf", file=sys.stderr)
-        return 2
     root = os.path.abspath(args.root)
     if not os.path.isdir(root):
         print(f"ERROR: root not found: {root}", file=sys.stderr)
@@ -226,6 +234,13 @@ def main() -> int:
         if path and not os.path.isfile(path):
             print(f"ERROR: {label} file not found: {path}", file=sys.stderr)
             return 2
+    requested = {e.lower().lstrip(".") for e in args.ext} if args.ext else None
+    if requested:
+        unknown = requested - SUPPORTED_EXTS
+        if unknown:
+            print(f"ERROR: unsupported extension(s): {', '.join(sorted(unknown))}", file=sys.stderr)
+            return 2
+    exts = requested
     out_dir = os.path.abspath(args.out)
     os.makedirs(out_dir, exist_ok=True)
     keywords = {}
@@ -233,6 +248,7 @@ def main() -> int:
         with open(args.keywords, encoding="utf-8") as fh:
             keywords = json.load(fh)
         keywords.pop("_note", None)
+    cat_map = category_map_from(keywords)
     keep_paths, removed_paths = read_valid_paths(args.audit, args.dedupe_plan)
 
     jsonl_path = os.path.join(out_dir, "coding_sheet.jsonl")
@@ -241,16 +257,22 @@ def main() -> int:
     skipped = []
     total = 0
     stop = False
+
+    def skip(rel: str, name: str, doc_type: str, chars: int, reason: str) -> None:
+        skipped.append({"relpath": rel, "file": name, "doc_type": doc_type,
+                        "chars": chars, "reason": reason})
+
     with open(jsonl_path, "w", encoding="utf-8") as out_jsonl:
         for dirpath, dirnames, filenames in os.walk(root):
             if stop:
                 break
             dirnames[:] = [d for d in dirnames if d != "_duplicates" and not d.startswith(".")]
             for name in filenames:
-                if not name.lower().endswith(".pdf") or name.startswith("._"):
+                if name.startswith("._") or name == ".DS_Store":
                     continue
                 path = os.path.join(dirpath, name)
                 rel = os.path.relpath(path, root)
+                ext = ext_of(path)
                 if keep_paths is not None and rel not in keep_paths:
                     continue
                 if rel in removed_paths:
@@ -258,47 +280,77 @@ def main() -> int:
                 if args.max_files and total >= args.max_files:
                     stop = True
                     break
+                if exts is not None and ext not in exts:
+                    skip(rel, name, ext, 0, "extension not requested; use --ext to include it")
+                    continue
+                if ext not in SUPPORTED_EXTS:
+                    skip(rel, name, ext, 0, "unsupported extension; convert or extract first")
+                    continue
                 if os.path.getsize(path) == 0:
-                    skipped.append({"relpath": rel, "file": name, "doc_type": "",
-                                    "han_chars": 0, "reason": "zero-byte file"})
+                    skip(rel, name, "", 0, "zero-byte file")
+                    continue
+                kind = kind_of(path)
+                if ext in STRUCTURED_EXTS or kind == "spreadsheet":
+                    skip(rel, name, kind, 0, "tabular/structured data; use auto_stats or CSV pipeline")
+                    continue
+                if kind == "image":
+                    skip(rel, name, kind, 0, "image_only; run OCR first")
+                    continue
+                if kind == "media":
+                    skip(rel, name, kind, 0, "audio/video; transcribe first")
+                    continue
+                if kind in {"archive", "legacy_office", "unknown"}:
+                    skip(rel, name, kind, 0, "unsupported format; convert or extract first")
                     continue
                 try:
                     text = extract_text(path)
                 except Exception as exc:
                     print(f"WARN: cannot read {rel}: {exc}", file=sys.stderr)
-                    skipped.append({"relpath": rel, "file": name, "doc_type": "unreadable",
-                                    "han_chars": 0, "reason": f"unreadable: {exc}"})
+                    skip(rel, name, "unreadable", 0, f"unreadable: {exc}")
                     continue
+                chars = len(text.strip())
                 han = len(re.findall(r"[\u4e00-\u9fa5]", text))
-                if han < args.min_chars:
-                    skipped.append({"relpath": rel, "file": name, "doc_type": "",
-                                    "han_chars": han,
-                                    "reason": f"below --min-chars ({han} < {args.min_chars})"})
+                if chars < args.min_chars:
+                    skip(rel, name, kind, chars,
+                         f"below --min-chars ({chars} < {args.min_chars})")
                     continue
-                doc_type = detect_doc_type(text, name)
-                if args.doc_type == "judgment" and doc_type == "other":
-                    skipped.append({"relpath": rel, "file": name, "doc_type": doc_type,
-                                    "han_chars": han, "reason": "not a judgment/ruling/mediation/decision"})
-                    continue
-                parts = rel.split(os.sep)
-                court_match = COURT_RE.search(name) or COURT_RE.search(text[:2000])
-                court = court_match.group(1) if court_match else ""
-                province = infer_province(parts, court, name)
-                case_no = find_case_no(text, name)
-                year_match = (YEAR_RE.search(case_no) or YEAR_RE.search(name)
-                              or YEAR_RE.search(text[:500]))
+
+                if args.profile == "legal":
+                    doc_type = detect_doc_type(text, name)
+                    if args.doc_type == "judgment" and doc_type == "other":
+                        skip(rel, name, doc_type, chars,
+                             "not a judgment/ruling/mediation/decision")
+                        continue
+                    parts = rel.split(os.sep)
+                    court_match = COURT_RE.search(name) or COURT_RE.search(text[:2000])
+                    court = court_match.group(1) if court_match else ""
+                    province = infer_province(parts, court, name)
+                    case_no = find_case_no(text, name)
+                    year_match = (YEAR_RE.search(case_no) or YEAR_RE.search(name)
+                                  or YEAR_RE.search(text[:500]))
+                else:
+                    doc_type = kind or ext
+                    court = province = case_no = ""
+                    year_match = YEAR_RE.search(name) or YEAR_RE.search(text[:500])
+
                 signals = find_signals(text, keywords) if keywords else {}
-                crime_candidates = detect_crimes(text, name, keywords.get("crime", {})) if keywords else []
+                categories = detect_categories(text, name, cat_map) if cat_map else []
+                title = first_title(text, name)
                 rec = {
+                    "profile": args.profile,
                     "file": name,
                     "relpath": rel,
+                    "source_type": ext or kind,
+                    "doc_type": doc_type,
+                    "title": title,
                     "province": province,
                     "year": int(year_match.group(0)) if year_match else None,
                     "case_no": case_no,
                     "court": court,
-                    "doc_type": doc_type,
+                    "chars": chars,
                     "han_chars": han,
-                    "crime_candidates": crime_candidates,
+                    "category_candidates": categories,
+                    "crime_candidates": categories if args.profile == "legal" else [],
                     "text": text,
                     "signals": signals,
                     "codes": {},
@@ -306,10 +358,12 @@ def main() -> int:
                 }
                 out_jsonl.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 rows.append({
-                    "file": name, "relpath": rel, "province": province,
-                    "year": rec["year"], "case_no": case_no, "court": court,
-                    "doc_type": doc_type, "han_chars": han,
-                    "crime_candidates": ",".join(crime_candidates),
+                    "file": name, "relpath": rel, "source_type": ext or kind,
+                    "doc_type": doc_type, "title": title, "year": rec["year"],
+                    "province": province, "case_no": case_no, "court": court,
+                    "chars": chars, "han_chars": han,
+                    "category_candidates": ",".join(categories),
+                    "crime_candidates": ",".join(categories) if args.profile == "legal" else "",
                     "signal_categories": ",".join(sorted(signals.keys())),
                     "signal_hits": sum(len(v) for v in signals.values()),
                 })
@@ -318,15 +372,17 @@ def main() -> int:
                     print(f"  extracted {total} ...", flush=True)
 
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as fh:
-        fields = ["file", "relpath", "province", "year", "case_no", "court", "doc_type",
-                  "han_chars", "crime_candidates", "signal_categories", "signal_hits"]
+        fields = ["file", "relpath", "source_type", "doc_type", "title", "year",
+                  "province", "case_no", "court", "chars", "han_chars",
+                  "category_candidates", "crime_candidates",
+                  "signal_categories", "signal_hits"]
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
     skipped_path = os.path.join(out_dir, "skipped_documents.csv")
     with open(skipped_path, "w", newline="", encoding="utf-8-sig") as fh:
-        fields = ["relpath", "file", "doc_type", "han_chars", "reason"]
+        fields = ["relpath", "file", "doc_type", "chars", "reason"]
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(skipped)

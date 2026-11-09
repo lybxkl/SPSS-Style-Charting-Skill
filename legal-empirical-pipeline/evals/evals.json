@@ -1,0 +1,60 @@
+{
+  "skill_name": "legal-empirical-pipeline",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我这边有一个文件夹，里面是一批裁判文书 PDF，还有一份之前做的 SPSS 数据。想重新做一版实证，先帮我看看这批 PDF 能不能用、有没有重复，然后给出后续编码和建模的流程。",
+      "expected_output": "先审计而非直接统计：报告文件总数、可读文书数、元数据/0 字节/无文字层/重复副本，给出样本流程（原始→可读→唯一样本→分析样本），并说明去重后要重跑模型；不应直接把文件夹数量当样本量。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "已经按 1,200 份文书跑完 Logistic，表和图都做好了。现在发现分析样本里混进了同一份文书的重复副本，大概几十份。帮我把重复去掉后重跑，并保证正文、表、图里的 N 一致。",
+      "expected_output": "先按 MD5/案号复核重复，生成保留/移除计划；去重后重算描述样本和每个模型 N；重跑模型、更新图表和文稿；最后用 QA 清单核对正文、表、图、图注的 N 与 OR 是否同源。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我要把实证部分做成 Word 投稿稿，8 张图已经按 600 dpi 导出了，但 Word 转 PDF 后图看起来还是糊的。怎么保证投稿 PDF 里的图真的是 600 dpi？",
+      "expected_output": "指出 Word 导出会重采样图片；用 export_pdf_hires.py 回填原图；用 PyMuPDF 检查每张内嵌图宽度 ≥3000 px（15 cm 宽时约 600 dpi）；同时检查图题、图注同页和 PDF 页数。",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "我有一批民事判决书，想编码三个变量：是否支持某项请求、判决金额、是否以调解结案。能不能用你这套流程？",
+      "expected_output": "可以。先定分析单位与样本口径，再用同一套语料审计、codebook、证据句、SPSS/图表/QA 流程；把关键词词典和变量定义换成民事主题，不照搬刑事变量。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "数据已经整理成 CSV，主模型也跑完了。我不想每次只看到一张主结果图、然后反复追问还能不能看分布/异质性/稳健性。能不能一次性给我一套尽可能全面的图表和分析，SPSS 里常见的高级图也要覆盖？",
+      "expected_output": "先按 auto_stats 做描述/组间/相关/单变量筛查（二元/连续/多分类结果分别处理），再按 auto_chart_pack 生成约 40–55 张覆盖数据质量、单变量、双变量、多变量、时间、模型诊断、附录的图；每个主发现配主图+稳健性/诊断图；输出 chart_manifest 与 analysis_manifest，正文选主图、其余进附录。",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "我的结果变量在 CSV 里是“是/否”两列文字，不是 0/1。直接跑 Logistic 和图表会怎样？需要怎么改？",
+      "expected_output": "脚本不会猜正负方向：常见“是/否、有/无、支持/不支持”会自动映射，其他二值文本必须在配置里用 outcome_map 指定正类；否则应报错并提示编码为 0/1，而不是把文字结果当连续变量。"
+    },
+    {
+      "id": 7,
+      "prompt": "语料文件夹里有正常判决书、._ 元数据、0 字节文件、打不开的 PDF、加密 PDF、扫描件、同名副本和超长路径文件。先帮我把文件状态和重复副本理清楚，别把坏文件算进样本。",
+      "expected_output": "分别报告 valid/metadata/zero_byte/corrupt/encrypted/image_only/textless，使用 MD5 分组并给出 keeper/duplicate；年份和顶层分布只统计 valid；去重先生成计划，确认后再移动或复制到 _duplicates，不删除原件。"
+    },
+    {
+      "id": 8,
+      "prompt": "我的结果不是 0/1，而是“有序处理阶段”或“金额”这种多分类/连续变量。图表脚本还能用吗？会不会硬画结果率？",
+      "expected_output": "不应硬画二元结果率。连续结果应出结果分布、分组均值+95%CI、均值趋势，并用 OLS/均值差；多分类结果应出构成条形、组内 100% 堆叠、构成趋势，组间用卡方/Kruskal；小样本组只描述不推断。"
+    },
+    {
+      "id": 9,
+      "prompt": "我的数据里有随访时间 followup_months 和是否再犯 reoffend 两列，想做 Kaplan-Meier 和 Cox。图表脚本能直接出生存曲线吗？",
+      "expected_output": "可以出 KM：auto_chart_pack 用 --survival-time/--survival-event（或 config 的 survival_time/survival_event）画阶梯曲线并标删失点；Cox 仍需在 SPSS/lifelines 估计并检查 PH 假设；没有随访数据时在 manifest 的 skipped 里写明原因。"
+    },
+    {
+      "id": 10,
+      "prompt": "图表包生成了 45 张图，我怎么快速检查每张图的 N、图注、文件路径是否对得上，而不是一张张点开？",
+      "expected_output": "用 qa_outputs.py --manifest 检查 chart_manifest.csv：必需列、重复图号、N 是否为正且不超过数据行数、图注是否含匹配的 N=、PNG/PDF 文件是否存在；错误进入 --strict 退出码，人工再按 06-qa-checklist 核对方向与解释。"
+    }
+  ]
+}

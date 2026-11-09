@@ -1,0 +1,98 @@
+{
+  "_note": "复制本文件，按项目替换列名。示例列名与数值均为占位，不对应任何真实数据。filter 为空/省略时，如果存在 in_analysis 列，默认只用 in_analysis=1。文本结果为“是/否”时加 outcome_map（如 {\"是\":1,\"否\":0}）；term_labels 用于把 lv3 等模型项名映射成中文；有随访数据时加 survival_time/survival_event（可选 survival_group），或改用命令行 --survival-time/--survival-event/--survival-group。",
+  "id": "id",
+  "time": "year",
+  "group": "category",
+  "treatment": "stage",
+  "outcome": "outcome_binary",
+  "region": "region",
+  "trial": "instance_level",
+  "filter": {
+    "in_analysis": 1
+  },
+  "filter_query": "in_analysis == 1 and stage > 0",
+  "numeric": [
+    "text_length",
+    "amount_max",
+    "amount_min",
+    "amount"
+  ],
+  "categorical": [
+    "category",
+    "region",
+    "province",
+    "instance_level",
+    "stage"
+  ],
+  "binary": [
+    "outcome_binary",
+    "control_1",
+    "control_2",
+    "control_3",
+    "control_4",
+    "control_5",
+    "control_6"
+  ],
+  "drop": [
+    "file",
+    "category_en",
+    "stage_label",
+    "year_c"
+  ],
+  "dumbbell": [
+    "control_1",
+    "control_2"
+  ],
+  "variable_labels": {
+    "text_length": "正文汉字数",
+    "amount_max": "金额上限",
+    "amount_min": "金额下限",
+    "amount": "金额",
+    "outcome_binary": "二元结果",
+    "control_1": "程序性控制 1",
+    "control_2": "程序性控制 2",
+    "control_3": "程序性控制 3",
+    "control_4": "实体性控制 1",
+    "control_5": "实体性控制 2",
+    "control_6": "实体性控制 3",
+    "stage": "处理阶段",
+    "category": "类别",
+    "region": "地区",
+    "province": "省份",
+    "instance_level": "审级",
+    "moderator": "调节变量"
+  },
+  "value_labels": {
+    "stage": {
+      "0": "未识别",
+      "1": "仅请求/判令",
+      "2": "承诺/协议",
+      "3": "已支付/缴纳",
+      "4": "已实施",
+      "5": "已确认"
+    },
+    "instance_level": {
+      "1": "一审",
+      "2": "二审",
+      "3": "再审"
+    }
+  },
+  "term_labels": {
+    "lv3": "阶段：已支付/缴纳",
+    "lv4": "阶段：已实施",
+    "lv5": "阶段：已确认",
+    "mod2": "调节变量：中",
+    "mod3": "调节变量：高",
+    "lv3_mod2": "阶段3×调节中",
+    "lv3_mod3": "阶段3×调节高",
+    "lv4_mod2": "阶段4×调节中",
+    "lv4_mod3": "阶段4×调节高",
+    "year": "年份",
+    "control_1": "程序性控制 1",
+    "control_2": "程序性控制 2",
+    "control_3": "程序性控制 3",
+    "control_4": "实体性控制 1",
+    "control_5": "实体性控制 2",
+    "control_6": "实体性控制 3"
+  }
+}

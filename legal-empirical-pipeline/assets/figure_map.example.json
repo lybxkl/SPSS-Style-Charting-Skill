@@ -1,0 +1,17 @@
+[
+  {
+    "tag": "图1",
+    "title": "样本类别结构",
+    "image": "output/figures/fig1_category_structure.png"
+  },
+  {
+    "tag": "图2",
+    "title": "处理阶段与结果发生率",
+    "image": "output/figures/fig2_stage_outcome.png"
+  },
+  {
+    "tag": "图3",
+    "title": "主要类别的处理差异",
+    "image": "output/figures/fig3_category_gap.png"
+  }
+]

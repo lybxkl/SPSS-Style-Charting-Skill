@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+__MACOSX/
+.idea/
+.vscode/
+
+# Local research data and outputs: never commit
+data/
+output/
+_duplicates/
+*.csv
+*.sav
+*.jsonl
+*.docx
+*.pdf
+*.log

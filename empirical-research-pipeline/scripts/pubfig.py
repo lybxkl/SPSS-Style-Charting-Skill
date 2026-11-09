@@ -126,7 +126,10 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     den = 1 + z * z / n
     center = (p + z * z / (2 * n)) / den
     half = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
-    return (max(0.0, center - half), min(1.0, center + half))
+    # The Wilson interval always brackets p mathematically; clamp away the
+    # 1e-16 float noise so degenerate groups (all 0 or all 1) never yield a
+    # negative error-bar length.
+    return (max(0.0, min(center - half, p)), min(1.0, max(center + half, p)))
 
 
 def save_fig(fig, out_dir: str, name: str,

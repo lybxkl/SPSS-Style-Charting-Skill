@@ -25,7 +25,8 @@
 | `textless` | 有页面/单元格但文本不足 | 否，检查空文件或重新导出 |
 | `image_only` | 图片/扫描件，无文字层 | OCR 后可用，否则排除 |
 | `media` | 音频/视频 | 转写/抽帧后再用 |
-| `duplicate` | 与另一份内容相同 | 只保留一份 |
+
+重复不是独立的 `status`：内容相同的文件仍是 `valid`，另用 `dup_group`/`dup_role` 标记 keeper/duplicate；`unique_valid_files` 已扣除副本。
 
 ## 先跑审计脚本
 
@@ -38,7 +39,7 @@ python scripts/audit_corpus.py \
 
 默认扫描所有支持的类型，不需要逐个写 `--ext`；`--list-ext` 可查看完整列表。支持：
 
-- PDF、DOCX、ODT、PPTX、XLSX/XLSM、HTML、TXT/MD/RTF/XML、CSV/TSV/JSON/JSONL。
+- PDF、DOCX/DOCM、ODT、PPTX/PPTM、XLSX/XLSM、HTML、TXT/MD/RTF/XML、CSV/TSV/JSON/JSONL。
 - 图片、音视频、压缩包、旧版 `.doc/.xls/.ppt` 会被清点并标记，不会静默漏掉。
 
 `--ext` 只用于限制本次解析的范围；不写就解析所有支持格式。未支持格式会计入 `total_files` 并标为 `unsupported`，并给出转换提示。
@@ -50,14 +51,14 @@ python scripts/audit_corpus.py \
 | 文件 | 关键列 |
 |---|---|
 | `corpus_audit.csv` | `relpath, ext, kind, bytes, pages, chars, images, encrypted, md5, status, error` |
-| `corpus_duplicates.csv` | `group, md5, keeper, file, pages, chars` |
+| `corpus_duplicates.csv` | `group, md5, role, top, file, relpath, bytes, pages, chars` |
 | `corpus_summary.json` | 总数、有效数、重复组、状态分布、扩展名分布、年份提示 |
 | `corpus_report.md` | 可直接放进项目日志的中文摘要 |
 
 ## 多格式处理规则
 
 - **PDF**：优先取文字层；`chars` 低且 `images` 高时记为 `image_only`，先 OCR。
-- **DOCX/ODT/PPTX**：读段落/幻灯片文本；旧版 `.doc/.ppt` 用 Office 或 LibreOffice 转换。
+- **DOCX/DOCM、ODT、PPTX/PPTM**：读段落/幻灯片文本；旧版 `.doc/.ppt` 用 Office 或 LibreOffice 转换。
 - **XLSX/XLSM**：按工作表读取文本/单元格；建议安装 `openpyxl`，未安装时会尝试直接解析 XML。`.xls` 先另存为 `.xlsx`。
 - **CSV/TSV/JSON**：属于表格/结构化数据，审计只统计字符与行；字段质量另做检查，编码工作表会跳过它们。
 - **HTML**：去掉脚本、样式和标签后统计正文。

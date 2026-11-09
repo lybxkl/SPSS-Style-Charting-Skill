@@ -43,6 +43,22 @@ CAPTION_RE = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 N_RE = re.compile(r"\b[ＮNn]\s*[=＝]\s*([\d,，]+)")
+CSV_ENCODINGS = ("utf-8-sig", "gb18030", "big5")
+
+
+def read_rows(path: str) -> list[dict]:
+    last_error = None
+    for encoding in CSV_ENCODINGS:
+        try:
+            with open(path, encoding=encoding, newline="") as fh:
+                return list(csv.DictReader(fh))
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        return list(csv.DictReader(fh))
 
 
 def check_pdf(path: str, min_width: int) -> dict:
@@ -53,26 +69,36 @@ def check_pdf(path: str, min_width: int) -> dict:
     if fitz is None:
         result["errors"].append("PyMuPDF not installed")
         return result
-    doc = fitz.open(path)
-    result["pages"] = doc.page_count
-    widths = []
-    captions = Counter()
-    n_values = set()
-    for i, page in enumerate(doc):
-        text = page.get_text()
-        for m in CAPTION_RE.finditer(text):
-            captions[f"{m.group(1)}{m.group(2)}"] += 1
-        for m in N_RE.finditer(text):
-            n_values.add(m.group(1))
-        for im in page.get_images(full=True):
-            try:
-                info = doc.extract_image(im[0])
-                widths.append({"page": i + 1, "width": info["width"],
-                               "height": info["height"]})
-            except Exception:
-                continue
-    doc.close()
-    # Ignore logos, rules, and equation fragments: only check figure-sized images.
+    try:
+        doc = fitz.open(path)
+    except Exception as exc:
+        result["errors"].append(f"cannot open PDF: {type(exc).__name__}: {exc}"[:300])
+        return result
+    try:
+        result["pages"] = doc.page_count
+        widths = []
+        captions = Counter()
+        n_values = set()
+        for i, page in enumerate(doc):
+            text = page.get_text()
+            for m in CAPTION_RE.finditer(text):
+                captions[f"{m.group(1)}{m.group(2)}"] += 1
+            for m in N_RE.finditer(text):
+                n_values.add(m.group(1))
+            for im in page.get_images(full=True):
+                try:
+                    rect = page.get_image_bbox(im)
+                    if rect.width <= 1 or rect.height <= 1:
+                        continue
+                    info = doc.extract_image(im[0])
+                    widths.append({"page": i + 1, "width": info["width"],
+                                   "height": info["height"]})
+                except Exception:
+                    continue
+    finally:
+        doc.close()
+    # Ignore logos, rules, equation fragments, and unused replacement xrefs:
+    # only check images actually placed on the page at figure size.
     figure_images = [w for w in widths
                      if w["width"] * w["height"] >= 200_000 or w["width"] >= 1000]
     low = [w for w in figure_images if w["width"] < min_width]
@@ -96,7 +122,11 @@ def check_docx(path: str) -> dict:
     if Document is None:
         result["errors"].append("python-docx not installed")
         return result
-    doc = Document(path)
+    try:
+        doc = Document(path)
+    except Exception as exc:
+        result["errors"].append(f"cannot open DOCX: {type(exc).__name__}: {exc}"[:300])
+        return result
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     captions = []
     for text in paragraphs:
@@ -125,8 +155,11 @@ def check_data(path: str, key: str, flag: str | None) -> dict:
     if not result["exists"]:
         result["errors"].append("CSV not found")
         return result
-    with open(path, encoding="utf-8-sig", newline="") as fh:
-        rows = list(csv.DictReader(fh))
+    try:
+        rows = read_rows(path)
+    except Exception as exc:
+        result["errors"].append(f"cannot read CSV: {type(exc).__name__}: {exc}"[:300])
+        return result
     result["rows"] = len(rows)
     result["columns"] = len(rows[0]) if rows else 0
     if not rows:
@@ -152,9 +185,14 @@ def check_audit(path: str) -> dict:
     if not result["exists"]:
         result["errors"].append("audit CSV not found")
         return result
-    with open(path, encoding="utf-8-sig", newline="") as fh:
-        rows = list(csv.DictReader(fh))
+    try:
+        rows = read_rows(path)
+    except Exception as exc:
+        result["errors"].append(f"cannot read audit CSV: {type(exc).__name__}: {exc}"[:300])
+        return result
     result["files"] = len(rows)
+    if not rows:
+        result["errors"].append("audit CSV has no rows")
     result["status"] = dict(Counter(r.get("status", "") for r in rows))
     result["duplicate_groups"] = len({r.get("dup_group") for r in rows if r.get("dup_group")})
     result["duplicate_files"] = sum(1 for r in rows if r.get("dup_role") == "duplicate")
@@ -169,9 +207,14 @@ def check_manifest(path: str, data_rows: int | None = None) -> dict:
     if not result["exists"]:
         result["errors"].append("manifest not found")
         return result
-    with open(path, encoding="utf-8-sig", newline="") as fh:
-        rows = list(csv.DictReader(fh))
+    try:
+        rows = read_rows(path)
+    except Exception as exc:
+        result["errors"].append(f"cannot read manifest: {type(exc).__name__}: {exc}"[:300])
+        return result
     result["charts"] = len(rows)
+    if not rows:
+        result["errors"].append("manifest has no chart rows")
     required = {"id", "question", "chart_type", "variables", "n", "png", "pdf", "caption"}
     if rows:
         missing = required - set(rows[0].keys())
@@ -192,13 +235,16 @@ def check_manifest(path: str, data_rows: int | None = None) -> dict:
             n_bad.append(r.get("id", "?"))
         if data_rows is not None and n > data_rows:
             n_bad.append(f"{r.get('id', '?')}(N>{data_rows})")
-        cap = r.get("caption", "") or ""
+        cap = (r.get("caption", "") or "").replace("，", ",")
+        cap = re.sub(r"\s+", "", cap).replace("＝", "=")
         if f"N={n:,}" not in cap and f"N={n}" not in cap:
             caption_bad.append(r.get("id", "?"))
         for col in ("png", "pdf"):
             val = (r.get(col) or "").strip()
             if val and not os.path.isfile(val):
-                file_bad.append(f"{r.get('id', '?')}:{col}")
+                beside_manifest = os.path.join(os.path.dirname(os.path.abspath(path)), val)
+                if not os.path.isfile(beside_manifest):
+                    file_bad.append(f"{r.get('id', '?')}:{col}")
     if n_bad:
         result["errors"].append(f"{len(n_bad)} chart N invalid: {n_bad[:8]}")
     if caption_bad:

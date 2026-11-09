@@ -89,7 +89,7 @@ python scripts/csv_to_spss_syntax.py --csv data/analysis.csv   --out-sps syntax/
 
 ```spss
 GET DATA /TYPE=TXT
-  /FILE='D:/project/data/analysis.csv'
+  /FILE='data/analysis.csv'
   /ENCODING='UTF8'
   /DELIMITERS=","
   /QUALIFIER='"'
@@ -139,7 +139,7 @@ LOGISTIC REGRESSION VARIABLES outcome_binary
 ```spss
 OUTPUT EXPORT
   /CONTENTS EXPORT=VISIBLE
-  /DOCUMENTFILE='D:/project/output/model1.docx'.
+  /DOCUMENTFILE='output/model1.docx'.
 ```
 
 或用 `OMS` 抓取 `Variables in the Equation` 表，导出 CSV 后再解析。不要手工抄 OR；抄写是数字不一致的主要来源。

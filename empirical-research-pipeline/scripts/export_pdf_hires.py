@@ -73,11 +73,15 @@ def load_map(path: str | None) -> list[dict]:
         for tag, value in data.items():
             if isinstance(value, str):
                 out.append({"tag": tag, "title": "", "image": value})
-            else:
+            elif isinstance(value, dict):
                 out.append({"tag": tag, "title": value.get("title", ""),
                             "image": value.get("image", "")})
+            else:
+                out.append({"tag": str(tag), "title": "", "image": ""})
         return out
-    return data
+    if not isinstance(data, list):
+        raise ValueError("figure map must be a JSON list or object")
+    return [item for item in data if isinstance(item, dict)]
 
 
 def word_export(docx: str, raw_pdf: str) -> None:
@@ -98,42 +102,82 @@ def word_export(docx: str, raw_pdf: str) -> None:
         word.Quit()
 
 
+def caption_rect(page, tag: str, title: str):
+    """Return the caption rectangle so the nearest image can be selected."""
+    tag_n = norm(tag)
+    title_n = norm(title)
+    if not tag_n:
+        return None
+    pattern = re.compile(re.escape(tag_n) + r"(?!\d)")
+    for block in page.get_text("blocks"):
+        block_text = norm(block[4] if len(block) > 4 else "")
+        if pattern.search(block_text) and (not title_n or title_n in block_text):
+            return fitz.Rect(block[:4])
+    for rect in page.search_for(tag):
+        return rect
+    return None
+
+
 def find_figure_page(pdf, tag: str, title: str):
-    """Return the page with the largest image area that contains the caption."""
+    """Return the page and image closest to the caption.
+
+    Two figures can share a page; picking the page's largest image would
+    backfill the wrong figure or overwrite the first one twice.
+    """
     best = None
     for page in pdf:
         text = page.get_text("text")
         any_hit, line_hit = tag_hit(text, tag, title)
         if not any_hit:
             continue
-        best_area = 0
+        cap = caption_rect(page, tag, title)
+        best_score = None
         best_xref = None
         for im in page.get_images(full=True):
             try:
                 rect = page.get_image_bbox(im)
-                area = abs(rect.width * rect.height)
             except Exception:
                 continue
-            if area > best_area:
-                best_area, best_xref = area, im[0]
+            if rect.width <= 1 or rect.height <= 1:
+                continue
+            area = abs(rect.width * rect.height)
+            if cap is None:
+                score = (0, 0.0, -area)
+            else:
+                if rect.y1 <= cap.y0:
+                    gap = cap.y0 - rect.y1
+                elif rect.y0 >= cap.y1:
+                    gap = rect.y0 - cap.y1
+                else:
+                    gap = 0.0
+                overlap = max(0.0, min(rect.x1, cap.x1) - max(rect.x0, cap.x0))
+                score = (0 if overlap > 0 else 1, gap, -area)
+            if best_score is None or score < best_score:
+                best_score, best_xref = score, im[0]
         if best_xref is None:
             continue
-        score = (line_hit, best_area)
-        if best is None or score > best[0]:
-            best = (score, page, best_xref)
+        page_score = (0 if line_hit else 1, best_score[1], best_score[2])
+        if best is None or page_score < best[0]:
+            best = (page_score, page, best_xref)
     return (best[1], best[2]) if best else None
 
 
 def image_widths(pdf) -> list[dict]:
+    """Only count placed figure images; replacement leaves unused xrefs behind."""
     out = []
     for i, page in enumerate(pdf):
         for im in page.get_images(full=True):
             try:
+                rect = page.get_image_bbox(im)
+                if rect.width <= 1 or rect.height <= 1:
+                    continue
                 info = pdf.extract_image(im[0])
-                out.append({"page": i + 1, "xref": im[0],
-                            "width": info["width"], "height": info["height"]})
             except Exception:
                 continue
+            if info["width"] * info["height"] < 200_000 and info["width"] < 1000:
+                continue
+            out.append({"page": i + 1, "xref": im[0],
+                        "width": info["width"], "height": info["height"]})
     return out
 
 
@@ -160,7 +204,14 @@ def main() -> int:
         print("ERROR: --raw-pdf must differ from --out-pdf", file=sys.stderr)
         return 2
     os.makedirs(os.path.dirname(out_pdf), exist_ok=True)
-    figures = load_map(args.figure_map)
+    if args.figure_map and not os.path.isfile(args.figure_map):
+        print(f"ERROR: figure map not found: {args.figure_map}", file=sys.stderr)
+        return 2
+    try:
+        figures = load_map(args.figure_map)
+    except Exception as exc:
+        print(f"ERROR: cannot read figure map: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
 
     tmp = None
     if args.raw_pdf:

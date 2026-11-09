@@ -31,7 +31,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 
 from text_extract import (
-    IMAGE_EXTS, MEDIA_EXTS, STRUCTURED_EXTS, SUPPORTED_EXTS,
+    STRUCTURED_EXTS, SUPPORTED_EXTS,
     inspect_file, kind_of, win_path,
 )
 
@@ -99,6 +99,8 @@ def classify(path: str, ext: str, min_chars: int) -> tuple[str, dict]:
     if ext in STRUCTURED_EXTS or kind == "spreadsheet":
         return ("valid", parsed) if (parsed.get("chars") or 0) > 0 else ("textless", parsed)
     if parsed.get("chars") is not None and parsed["chars"] < min_chars:
+        if kind == "pdf" and parsed.get("images"):
+            return "image_only", parsed
         return "textless", parsed
     return "valid", parsed
 

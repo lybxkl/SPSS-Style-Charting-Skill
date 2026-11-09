@@ -31,8 +31,8 @@ from scipy import stats
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analysis_utils import (  # noqa: E402
-    apply_filter, encode_binary, is_constant, is_id_like, outcome_kind,
-    same_values, fmt, fmt_p,
+    apply_filter, is_constant, is_id_like, outcome_kind,
+    read_csv_auto, same_values, fmt, fmt_p,
 )
 
 try:
@@ -454,15 +454,31 @@ def main() -> int:
     if not os.path.isfile(args.data):
         print(f"ERROR: data not found: {args.data}", file=sys.stderr)
         return 2
-    df = pd.read_csv(args.data, encoding="utf-8-sig", low_memory=False)
+    try:
+        df = read_csv_auto(args.data, low_memory=False)
+    except pd.errors.EmptyDataError:
+        print(f"ERROR: data file has no columns/rows: {args.data}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"ERROR: cannot read data: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
     df.columns = [str(c).strip() for c in df.columns]
+    if df.empty:
+        print(f"ERROR: data has no rows: {args.data}", file=sys.stderr)
+        return 2
     cfg = {}
     if args.config:
         if not os.path.isfile(args.config):
             print(f"ERROR: config not found: {args.config}", file=sys.stderr)
             return 2
-        with open(args.config, encoding="utf-8") as fh:
-            cfg = json.load(fh)
+        try:
+            with open(args.config, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            if not isinstance(cfg, dict):
+                raise ValueError("config must be a JSON object")
+        except Exception as exc:
+            print(f"ERROR: cannot read config: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
     try:
         df, filter_desc = apply_filter(df, cfg)
     except ValueError as exc:

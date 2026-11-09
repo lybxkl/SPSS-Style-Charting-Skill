@@ -7,7 +7,6 @@ figure script only contains the actual data and geometry.
 
 Example:
     import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
     from pubfig import set_style, save_fig, wilson_ci, forest_plot
 
     W = set_style()

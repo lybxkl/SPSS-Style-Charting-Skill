@@ -29,11 +29,9 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
 
 from text_extract import (
-    ARCHIVE_EXTS, IMAGE_EXTS, LEGACY_OFFICE_EXTS, MEDIA_EXTS,
-    STRUCTURED_EXTS, SUPPORTED_EXTS, TEXTUAL_EXTS, extract_text, ext_of, kind_of,
+    STRUCTURED_EXTS, SUPPORTED_EXTS, extract_text, ext_of, kind_of,
 )
 
 CASE_NO_RE = re.compile(
@@ -58,7 +56,6 @@ PROVINCE_FULL_TO_SHORT = {
 OWN_CASE_RE = re.compile(r"(?:本院|我院|本案)[^\n。]{0,40}?" + CASE_NO_RE.pattern)
 SENT_SPLIT_RE = re.compile(r"(?<=[。；;！？!?])|(?<=[.!?])\s+|\n+")
 
-DOC_EXTS = TEXTUAL_EXTS - STRUCTURED_EXTS
 
 
 def sentences(text: str) -> list[str]:
@@ -190,11 +187,21 @@ def read_valid_paths(audit: str | None, dedupe_plan: str | None) -> tuple[set[st
     if audit:
         with open(audit, encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
+        if not rows:
+            raise ValueError("audit CSV has no rows")
+        missing = {"relpath", "status"} - set(rows[0].keys())
+        if missing:
+            raise ValueError(f"audit CSV missing columns: {sorted(missing)}")
         keep = {r["relpath"] for r in rows if r.get("status") == "valid"}
     removed: set[str] = set()
     if dedupe_plan:
         with open(dedupe_plan, encoding="utf-8-sig", newline="") as fh:
             rows = list(csv.DictReader(fh))
+        if not rows:
+            raise ValueError("dedupe plan has no rows")
+        missing = {"action", "relpath"} - set(rows[0].keys())
+        if missing:
+            raise ValueError(f"dedupe plan missing columns: {sorted(missing)}")
         removed = {r["relpath"] for r in rows
                    if r.get("action") in {"move", "copy"} and r.get("relpath")}
     return keep, removed
@@ -245,11 +252,23 @@ def main() -> int:
     os.makedirs(out_dir, exist_ok=True)
     keywords = {}
     if args.keywords:
-        with open(args.keywords, encoding="utf-8") as fh:
-            keywords = json.load(fh)
+        try:
+            with open(args.keywords, encoding="utf-8") as fh:
+                keywords = json.load(fh)
+            if not isinstance(keywords, dict):
+                raise ValueError("keywords must be a JSON object")
+        except Exception as exc:
+            print(f"ERROR: cannot read keywords: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            return 2
         keywords.pop("_note", None)
     cat_map = category_map_from(keywords)
-    keep_paths, removed_paths = read_valid_paths(args.audit, args.dedupe_plan)
+    try:
+        keep_paths, removed_paths = read_valid_paths(args.audit, args.dedupe_plan)
+    except Exception as exc:
+        print(f"ERROR: cannot read audit/dedupe input: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return 2
 
     jsonl_path = os.path.join(out_dir, "coding_sheet.jsonl")
     csv_path = os.path.join(out_dir, "coding_sheet.csv")
@@ -311,8 +330,10 @@ def main() -> int:
                 chars = len(text.strip())
                 han = len(re.findall(r"[\u4e00-\u9fa5]", text))
                 if chars < args.min_chars:
-                    skip(rel, name, kind, chars,
-                         f"below --min-chars ({chars} < {args.min_chars})")
+                    reason = f"below --min-chars ({chars} < {args.min_chars})"
+                    if kind == "pdf":
+                        reason += "; scanned/image-only PDF? run OCR first"
+                    skip(rel, name, kind, chars, reason)
                     continue
 
                 if args.profile == "legal":

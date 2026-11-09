@@ -28,8 +28,6 @@ import os
 import re
 import sys
 import warnings
-from collections import Counter
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,18 +35,18 @@ from scipy import stats
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pubfig import (  # noqa: E402
-    set_style, save_fig, wilson_ci, style_axis, panel_label,
+    set_style, save_fig, wilson_ci, style_axis,
     bar_counts, plot_distribution, plot_violin, stacked_bar, line_ci,
     heatmap, corr_heatmap, scatter_fit, roc_curve, calibration_plot,
     pareto, scree_plot, forest_plot, dumbbell,
-    stacked_area, bubble, binary_array,
+    stacked_area, bubble,
     pie_chart, qq_plot, control_chart, dendrogram_plot, classical_mds,
     mds_plot, pr_curve, lift_chart, confusion_heatmap, kaplan_meier,
-    BLUE, ORANGE, GREEN, GRAY, LGRAY, RED, INK,
+    BLUE, ORANGE, GRAY, LGRAY, INK,
 )
 from analysis_utils import (  # noqa: E402
     apply_filter, encode_binary, is_constant, is_id_like, outcome_kind,
-    same_values,
+    read_csv_auto, same_values,
 )
 
 FIG_W = 15 / 2.54  # 15 cm text width, A4 with standard margins
@@ -197,6 +195,10 @@ class ChartPack:
 
     def save(self, fig, slug: str, section: str, question: str, chart_type: str,
              variables: list[str], n: int, caption: str, note: str = ""):
+        if int(n) <= 0:
+            self.skip(section, question, "no valid observations (N=0)")
+            plt.close(fig)
+            return
         idx = len(self.manifest) + 1
         name = f"fig{idx:02d}_{slug}"
         caption = re.sub(r"N=[\d,]+", f"N={int(n):,}", caption, count=1)
@@ -1099,7 +1101,13 @@ class ChartPack:
                       "未提供 --coef 或 --pred；可补充 CSV 后重跑")
             return
         if coef_path:
-            c = pd.read_csv(coef_path, encoding="utf-8-sig")
+            try:
+                c = read_csv_auto(coef_path)
+            except Exception as exc:
+                self.skip("F 模型诊断", "模型系数图",
+                          f"coef CSV 无法读取: {type(exc).__name__}: {exc}"[:200])
+                c = None
+        if coef_path and c is not None:
             rename = {x.lower(): x for x in c.columns}
             term = rename.get("term") or rename.get("variable")
             est = rename.get("or") or rename.get("estimate")
@@ -1109,27 +1117,51 @@ class ChartPack:
             metric_col = rename.get("metric")
             n_col = rename.get("n")
             if term and est and lo and hi:
-                groups = c.groupby(model) if model else [("model", c)]
+                c = c.copy()
+                for col in (est, lo, hi):
+                    c[col] = pd.to_numeric(c[col], errors="coerce")
+                c = c[c[[term, est, lo, hi]].notna().all(axis=1)]
+                if c.empty:
+                    self.skip("F 模型诊断", "模型系数图",
+                              "coef CSV 的 estimate/CI 列没有可用数值")
+                    groups = []
+                else:
+                    groups = c.groupby(model) if model else [("model", c)]
                 for m, sub in groups:
-                    metric = str(sub[metric_col].iloc[0]).upper() if metric_col else "OR"
-                    log_scale = metric in {"OR", "HR", "RR"}
-                    ref = 1.0 if log_scale else 0.0
-                    n_model = int(sub[n_col].iloc[0]) if n_col and sub[n_col].notna().any() else len(self.df)
-                    term_labels = self.cfg.get("term_labels", {})
-                    fig, ax = plt.subplots(figsize=(FIG_W, max(3.2, 0.4 * len(sub) + 1.2)))
-                    forest_plot(ax, [term_labels.get(str(x), short_label(x)) for x in sub[term]],
-                                sub[est].values, sub[lo].values, sub[hi].values,
-                                ref=ref, log_scale=log_scale,
-                                xlabel=f"{metric}（95%CI）")
-                    self.save(fig, f"forest_{re.sub(r'[^A-Za-z0-9]+', '_', str(m))}",
-                              "F 模型诊断", f"{m} 的系数方向与不确定性如何？",
-                              "forest plot", [term, est, lo, hi], n_model,
-                              f"注：N={n_model:,}；模型 {m}；点为 {metric}，线为 95%CI；"
-                              f"参考线 {metric}={ref:g}；数据来源：分析数据集。")
+                    try:
+                        metric = str(sub[metric_col].iloc[0]).upper() if metric_col else "OR"
+                        log_scale = metric in {"OR", "HR", "RR"}
+                        ref = 1.0 if log_scale else 0.0
+                        n_model = len(self.df)
+                        if n_col and sub[n_col].notna().any():
+                            try:
+                                n_model = int(float(sub[n_col].iloc[0]))
+                            except (TypeError, ValueError):
+                                pass
+                        term_labels = self.cfg.get("term_labels", {})
+                        fig, ax = plt.subplots(figsize=(FIG_W, max(3.2, 0.4 * len(sub) + 1.2)))
+                        forest_plot(ax, [term_labels.get(str(x), short_label(x)) for x in sub[term]],
+                                    sub[est].values, sub[lo].values, sub[hi].values,
+                                    ref=ref, log_scale=log_scale,
+                                    xlabel=f"{metric}（95%CI）")
+                        self.save(fig, f"forest_{re.sub(r'[^A-Za-z0-9]+', '_', str(m))}",
+                                  "F 模型诊断", f"{m} 的系数方向与不确定性如何？",
+                                  "forest plot", [term, est, lo, hi], n_model,
+                                  f"注：N={n_model:,}；模型 {m}；点为 {metric}，线为 95%CI；"
+                                  f"参考线 {metric}={ref:g}；数据来源：分析数据集。")
+                    except Exception as exc:
+                        self.skip("F 模型诊断", f"{m} 的系数图",
+                                  f"无法绘制: {type(exc).__name__}: {exc}"[:200])
             else:
                 self.skip("F 模型诊断", "模型系数图", "coef CSV 缺少 term/estimate/ci_low/ci_high")
         if pred_path:
-            p = pd.read_csv(pred_path, encoding="utf-8-sig")
+            try:
+                p = read_csv_auto(pred_path)
+            except Exception as exc:
+                self.skip("F 模型诊断", "ROC/校准图",
+                          f"pred CSV 无法读取: {type(exc).__name__}: {exc}"[:200])
+                p = None
+        if pred_path and p is not None:
             ycol = next((c for c in p.columns if c.lower() in {"y_true", "y", "outcome", "label"}), None)
             scol = next((c for c in p.columns if c.lower() in {"y_prob", "prob", "pred", "prediction"}), None)
             if not (ycol and scol):
@@ -1309,12 +1341,28 @@ def main() -> int:
     if args.top_n < 1 or args.min_n < 1:
         print("ERROR: --top-n and --min-n must be at least 1", file=sys.stderr)
         return 2
-    df = pd.read_csv(args.data, encoding="utf-8-sig", low_memory=False)
+    try:
+        df = read_csv_auto(args.data, low_memory=False)
+    except pd.errors.EmptyDataError:
+        print(f"ERROR: data file has no columns/rows: {args.data}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"ERROR: cannot read data: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
     df.columns = [str(c).strip() for c in df.columns]
+    if df.empty:
+        print(f"ERROR: data has no rows: {args.data}", file=sys.stderr)
+        return 2
     cfg = {}
     if args.config:
-        with open(args.config, encoding="utf-8") as fh:
-            cfg = json.load(fh)
+        try:
+            with open(args.config, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            if not isinstance(cfg, dict):
+                raise ValueError("config must be a JSON object")
+        except Exception as exc:
+            print(f"ERROR: cannot read config: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
     if args.survival_time:
         cfg["survival_time"] = args.survival_time
     if args.survival_event:

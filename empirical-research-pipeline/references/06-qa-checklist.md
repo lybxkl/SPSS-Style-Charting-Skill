@@ -49,7 +49,7 @@
 - [ ] `chart_manifest.csv` 覆盖所有图，含问题、变量、N、图注、路径；`qa_outputs.py --manifest` 检查 N、图注 N= 与文件路径。
 - [ ] 正文主图与附录图不重复；每个主发现至少有主图 + 稳健性/诊断图。
 - [ ] 图数没有被人为压到 8 张；分布、异质性、诊断图齐全或已说明跳过原因。
-- [ ] 每张图有 PNG 600 dpi、PDF 矢量、TIFF LZW。
+- [ ] 每张图有 PNG 600 dpi、PDF 矢量；投稿要求 TIFF 时已用 `--tiff` 输出 LZW 无损 TIFF。
 - [ ] 图宽 15 cm，最小字号 ≥7 pt。
 - [ ] 中文宋体、西文 Times New Roman，PDF 字体嵌入。
 - [ ] 图内无标题；图题、图注在 Word 中。

@@ -71,20 +71,56 @@ def quote_label(text: str) -> str:
     return "'" + text.replace("'", "''") + "'"
 
 
-def infer(path: str, sample_rows: int = 500, encoding: str = "utf-8-sig"):
+def infer(path: str, sample_rows: int = 500, encoding: str = "utf-8-sig",
+          delimiter: str = ","):
+    """Infer SPSS formats from the whole file, not just the first N rows.
+
+    Reading a sample would let long values in later rows be silently truncated
+    by an A format sized on the sample, or let a text value in row 900 turn a
+    column declared F into missing data. Widths are byte lengths because SPSS
+    string widths are bytes, not characters.
+    """
+    if encoding.lower() == "auto":
+        last_error = None
+        for candidate in ("utf-8-sig", "gb18030", "big5"):
+            try:
+                return infer(path, sample_rows, candidate, delimiter)
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                continue
+        if last_error is not None:
+            raise last_error
     with open(path, encoding=encoding, newline="") as fh:
-        reader = csv.reader(fh)
+        reader = csv.reader(fh, delimiter=delimiter)
         try:
             header = next(reader)
         except StopIteration:
             raise ValueError("CSV is empty (no header row)")
         samples = [[] for _ in header]
-        for i, row in enumerate(reader):
-            if i >= sample_rows:
-                break
+        numeric = [True] * len(header)
+        saw_numeric = [False] * len(header)
+        max_bytes = [0] * len(header)
+        max_decimals = [0] * len(header)
+        max_digits = [0] * len(header)
+        levels: list[list[str]] = [[] for _ in header]
+        for row in reader:
             for j, value in enumerate(row[:len(header)]):
-                if value != "":
+                if value == "":
+                    continue
+                if len(samples[j]) < sample_rows:
                     samples[j].append(value)
+                max_bytes[j] = max(max_bytes[j], len(value.encode("utf-8")))
+                if not NUM_RE.match(value):
+                    numeric[j] = False
+                    stripped = value.strip()
+                    if stripped and stripped not in levels[j] and len(levels[j]) < 3:
+                        levels[j].append(stripped)
+                else:
+                    saw_numeric[j] = True
+                    decimals = len(value.split(".")[1]) if "." in value else 0
+                    digits = len(re.sub(r"[^0-9]", "", value.split("e")[0].split("E")[0]))
+                    max_decimals[j] = max(max_decimals[j], decimals)
+                    max_digits[j] = max(max_digits[j], digits)
 
     used: set[str] = set()
     names: list[str | None] = [None] * len(header)
@@ -102,25 +138,26 @@ def infer(path: str, sample_rows: int = 500, encoding: str = "utf-8-sig"):
     specs = []
     labels = []
     recodes = []
-    for raw, name, values in zip(header, names, samples):
-        if values and all(NUM_RE.match(v) for v in values):
-            decimals = max((len(v.split(".")[1]) if "." in v else 0) for v in values)
-            digits = max(len(re.sub(r"[^0-9]", "", v.split("e")[0].split("E")[0])) for v in values)
+    for i, (raw, name) in enumerate(zip(header, names)):
+        values = samples[i]
+        if values and numeric[i]:
+            decimals = max_decimals[i]
+            digits = max_digits[i]
             width = max(8, min(40, digits + (2 if decimals else 0) + 1))
             fmt = f"F{width}.{min(decimals, 4)}"
         else:
-            width = max(20, max((len(v) for v in values), default=0) + 20)
+            width = max(20, max_bytes[i] + 20)
             fmt = f"A{min(width, 32767)}"
-            levels = list(dict.fromkeys(v.strip() for v in values if v.strip()))
-            mapping = {v: BINARY_TEXT[v.strip().lower()] for v in levels
-                       if v.strip().lower() in BINARY_TEXT}
-            if len(levels) == 2 and len(mapping) == 2 and set(mapping.values()) == {0, 1}:
+            mapping = {v: BINARY_TEXT[v.lower()] for v in levels[i]
+                       if v.lower() in BINARY_TEXT}
+            if (not saw_numeric[i] and len(levels[i]) == 2
+                    and len(mapping) == 2 and set(mapping.values()) == {0, 1}):
                 new_name = sanitize_name(name + "_num", len(names) + len(recodes), used)
                 recodes.append({"name": name, "new": new_name, "map": mapping,
                                 "label": raw.strip()})
         specs.append((name, fmt))
         labels.append((name, raw.strip()))
-    return header, specs, labels, recodes
+    return header, specs, labels, recodes, encoding
 
 
 def main() -> int:
@@ -128,9 +165,10 @@ def main() -> int:
     parser.add_argument("--csv", required=True)
     parser.add_argument("--out-sps", required=True)
     parser.add_argument("--sav-out", default=None, help="optional SAVE OUTFILE path")
-    parser.add_argument("--encoding", default="UTF8", help="encoding recorded in GET DATA")
-    parser.add_argument("--csv-encoding", default="utf-8-sig",
-                        help="encoding used to read the CSV (default: utf-8-sig)")
+    parser.add_argument("--encoding", default="auto",
+                        help="SPSS encoding in GET DATA: auto (UTF8/GBK/BIG5) or a code page name")
+    parser.add_argument("--csv-encoding", default="auto",
+                        help="CSV encoding: auto (utf-8-sig/gb18030/big5) or a codec name")
     parser.add_argument("--delimiter", default=",")
     parser.add_argument("--sample-rows", type=int, default=500)
     parser.add_argument("--no-recode", action="store_true",
@@ -143,18 +181,23 @@ def main() -> int:
         return 2
     delimiter = args.delimiter.replace("\\t", "\t")
     try:
-        header, specs, labels, recodes = infer(csv_path, args.sample_rows, args.csv_encoding)
+        header, specs, labels, recodes, used_encoding = infer(
+            csv_path, args.sample_rows, args.csv_encoding, delimiter)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
     if not specs:
         print("ERROR: no variables found", file=sys.stderr)
         return 2
+    spss_encoding = args.encoding
+    if spss_encoding.lower() == "auto":
+        spss_encoding = {"utf-8-sig": "UTF8", "gb18030": "GBK",
+                         "big5": "BIG5"}.get(used_encoding, "UTF8")
 
     var_lines = "\n    ".join(f"{name} {fmt}" for name, fmt in specs)
     syntax = f"""GET DATA /TYPE=TXT
   /FILE='{csv_path.replace(chr(92), '/')}'
-  /ENCODING='{args.encoding}'
+  /ENCODING='{spss_encoding}'
   /DELIMITERS="{delimiter}"
   /QUALIFIER='"'
   /ARRANGEMENT=DELIMITED

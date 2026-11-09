@@ -15,7 +15,7 @@
 - **SPSS 数据**：输出 CSV/JSONL；生成 `.sps` 读入语法、变量标签、值标签，并自动把“是/否、有/无、支持/不支持”等二值文本 `RECODE` 为 `*_num`。
 - **自动统计筛查**：描述统计、组间检验、相关、单变量 OLS/Logit；多分类自变量自动哑变量化，完全分离/不可估计模型写入跳过清单。
 - **全景图表包**：默认覆盖 A 数据质量、B 单变量、C 双变量、D 多变量、E 时间、F 模型诊断、G 附录，约 40–55 张；含 PCA、Ward 聚类、MDS、对应分析、控制图、ROC/PR/校准/混淆矩阵/Lift、Kaplan–Meier 等。
-- **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF、LZW TIFF。
+- **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF；需要 TIFF 时加 `--tiff` 输出 LZW 无损 TIFF。
 - **Word → PDF 高清回填**：定位 Word 导出 PDF 中被压缩的图，替换回 600 dpi 原图，并检查内嵌图宽度。
 - **终检**：核对样本流程、N、图注、图表清单、PDF 图分辨率；`chart_manifest.csv` 支持图号唯一性、N 合理性和文件路径检查。
 
@@ -120,7 +120,7 @@ python scripts/csv_to_spss_syntax.py --csv data/analysis.csv --out-sps syntax/im
 # 6. 自动统计筛查
 python scripts/auto_stats.py --data data/analysis.csv --config assets/chart_config.example.json --out output/analysis_pack
 
-# 7. 生成全景图表包（PNG + PDF + TIFF）
+# 7. 生成全景图表包（PNG + PDF；加 --tiff 同时输出 TIFF）
 python scripts/auto_chart_pack.py --data data/analysis.csv --config assets/chart_config.example.json --out output/chart_pack --tiff
 
 # 8. 终检（docx/pdf 为成稿；尚未排稿时可先只用 --data/--figures/--manifest）

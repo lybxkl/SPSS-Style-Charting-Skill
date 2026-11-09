@@ -19,6 +19,21 @@ POSITIVE_LABELS = {
 }
 
 ID_PATTERN = re.compile(r"(^id$|^file$|^path$|^relpath$|_id$|^case_?no$)", re.I)
+CSV_ENCODINGS = ("utf-8-sig", "gb18030", "big5")
+
+
+def read_csv_auto(path: str, **kwargs):
+    """Read a CSV, trying the encodings common in Chinese research data."""
+    last_error = None
+    for encoding in CSV_ENCODINGS:
+        try:
+            return pd.read_csv(path, encoding=encoding, **kwargs)
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
+    return pd.read_csv(path, **kwargs)
 
 
 def apply_filter(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, str | None]:
@@ -29,10 +44,12 @@ def apply_filter(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, str | None]
         if query:
             return df.query(query).copy(), query
         if filt:
+            missing = [key for key in filt if key not in df.columns]
+            if missing:
+                raise ValueError(f"filter column(s) not found: {missing}")
             out = df
             for key, value in filt.items():
-                if key in out.columns:
-                    out = out[out[key] == value]
+                out = out[out[key] == value]
             return out.copy(), str(filt)
         if "in_analysis" in df.columns:
             return df[df["in_analysis"] == 1].copy(), "in_analysis == 1"

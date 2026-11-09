@@ -104,7 +104,8 @@ python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --
 | `textless` | 有页面/单元格但文本不足 | 否，检查是否空文件或需重导出 |
 | `image_only` | 图片/扫描件，无文字层 | OCR 后可用 |
 | `media` | 音频/视频 | 先转写/抽帧 |
-| `duplicate` | 与另一份内容相同 | 只保留一份 |
+
+重复不是独立的 `status`：内容相同的文件仍是 `valid`，另用 `dup_group`/`dup_role` 标记 keeper/duplicate；报告中的 `unique_valid_files` 已扣除副本。
 
 必须逐项处理：
 
@@ -263,7 +264,7 @@ python scripts/auto_chart_pack.py \
 
 连续/多分类结果不需要改脚本：结果变量会自动切换为“结果分布 + 分组均值/构成”图；文本结果同样可用 `outcome_map` 指定编码。`--coef` 支持 `metric`（OR/HR/RR/beta）与 `n` 列，森林图会按模型样本量写 N；`--pred` 支持 0/1 或“是/否”标签，常数预测/单一类别会跳过 ROC/PR/校准并写明原因。`term_labels` 可把 `lv3` 这类模型项名映射为中文。双比例哑铃图需在 config 里用 `dumbbell` 指定两个 0/1 列。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可加 `--survival-group`）生成 Kaplan–Meier 曲线。
 
-默认覆盖 7 组，常规约 40–55 张：二分类 37–45 张，带模型输入 45–50 张；连续/多分类结果 32–38 张。
+默认覆盖 7 组，常规约 40–55 张：二分类约 44 张，带模型输入约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动；实际数量以 `chart_manifest.csv` 为准。
 
 - **A 数据质量**：缺失率、样本类别/年份/地区、二元变量发生率。
 - **B 单变量**：结果分布（二分类/连续/多分类分别处理，连续结果加 Q-Q）、处理构成（条形+环形）、数值分布、类别构成。
@@ -357,6 +358,7 @@ python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --f
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动到 `_duplicates/` |
 | `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段 |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频） |
+| `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
 | `scripts/auto_chart_pack.py` | 按列角色自动生成约 40–55 张数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest |

@@ -18,7 +18,6 @@ import os
 import shutil
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime
 
 
 def read_audit(path: str) -> list[dict]:
@@ -31,6 +30,23 @@ def write_csv(path: str, rows: list[dict], fields: list[str]) -> None:
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+def safe_relpath(rel: str, root: str) -> str | None:
+    """Return a normalized in-root relative path, or None if it escapes root."""
+    rel = (rel or "").strip().replace("\\", "/")
+    if not rel or os.path.isabs(rel) or os.path.splitdrive(rel)[0]:
+        return None
+    parts = [p for p in rel.split("/") if p not in {"", "."}]
+    if not parts or ".." in parts:
+        return None
+    normalized = os.path.join(*parts)
+    root_real = os.path.realpath(root)
+    try:
+        inside = os.path.commonpath([root_real, os.path.realpath(os.path.join(root, normalized))])
+    except ValueError:
+        return None
+    return normalized if inside == root_real else None
 
 
 def unique_destination(dest: str) -> str:
@@ -58,11 +74,27 @@ def main() -> int:
     if not os.path.isdir(root):
         print(f"ERROR: root not found: {root}", file=sys.stderr)
         return 2
+    if not os.path.isfile(audit_path):
+        print(f"ERROR: audit file not found: {audit_path}", file=sys.stderr)
+        return 2
+    dest_name = safe_relpath(args.dest_name, root)
+    if dest_name is None:
+        print("ERROR: --dest-name must be a folder inside --root", file=sys.stderr)
+        return 2
     out_dir = os.path.abspath(args.out_dir or os.path.dirname(audit_path))
     os.makedirs(out_dir, exist_ok=True)
-    rows = read_audit(audit_path)
+    try:
+        rows = read_audit(audit_path)
+    except Exception as exc:
+        print(f"ERROR: cannot read audit file: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
     if not rows:
         print("ERROR: empty audit file", file=sys.stderr)
+        return 2
+    required = {"relpath", "name", "dup_group", "dup_role"}
+    missing = required - set(rows[0].keys())
+    if missing:
+        print(f"ERROR: audit file missing columns: {sorted(missing)}", file=sys.stderr)
         return 2
 
     groups: dict[str, list[dict]] = defaultdict(list)
@@ -91,7 +123,7 @@ def main() -> int:
                     "chars": row.get("chars", ""),
                 })
                 continue
-            dest = os.path.join(args.dest_name, row["relpath"])
+            dest = os.path.join(dest_name, row["relpath"])
             plan.append({
                 "group": group, "action": "copy" if args.copy else "move",
                 "role": "duplicate", "file": row["name"], "relpath": row["relpath"],
@@ -117,12 +149,16 @@ def main() -> int:
     for item in plan:
         if item["action"] not in {"move", "copy"}:
             continue
-        rel = item["relpath"]
-        if os.path.isabs(rel) or ".." in rel.split(os.sep):
-            print(f"WARN: unsafe relpath skipped: {rel}", file=sys.stderr)
+        rel = safe_relpath(item["relpath"], root)
+        if rel is None:
+            print(f"WARN: unsafe relpath skipped: {item['relpath']}", file=sys.stderr)
+            continue
+        dest_rel = safe_relpath(item["destination"], root)
+        if dest_rel is None:
+            print(f"WARN: unsafe destination skipped: {item['destination']}", file=sys.stderr)
             continue
         src = os.path.join(root, rel)
-        dest = os.path.join(root, item["destination"])
+        dest = os.path.join(root, dest_rel)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         dest = unique_destination(dest)
         try:
@@ -133,7 +169,7 @@ def main() -> int:
             moved += 1
         except Exception as exc:
             print(f"WARN: {rel}: {exc}", file=sys.stderr)
-    print(f"applied: {moved} files -> {os.path.join(root, args.dest_name)}")
+    print(f"applied: {moved} files -> {os.path.join(root, dest_name)}")
     if moved < planned:
         print(f"WARN: {planned - moved} planned action(s) were not applied "
               "(already moved, missing, or unsafe)", file=sys.stderr)

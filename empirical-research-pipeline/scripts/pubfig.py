@@ -16,7 +16,9 @@ Example:
 """
 from __future__ import annotations
 
+import math
 import os
+import re
 from typing import Iterable, Sequence
 
 import numpy as np
@@ -24,7 +26,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter, NullLocator
 
 CM = 1 / 2.54
 INK = "#1A1A1A"
@@ -75,7 +77,14 @@ def set_style(width_cm: float = 15.0,
               font_latin: str = "Times New Roman",
               base_size: float = 8.5,
               dpi: int = 600) -> float:
-    """Apply publication defaults and return the figure width in inches."""
+    """Apply publication defaults and return the figure width in inches.
+
+    The width is also written into ``figure.figsize`` (height = 0.62 × width),
+    so ``plt.subplots()`` called without an explicit ``figsize`` already gets
+    the 15 cm single-column canvas instead of matplotlib's 6.4 in default.
+    An explicit ``figsize=`` at the call site still wins.
+    """
+    width_in = width_cm * CM
     plt.rcParams.update({
         "font.family": [font_latin, font_cjk],
         "font.size": base_size,
@@ -95,13 +104,14 @@ def set_style(width_cm: float = 15.0,
         "xtick.major.pad": 2.2,
         "ytick.major.pad": 2.2,
         "axes.unicode_minus": False,
+        "figure.figsize": (width_in, width_in * 0.62),
         "figure.dpi": dpi,
         "savefig.dpi": dpi,
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
         "savefig.facecolor": "white",
     })
-    return width_cm * CM
+    return width_in
 
 
 def style_axis(ax, grid_axis: str | None = "y") -> None:
@@ -118,14 +128,160 @@ def panel_label(ax, letter: str, x: float = -0.02, y: float = 1.035) -> None:
             fontweight="bold", ha="left", va="bottom", color=INK)
 
 
+_DUMMY_RE = re.compile(r"^(.+?)\[(?:T\.)?(.+?)\]$")
+# patsy wrappers: C(x) / C(x, Treatment('a')) / C(x, Treatment(reference='a'))
+_PATSY_C_RE = re.compile(r"^C\(\s*([^,()]+?)\s*(?:,.*)?\)$")
+
+
+def _strip_patsy(name: str) -> str:
+    """``C(x)`` / ``C(x, Treatment('a'))`` -> ``x``."""
+    s = str(name).strip()
+    m = _PATSY_C_RE.match(s)
+    return m.group(1).strip() if m else s
+
+
+def short_label(value, col: str = "", max_chars: int | None = None) -> str:
+    """Shorten a tick/axis label without destroying its meaning.
+
+    Parameters
+    ----------
+    value:
+        Raw label, typically a model term. Both ``var[T.level]`` (statsmodels /
+        patsy) and ``var_水平`` are accepted.
+    col:
+        Optional variable name the label belongs to; accepted for API symmetry
+        with the chart pack and currently unused.
+    max_chars:
+        Hard character budget. ``None`` means 24 for ASCII labels and 16 for
+        labels containing CJK text (wider glyphs).
+
+    Returns
+    -------
+    str
+        ``var[T.level]`` becomes ``var：level`` so dummy levels stay readable
+        and distinct; the label is only truncated when it really is too long,
+        and the ellipsis is appended at the end. No character is ever deleted
+        from the middle of the label (the old ``replace("罪", "")`` turned
+        ``单位犯罪`` into ``单位犯`` and collapsed every dummy of one variable
+        into the same 8-character prefix).
+    """
+    s = str(value).strip()
+    m = _DUMMY_RE.match(s)
+    if m:
+        s = f"{_strip_patsy(m.group(1))}[{m.group(2)}]"
+        m = _DUMMY_RE.match(s)
+    if max_chars is None:
+        max_chars = 24 if re.fullmatch(r"[A-Za-z0-9_ .,%\-]+", s) else 16
+    max_chars = max(3, int(max_chars))
+    if m:
+        var, level = m.group(1), m.group(2)
+        full = f"{var}：{level}"
+        if len(full) <= max_chars:
+            return full
+        if len(level) + 2 <= max_chars:
+            keep = max_chars - len(level) - 2
+            return f"{var[:max(keep, 1)]}…：{level}"
+        return level[: max_chars - 1] + "…"
+    if len(s) <= max_chars:
+        return s
+    return s[: max_chars - 1] + "…"
+
+
+def _log_tick_candidates(lo: float, hi: float, max_ticks: int = 9) -> list[float]:
+    """Pick readable major tick positions inside ``[lo, hi]`` on a log axis."""
+    if not (np.isfinite(lo) and np.isfinite(hi)) or lo <= 0 or hi <= lo:
+        return []
+    decades = np.arange(math.floor(math.log10(lo)), math.ceil(math.log10(hi)) + 1)
+    ticks = [m * 10.0 ** d for d in decades for m in (1, 2, 5)]
+    ticks = [t for t in ticks if lo * 0.999 <= t <= hi * 1.001]
+    if len(ticks) > max_ticks:
+        ticks = [10.0 ** d for d in decades if lo * 0.999 <= 10.0 ** d <= hi * 1.001]
+    return ticks or [lo, hi]
+
+
+def _fix_log_ticks(ax, ticks=None, axis: str = "x") -> None:
+    """Make a log axis print clean, fixed labels.
+
+    A log axis in matplotlib draws minor ticks by default and ``{x:g}`` style
+    auto labels; both produce a row of unlabelled ticks and mixed
+    ``1``/``1e+08`` strings. This turns the minor ticks off entirely
+    (``NullLocator`` + ``NullFormatter`` + zero length), pins the major ticks to
+    an explicit list and formats them with ``{x:g}``.
+
+    Parameters
+    ----------
+    ax:
+        Axes whose log axis is being fixed. The axis must already be set to
+        ``log`` (call this *after* ``set_xscale("log")`` / ``set_yscale("log")``).
+    ticks:
+        Explicit major tick positions. ``None`` derives 1/2/5×10^k positions
+        from the current view limits.
+    axis:
+        ``"x"`` (default) or ``"y"``.
+    """
+    target = ax.xaxis if axis == "x" else ax.yaxis
+    target.set_minor_locator(NullLocator())
+    target.set_minor_formatter(NullFormatter())
+    ax.tick_params(axis=axis, which="minor", length=0)
+    if ticks is None:
+        limits = ax.get_xlim() if axis == "x" else ax.get_ylim()
+        ticks = _log_tick_candidates(float(limits[0]), float(limits[1]))
+    try:
+        target.set_major_locator(FixedLocator([float(t) for t in ticks]))
+    except (TypeError, ValueError):
+        pass
+    target.set_major_formatter(FuncFormatter(lambda v, pos: f"{v:g}"))
+
+
+def _fit_legend(ax, legend, pad: float = 0.012, min_top: float = 0.55,
+                passes: int = 3) -> float:
+    """Shrink the axes until an above-axes legend fits inside the canvas.
+
+    ``tight_layout`` does not account for legends anchored outside the axes, so
+    a legend placed at ``bbox_to_anchor=(0.5, 1.16)`` is silently cropped once
+    ``save_fig`` refuses ``bbox_inches="tight"`` (it lowers the resolution).
+    This measures the legend in figure coordinates and lowers
+    ``subplotpars.top`` just enough to keep it on the canvas.
+
+    Returns the resulting ``fig.subplotpars.top`` (the value actually used).
+    """
+    fig = ax.get_figure()
+    for _ in range(max(1, int(passes))):
+        try:
+            fig.canvas.draw()
+            bbox = legend.get_window_extent(fig.canvas.get_renderer())
+            bbox = bbox.transformed(fig.transFigure.inverted())
+        except Exception:  # pragma: no cover - backend without a renderer
+            break
+        overflow = float(bbox.y1) + pad - 1.0
+        if overflow <= 0:
+            break
+        new_top = max(min_top, fig.subplotpars.top - overflow * 1.15)
+        if new_top >= fig.subplotpars.top - 1e-6:
+            break
+        fig.subplots_adjust(top=new_top)
+    return float(fig.subplotpars.top)
+
+
 def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """Wilson score interval for a binomial proportion."""
+    """Wilson score interval for a binomial proportion.
+
+    Identical to ``auto_stats.wilson_ci`` (same expression order and the same
+    clamp to ``p``), so a rate reported by the screening pack and a rate drawn
+    on a figure can never disagree. ``tests/test_stats_charts.py`` asserts the
+    equality; if you change one implementation, change the other.
+
+    Parameters
+    ----------
+    k: successes. ``n``: trials. ``z``: normal quantile (1.96 for 95%).
+    Returns ``(low, high)``, or ``(nan, nan)`` when ``n <= 0``.
+    """
     if n <= 0:
         return (float("nan"), float("nan"))
     p = k / n
     den = 1 + z * z / n
     center = (p + z * z / (2 * n)) / den
-    half = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den
     # The Wilson interval always brackets p mathematically; clamp away the
     # 1e-16 float noise so degenerate groups (all 0 or all 1) never yield a
     # negative error-bar length.
@@ -134,8 +290,40 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
 
 def save_fig(fig, out_dir: str, name: str,
              formats: Sequence[str] = ("png", "pdf", "tiff"),
-             dpi: int = 600) -> list[str]:
-    """Save PNG (600 dpi), vector PDF, and LZW TIFF. Returns written paths."""
+             dpi: int = 600, pad: float | None = None) -> list[str]:
+    """Save PNG (600 dpi), vector PDF, and LZW TIFF. Returns written paths.
+
+    Parameters
+    ----------
+    fig:
+        Figure to export (it is closed afterwards).
+    out_dir / name:
+        Target directory and file stem (``<name>.png`` etc.).
+    formats:
+        Any of ``"png"``, ``"pdf"``, ``"tiff"``.
+    dpi:
+        Raster resolution; the figure keeps its physical size, so a 15 cm wide
+        figure stays 15 cm wide (3543 px at 600 dpi).
+    pad:
+        Extra white margin **in inches**. ``None`` (default) leaves the canvas
+        and the axes untouched. A positive value insets the axes with
+        ``fig.subplots_adjust`` instead of ``bbox_inches="tight"``: tight
+        bounding boxes crop/scale the figure and therefore change the effective
+        resolution that ``qa_outputs.py`` measures.
+    """
+    if pad:
+        try:
+            fw, fh = (float(v) for v in fig.get_size_inches()[:2])
+            dx, dy = float(pad) / max(fw, 1e-9), float(pad) / max(fh, 1e-9)
+            sp = fig.subplotpars
+            left = min(max(sp.left + dx, 0.0), 0.45)
+            right = max(min(sp.right - dx, 1.0), 0.55)
+            bottom = min(max(sp.bottom + dy, 0.0), 0.45)
+            top = max(min(sp.top - dy, 1.0), 0.55)
+            if left < right and bottom < top:
+                fig.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
+        except Exception:  # pragma: no cover - defensive: never break export
+            pass
     os.makedirs(out_dir, exist_ok=True)
     paths = []
     for ext in formats:
@@ -152,6 +340,48 @@ def save_fig(fig, out_dir: str, name: str,
     return paths
 
 
+def _clip_huge_span(ax, est, lo, hi, ref: float = 1.0,
+                    max_decades: float = 8.0) -> bool:
+    """P-04: keep one quasi-separated CI from flattening the whole forest plot.
+
+    A coefficient sitting on a near-empty cell can carry a bound around
+    ``OR ≈ 1e9``.  On a log axis that stretches the scale over nine decades and
+    every other interval collapses into a dot.  When the log span of the bounds
+    exceeds ``max_decades`` the x limits are trimmed around the median
+    estimate (always keeping ``ref`` visible) and a short note is drawn, so the
+    reader sees that some intervals run off the axis instead of silently losing
+    them.
+
+    Returns ``True`` when the axis was trimmed.
+    """
+    vals = np.asarray(list(lo), dtype=float).tolist() + \
+        np.asarray(list(hi), dtype=float).tolist() + [float(ref)]
+    pos = np.asarray([v for v in vals if np.isfinite(v) and v > 0], dtype=float)
+    if len(pos) < 2:
+        return False
+    span = float(np.log10(pos.max()) - np.log10(pos.min()))
+    if span <= max_decades:
+        return False
+    est_pos = [v for v in np.asarray(list(est), dtype=float)
+               if np.isfinite(v) and v > 0]
+    mid = float(np.median(np.log10(est_pos))) if est_pos else \
+        float(np.median(np.log10(pos)))
+    left = float(np.log10(pos.min()))
+    right = float(np.log10(pos.max()))
+    half = max_decades / 2.0 - 0.5
+    x0 = max(left, mid - half)
+    x1 = min(right, mid + half)
+    ref_log = float(np.log10(ref)) if ref > 0 else None
+    if ref_log is not None:
+        x0 = min(x0, ref_log)
+        x1 = max(x1, ref_log)
+    if x1 > x0:
+        ax.set_xlim(10.0 ** x0, 10.0 ** x1)
+    ax.text(0.995, 0.012, "部分 CI 超出显示范围", transform=ax.transAxes,
+            ha="right", va="bottom", fontsize=6.2, color=GRAY)
+    return True
+
+
 def forest_plot(ax,
                 labels: Sequence[str],
                 estimates: Iterable[float],
@@ -163,7 +393,28 @@ def forest_plot(ax,
                 color_sig: str = BLUE,
                 color_ns: str = GRAY,
                 marker_size: float = 18) -> None:
-    """Draw a forest plot with solid significant / hollow non-significant points."""
+    """Draw a forest plot with solid significant / hollow non-significant points.
+
+    Parameters
+    ----------
+    ax: target axes.
+    labels: one row label per estimate (``pubfig.short_label`` keeps dummy
+        levels readable).
+    estimates / lows / highs: point estimate and 95% CI bounds. Rows with a
+        non-finite value are dropped; an empty set writes a placeholder note.
+    ref: null value of the effect scale (1 for OR/HR/RR, 0 for β).
+    log_scale: draw the x axis on a log scale. Refused automatically (and the
+        axis switched to linear) when any bound is <= 0 — a log axis cannot show
+        a negative β. When enabled, minor ticks are switched off and the major
+        ticks are pinned to ``{x:g}`` labels (CONTRACTS §7). A span wider than
+        8 decades (a nearly separated dummy, ``OR ≈ 1e9``) is clipped around the
+        median estimate with a "部分 CI 超出显示范围" note instead of letting one
+        row flatten every other interval.
+    xlabel: x axis label.
+    color_sig / color_ns: fill / edge colours for significant and
+        non-significant rows.
+    marker_size: scatter marker area in points².
+    """
     est = np.asarray(list(estimates), dtype=float)
     lo = np.asarray(list(lows), dtype=float)
     hi = np.asarray(list(highs), dtype=float)
@@ -192,15 +443,39 @@ def forest_plot(ax,
     ax.set_yticklabels(labels)
     if log_scale:
         ax.set_xscale("log")
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f"{x:g}"))
+        # P-04: a CI spanning > 8 decades (quasi-separation, OR ≈ 1e9) is
+        # clipped with an explicit note rather than allowed to flatten the plot.
+        _clip_huge_span(ax, est, lo, hi, ref)
     ax.set_xlabel(xlabel)
     style_axis(ax, "x")
+    if log_scale:
+        # P-07: a log axis keeps its minor ticks and mixed scientific labels
+        # unless they are switched off after the scale is applied.
+        _fix_log_ticks(ax)
 
 
 def bar_with_ci(ax, labels: Sequence[str], estimates: Iterable[float],
                 lows: Iterable[float], highs: Iterable[float],
-                color: str = BLUE, width: float = 0.62) -> None:
-    """Bar chart with 95% CI error bars."""
+                color: str = BLUE, width: float = 0.62,
+                ylim_headroom: float = 0.08,
+                annotate: bool = False,
+                fmt: str = "{:.3g}") -> None:
+    """Bar chart with 95% CI error bars.
+
+    Parameters
+    ----------
+    ax: target axes.
+    labels: one bar label per estimate.
+    estimates / lows / highs: bar height and 95% CI bounds.
+    color / width: bar fill colour and bar width in category units.
+    ylim_headroom: fraction of the tallest upper CI bound added above the bars
+        so the caps are never clipped by the axes frame. ``0`` disables the
+        y-limit (legacy behaviour). Only applied when every value is >= 0.
+    annotate: write the estimate above each upper CI bound; the text is placed
+        just above the cap, inside the headroom reserved above, so it never
+        overlaps the error bar.
+    fmt: format string for the annotation (default ``"{:.3g}"``).
+    """
     est = np.asarray(list(estimates), dtype=float)
     lo = np.asarray(list(lows), dtype=float)
     hi = np.asarray(list(highs), dtype=float)
@@ -208,6 +483,19 @@ def bar_with_ci(ax, labels: Sequence[str], estimates: Iterable[float],
     ax.bar(x, est, width=width, color=color, edgecolor="none", zorder=2)
     ax.errorbar(x, est, yerr=[est - lo, hi - est], fmt="none",
                 ecolor=INK, elinewidth=0.8, capsize=2.2, zorder=3)
+    finite = np.isfinite(est) & np.isfinite(lo) & np.isfinite(hi)
+    top = float(np.nanmax(hi[finite])) if finite.any() else float("nan")
+    floor = float(np.nanmin(np.r_[est[finite], lo[finite]])) if finite.any() else float("nan")
+    if ylim_headroom and ylim_headroom > 0 and np.isfinite(top) and top > 0 \
+            and np.isfinite(floor) and floor >= 0:
+        ax.set_ylim(0, top * (1 + float(ylim_headroom)))
+    if annotate:
+        offset = max((ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.012, 1e-9)
+        for xx, e, h in zip(x, est, hi):
+            if not np.isfinite(h):
+                continue
+            ax.text(xx, h + offset, fmt.format(float(e)), ha="center",
+                    va="bottom", fontsize=7.4, color=INK)
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     style_axis(ax, "y")
@@ -323,8 +611,37 @@ def plot_violin(ax, groups: Sequence[Iterable[float]], labels: Sequence[str],
 def stacked_bar(ax, row_labels: Sequence[str], series: Sequence[Iterable[float]],
                 series_labels: Sequence[str], colors: Sequence[str] | None = None,
                 normalize: bool = True, horizontal: bool = False,
-                legend: bool = True) -> None:
-    """Stacked bar/100% stacked bar. series is a list of arrays, one per stack."""
+                legend: bool = True, legend_loc: str = "upper center",
+                legend_anchor: tuple[float, float] | None = None,
+                adjust_top: bool = True, ncol: int | None = None) -> float | None:
+    """Stacked bar / 100% stacked bar.
+
+    Parameters
+    ----------
+    ax: target axes.
+    row_labels: one label per bar (category on x, or y when ``horizontal``).
+    series: one array per stack, all the same length as ``row_labels``.
+    series_labels: legend label of each stack.
+    colors: palette; cycled when there are more stacks than colours.
+    normalize: divide each bar by its total (100% stacked bar).
+    horizontal: draw horizontal bars.
+    legend: draw the legend at all.
+    legend_loc: matplotlib legend ``loc``; default ``"upper center"``.
+    legend_anchor: ``bbox_to_anchor``; default ``(0.5, 1.02)`` — just above the
+        axes but *inside* the canvas. The old hard-coded ``1.16`` pushed the
+        legend outside the figure, and because ``save_fig`` must not use
+        ``bbox_inches="tight"`` (it lowers the effective dpi, CONTRACTS §7) the
+        legend was cropped out of the PNG.
+    adjust_top: measure the legend after drawing and lower
+        ``fig.subplotpars.top`` until it fits on the canvas.
+    ncol: legend columns; default ``min(number of stacks, 4)``.
+
+    Returns
+    -------
+    float | None
+        The ``subplotpars.top`` actually used (``None`` when no legend and no
+        adjustment was made).
+    """
     labels = list(row_labels)
     mats = [np.asarray(list(s), dtype=float) for s in series]
     if normalize:
@@ -356,9 +673,14 @@ def stacked_bar(ax, row_labels: Sequence[str], series: Sequence[Iterable[float]]
         ax.set_xticklabels(labels)
         ax.set_ylim(0, 1)
         style_axis(ax, "y")
+    top = None
     if legend:
-        ax.legend(frameon=False, ncol=min(len(series_labels), 4),
-                  loc="upper center", bbox_to_anchor=(0.5, 1.16))
+        leg = ax.legend(frameon=False, ncol=ncol or min(len(series_labels), 4),
+                        loc=legend_loc,
+                        bbox_to_anchor=(0.5, 1.02) if legend_anchor is None else legend_anchor)
+        if adjust_top:
+            top = _fit_legend(ax, leg)
+    return top
 
 
 def line_ci(ax, x: Sequence[float], y: Iterable[float],
@@ -479,6 +801,10 @@ def scatter_fit(ax, x: Iterable[float], y: Iterable[float],
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     style_axis(ax, "both")
+    if logx:
+        _fix_log_ticks(ax, axis="x")
+    if logy:
+        _fix_log_ticks(ax, axis="y")
     return r
 
 
@@ -525,8 +851,25 @@ def roc_curve(ax, y_true: Iterable[int], y_score: Iterable[float],
 
 
 def calibration_plot(ax, y_true: Iterable[int], y_prob: Iterable[float],
-                     bins: int = 10, color: str = BLUE) -> None:
-    """Calibration curve: observed rate vs mean predicted probability."""
+                     bins: int = 10, color: str = BLUE,
+                     annotate_n: bool = False) -> None:
+    """Calibration curve: observed rate vs mean predicted probability.
+
+    Parameters
+    ----------
+    ax: target axes.
+    y_true: binary outcome (0/1, bool, or mapped text labels).
+    y_prob: predicted probability per observation.
+    bins: number of quantile bins (fewer when the probabilities tie).
+    color: line/marker colour.
+    annotate_n: write the bin size next to each point.
+
+    Notes
+    -----
+    The last bin is closed on both ends (``p == max`` belongs to it); the old
+    ``(p >= lo) & (p < hi)`` loop silently dropped the highest-risk
+    observation(s), which is exactly the point a calibration plot is read for.
+    """
     try:
         y = binary_array(y_true)
     except ValueError as exc:
@@ -548,8 +891,11 @@ def calibration_plot(ax, y_true: Iterable[int], y_prob: Iterable[float],
     if len(edges) < 2:
         xs, ys, ns = [float(p.mean())], [float(y.mean())], [len(p)]
     else:
-        for lo, hi in zip(edges[:-1], edges[1:]):
-            m = (p >= lo) & (p < hi)
+        # searchsorted-right minus one puts p == max into the last bin and
+        # keeps every observation in exactly one bin.
+        idx = np.clip(np.searchsorted(edges, p, side="right") - 1, 0, len(edges) - 2)
+        for b in range(len(edges) - 1):
+            m = idx == b
             if m.sum() == 0:
                 continue
             xs.append(float(p[m].mean()))
@@ -557,6 +903,10 @@ def calibration_plot(ax, y_true: Iterable[int], y_prob: Iterable[float],
             ns.append(int(m.sum()))
     ax.plot([0, 1], [0, 1], color=LGRAY, linewidth=0.6, linestyle=(0, (2, 2)))
     ax.plot(xs, ys, color=color, marker="o", markersize=3.5, linewidth=0.9)
+    if annotate_n:
+        for xx, yy, nn in zip(xs, ys, ns):
+            ax.annotate(f"n={nn}", (xx, yy), xytext=(4, -8),
+                        textcoords="offset points", fontsize=6.2, color=INK)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_xlabel("预测概率")
@@ -666,8 +1016,31 @@ def slopegraph(ax, labels: Sequence[str], left: Iterable[float],
 
 def stacked_area(ax, x: Sequence[float], series: Sequence[Iterable[float]],
                  series_labels: Sequence[str], colors: Sequence[str] | None = None,
-                 normalize: bool = True, alpha: float = 0.9) -> None:
-    """Stacked area chart (e.g. treatment composition over years)."""
+                 normalize: bool = True, alpha: float = 0.9,
+                 legend_loc: str = "upper center",
+                 legend_anchor: tuple[float, float] | None = None,
+                 adjust_top: bool = True, ncol: int | None = None) -> float | None:
+    """Stacked area chart (e.g. treatment composition over years).
+
+    Parameters
+    ----------
+    ax: target axes.
+    x: numeric x values, or categorical values (they are position-encoded).
+    series: one array per band, all the same length as ``x``.
+    series_labels: legend label of each band.
+    colors: palette; cycled when there are more bands than colours.
+    normalize: divide each x position by its total (composition, y limits 0–1).
+    alpha: band transparency.
+    legend_loc: matplotlib legend ``loc``; default ``"upper center"``.
+    legend_anchor: ``bbox_to_anchor``; default ``(0.5, 1.02)`` (inside canvas).
+    adjust_top: shrink the axes until the legend fits on the canvas.
+    ncol: legend columns; default ``min(number of bands, 4)``.
+
+    Returns
+    -------
+    float | None
+        The ``subplotpars.top`` actually used, or ``None`` without adjustment.
+    """
     raw_x = list(x)
     categorical = False
     try:
@@ -695,8 +1068,12 @@ def stacked_area(ax, x: Sequence[float], series: Sequence[Iterable[float]],
     if normalize:
         ax.set_ylim(0, 1)
     style_axis(ax, "y")
-    ax.legend(frameon=False, ncol=min(len(series_labels), 4),
-              loc="upper center", bbox_to_anchor=(0.5, 1.16))
+    leg = ax.legend(frameon=False, ncol=ncol or min(len(series_labels), 4),
+                    loc=legend_loc,
+                    bbox_to_anchor=(0.5, 1.02) if legend_anchor is None else legend_anchor)
+    if not adjust_top:
+        return None
+    return _fit_legend(ax, leg)
 
 
 def bubble(ax, x: Iterable[float], y: Iterable[float], size: Iterable[float],
@@ -726,8 +1103,24 @@ def bubble(ax, x: Iterable[float], y: Iterable[float], size: Iterable[float],
 def pie_chart(ax, labels: Sequence[str], values: Iterable[float],
               colors: Sequence[str] | None = None, donut: bool = True,
               max_categories: int = 6, min_pct: float = 0.8,
-              sort: bool = True) -> None:
-    """Part-to-whole pie/donut; merges the tail into '其他' and drops tiny labels."""
+              sort: bool = True, label_threshold: float = 0.0) -> None:
+    """Part-to-whole pie/donut.
+
+    Parameters
+    ----------
+    ax: target axes.
+    labels: one label per slice.
+    values: slice sizes; non-finite and non-positive values are dropped.
+    colors: palette; cycled when there are more slices than colours.
+    donut: draw a donut (white centre + ``N=`` total) instead of a pie.
+    max_categories: kept slices before the tail is merged into ``"其他"``.
+    min_pct: smallest percentage that gets an in-slice ``%`` label
+        (below it the slice still exists, only the number is hidden).
+    sort: order slices from largest to smallest.
+    label_threshold: share of the total (0–1) below which a slice is merged
+        into ``"其他"``. Slices under the threshold crowd the legend with
+        one-figure categories; ``0`` keeps every slice (legacy behaviour).
+    """
     vals = np.asarray(list(values), dtype=float)
     labs = [str(x) for x in labels]
     mask = np.isfinite(vals) & (vals > 0)
@@ -744,6 +1137,13 @@ def pie_chart(ax, labels: Sequence[str], values: Iterable[float],
         keep = max_categories - 1
         vals = np.r_[vals[:keep], vals[keep:].sum()]
         labs = labs[:keep] + ["其他"]
+    if label_threshold and label_threshold > 0:
+        share = vals / float(vals.sum())
+        keep = share >= float(label_threshold)
+        if not keep.all() and keep.any():
+            rest = float(vals[~keep].sum())
+            vals = np.r_[vals[keep], rest]
+            labs = [l for l, k in zip(labs, keep) if k] + ["其他"]
     total = vals.sum()
     palette = list(colors or [BLUE, ORANGE, GREEN, GRAY, RED, "#7B6D8D"])
     palette = (palette * (len(vals) // len(palette) + 1))[:len(vals)]
@@ -949,7 +1349,13 @@ def pr_curve(ax, y_true: Iterable, y_score: Iterable[float]) -> float:
 
 def lift_chart(ax, y_true: Iterable, y_score: Iterable[float],
                bins: int = 10) -> pd.DataFrame:
-    """Decile lift chart; returns per-bin counts and lift."""
+    """Decile lift chart; returns per-bin counts and lift.
+
+    Bin 1 (``D1``) is the **highest** predicted-probability decile, matching the
+    axis label. The old code ranked the raw score ascending, so ``D1`` was the
+    *lowest*-risk decile while the axis still claimed "D1=最高" — the chart read
+    backwards.
+    """
     y = binary_array(y_true)
     s = pd.to_numeric(pd.Series(list(y_score)), errors="coerce").to_numpy(float)
     mask = np.isfinite(y) & np.isfinite(s)
@@ -959,7 +1365,8 @@ def lift_chart(ax, y_true: Iterable, y_score: Iterable[float],
                 ha="center", va="center", fontsize=8)
         ax.set_axis_off()
         return pd.DataFrame()
-    ranks = pd.qcut(pd.Series(s).rank(method="first"), bins, labels=False).to_numpy()
+    # rank(-score): rank 1 = highest score, so bin 0 (=D1) = highest risk.
+    ranks = pd.qcut(pd.Series(-s).rank(method="first"), bins, labels=False).to_numpy()
     overall = y.mean()
     rows = []
     for b in range(bins):

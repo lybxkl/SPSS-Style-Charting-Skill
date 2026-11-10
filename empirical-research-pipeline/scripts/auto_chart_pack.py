@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -42,6 +43,7 @@ from pubfig import (  # noqa: E402
     stacked_area, bubble,
     pie_chart, qq_plot, control_chart, dendrogram_plot, classical_mds,
     mds_plot, pr_curve, lift_chart, confusion_heatmap, kaplan_meier,
+    short_label as _pubfig_short_label,
     BLUE, ORANGE, GRAY, LGRAY, INK,
 )
 from analysis_utils import (  # noqa: E402
@@ -51,19 +53,157 @@ from analysis_utils import (  # noqa: E402
 
 FIG_W = 15 / 2.54  # 15 cm text width, A4 with standard margins
 
+# Cap on the number of figures a single run may write. The documented default pack
+# is ~40-55 charts (references/07-chart-atlas.md §1/§5); --max-charts defaults to
+# this ceiling and can only be lowered explicitly.
+MAX_CHARTS = 60
+
+N_SCOPES = ("sample", "corpus", "subgroup")
+
+# Manifest columns, v2 order (docs/CONTRACTS.md §3). The first block is mandatory,
+# the rest is optional and written whenever it can be measured.
+MANIFEST_COLUMNS = [
+    "id", "question", "chart_type", "variables", "n", "n_scope",
+    "png", "pdf", "caption", "dpi", "px_width", "model_id", "data_hash",
+    "tiff", "note", "section", "status",
+]
+
+# Sections as they are written into the manifest; the CLI accepts the letter.
+SECTIONS = {
+    "A": "A 数据质量",
+    "B": "B 单变量",
+    "C": "C 双变量",
+    "D": "D 多变量",
+    "E": "E 时间",
+    "F": "F 模型诊断",
+    "G": "G 附录",
+}
+
+# Chart types whose legend is anchored outside the axes: always reserve headroom.
+# "top" legends are re-anchored above the axes; "side" ones (pie/donut) keep the
+# position pubfig gives them and only get a right margin when they overflow.
+TOP_LEGEND_CHART_TYPES = {"100% stacked bar", "100% stacked area"}
+SIDE_LEGEND_CHART_TYPES = {"donut", "pie"}
+FORCE_TOP_CHART_TYPES = TOP_LEGEND_CHART_TYPES | SIDE_LEGEND_CHART_TYPES
+
+# Effect measures a coef CSV can declare in its ``metric`` column: ratios live on a
+# log axis with a reference line at 1, linear terms (β) on a linear axis at 0.
+LOG_METRICS = {"OR", "HR", "RR", "AOR", "ODDS", "RATIO",
+               "ODDS RATIO", "HAZARD RATIO", "RISK RATIO"}
+LIN_METRICS = {"B", "BETA", "COEF", "COEF.", "β", "Β", "SLOPE", "ESTIMATE", "LINEAR"}
+
 SHORT_CATEGORY = {
     "其他": "其他",
 }
 
+# dummy pattern: C(charge_f)[T.水生资源] / charge_f[T.水生资源] / 变量[级别]
+_DUMMY_TERM_RE = re.compile(r"^\s*(?P<var>.+?)\s*\[\s*(?:T\.)?\s*(?P<level>.+?)\s*\]\s*$")
+_C_WRAPPER_RE = re.compile(r"^C\(\s*(?P<var>[^()]+?)\s*\)$")
+_N_TOKEN_RE = re.compile(r"[Nn]\s*[=＝]\s*\d[\d,，]*(?:\s*[→\-–—~]\s*\d[\d,，]*)?")
+
 
 def short_label(value, col: str = "") -> str:
-    s = str(value)
+    """Compact tick/axis label -- one implementation, shared with ``pubfig``.
+
+    The pack only adds patsy's ``C(var)[T.level]`` wrapper handling: ``C()`` is
+    stripped, so ``C(charge_f)[T.水生资源]`` and ``charge_f[T.水生资源]`` print the
+    same ``charge_f：水生资源``.  Everything else (keeping ``var：level`` instead of
+    cutting to 8 characters, never scrubbing a character out of the data, truncating
+    only what is really too long) comes from :func:`pubfig.short_label`.  A second
+    private copy is exactly what let the two versions drift apart.
+    """
+    s = str(value).strip()
     if col in {"category", "crime"} and s in SHORT_CATEGORY:
         return SHORT_CATEGORY[s]
-    if re.fullmatch(r"[A-Za-z0-9_ ]+", s):
-        return s if len(s) <= 22 else s[:20] + "…"
-    s = s.replace("罪", "")
-    return s if len(s) <= 9 else s[:8] + "…"
+    dummy = _DUMMY_TERM_RE.match(s)
+    if dummy and dummy.group("level").strip():
+        var = _C_WRAPPER_RE.sub(r"\g<var>", dummy.group("var").strip()).strip()
+        if var:
+            s = f"{var}[{dummy.group('level').strip()}]"
+    return _pubfig_short_label(s, col)
+
+
+def parse_n(value) -> tuple[int | None, str]:
+    """Parse a manifest N value into ``(first integer, display text)``.
+
+    CONTRACTS §3 allows an integer (``2713`` / ``"2,713"``), a range
+    (``"3111→2713"`` or ``"3111-2713"``, the first integer wins) and an ``N=``
+    prefix.  The display text keeps the range so the caption stays informative;
+    the integer is what validation compares with the row count.
+    """
+    if value is None:
+        return None, ""
+    if isinstance(value, (bool, int, np.integer)):
+        return int(value), f"{int(value):,}"
+    if isinstance(value, (float, np.floating)) and float(value).is_integer():
+        return int(value), f"{int(value):,}"
+    match = re.search(r"\d[\d,，]*(?:\s*[→\-–—~]\s*\d[\d,，]*)?", str(value))
+    if not match:
+        return None, ""
+    display = re.sub(r"\s+", "", match.group(0)).replace("，", ",")
+    first = re.match(r"\d[\d,]*", display)
+    try:
+        value = int(first.group(0).replace(",", ""))
+    except (AttributeError, ValueError):
+        return None, ""
+    if display == first.group(0):
+        display = f"{value:,}"          # plain integer / N= prefix: format it
+    return value, display
+
+
+def fill_caption_n(caption: str, display: str) -> str:
+    """Rewrite *every* ``N=...`` token in *caption* to the resolved N.
+
+    The old code used ``re.sub(..., count=1)``, so a caption that already carried
+    an ``N=`` of its own (e.g. ``完整案例 N=118``) kept a stale value next to the
+    rewritten one.
+    """
+    if not display:
+        return caption
+    if _N_TOKEN_RE.search(caption):
+        return _N_TOKEN_RE.sub(f"N={display}", caption)
+    body = caption.strip()
+    if not body:
+        return f"注：N={display}。"
+    prefix = "注：" if body.startswith("注：") else ""
+    body = body[len(prefix):].strip().rstrip("。")
+    return f"{prefix}N={display}；{body}。" if body else f"{prefix}N={display}。"
+
+
+def png_pixel_info(path: str) -> tuple[int, int]:
+    """Return ``(dpi, pixel_width)`` read back from the saved PNG, ``(0, 0)`` if absent."""
+    if not path or not os.path.isfile(path):
+        return 0, 0
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            width = int(im.size[0])
+            dpi = im.info.get("dpi") or (0, 0)
+        return (int(round(float(dpi[0]))), width) if dpi else (0, width)
+    except Exception:
+        return 0, 0
+
+
+def data_fingerprint(df: pd.DataFrame, key_cols: list[str] | None = None) -> str:
+    """8-hex md5 over column names, row count and a summary of the key columns.
+
+    Lets a later reader check that a manifest row was produced from the same
+    dataset without shipping the data itself.
+    """
+    digest = hashlib.md5()
+    digest.update("|".join(str(c) for c in df.columns).encode("utf-8"))
+    digest.update(f"|rows={len(df)}".encode("utf-8"))
+    candidates = [c for c in (key_cols or []) if c in df.columns] or list(df.columns)
+    for col in candidates[:12]:
+        series = df[col]
+        numeric = pd.to_numeric(series, errors="coerce")
+        n_num = int(numeric.notna().sum())
+        if n_num:
+            digest.update(f"|{col}:n{n_num}:s{float(numeric.sum()):.6f}".encode("utf-8"))
+        else:
+            digest.update(f"|{col}:n{int(series.notna().sum())}"
+                          f":u{int(series.nunique(dropna=True))}".encode("utf-8"))
+    return digest.hexdigest()[:8]
 
 
 def top_counts(series: pd.Series, n: int) -> tuple[list[str], np.ndarray]:
@@ -135,9 +275,98 @@ def role_columns(df: pd.DataFrame, cfg: dict, max_categories: int):
     return id_col, time_col, group_col, treatment_col, outcome_col, numeric, categorical, binaries
 
 
+# The chart catalogue: one row per chart type this script can emit, in output
+# order. `slug` is the manifest slug ("{}" marks a variable/model suffix);
+# `--list-charts` prints it and references/07-chart-atlas.md §1 is generated from
+# it, so the docs cannot drift from the code.
+CHART_CATALOG = [
+    ("A", "missingness", "horizontal bar", "哪些变量缺失最严重？", "存在缺失列"),
+    ("A", "sample_by_group", "bar", "样本在主要类别上如何分布？", "识别到分组变量"),
+    ("A", "sample_by_time", "bar", "样本随年份如何变化？", "识别到时间变量"),
+    ("A", "sample_by_region", "bar", "样本在地区上如何分布？", "识别到地区列"),
+    ("A", "binary_prevalence", "bar + 95%CI", "关键二元变量的发生率是多少？", "≥1 个可用二元变量"),
+    ("B", "outcome_distribution", "bar / histogram + box", "结果变量的分布如何？", "识别到结果变量"),
+    ("B", "outcome_qq", "normal Q-Q", "结果变量是否接近正态分布？", "连续结果"),
+    ("B", "treatment_distribution", "bar", "处理阶段/核心分组的构成如何？", "识别到处理变量"),
+    ("B", "treatment_donut", "donut", "处理阶段/核心分组的占比如何？", "处理变量 2–6 类"),
+    ("B", "dist_{}", "histogram + box", "该变量的分布是否偏态/多峰/有异常值？", "前 6 个数值变量"),
+    ("B", "cat_{}", "bar", "该变量的类别构成如何？", "前 6 个类别变量"),
+    ("C", "outcome_mean_by_{}", "bar + 95%CI", "连续结果的组间均值是否不同？", "连续结果 + 分组/处理/地区/审级"),
+    ("C", "outcome_composition_by_{}", "100% stacked bar", "多分类结果的构成是否不同？", "多分类结果 + 分组/处理/地区/审级"),
+    ("C", "outcome_by_group", "bar + 95%CI", "不同类别的结果率是否趋同？", "二分类结果"),
+    ("C", "group_rate_bubble", "bubble", "类别结果率与样本量是什么关系？", "二分类结果"),
+    ("C", "outcome_by_treatment", "bar + 95%CI", "不同处理阶段的结果率如何变化？", "二分类结果 + 处理变量"),
+    ("C", "group_treatment_heatmap", "heatmap（行百分比）", "各类别内部的处理阶段构成是否不同？", "分组 + 处理变量"),
+    ("C", "group_treatment_stacked", "100% stacked bar", "各类别内部的处理阶段构成是否不同？", "分组 + 处理变量"),
+    ("C", "outcome_group_treatment_heatmap", "heatmap", "类别×阶段的结果率是否存在结构差异？", "二分类 + 分组 + 处理"),
+    ("C", "outcome_by_region", "bar + 95%CI", "不同地区的结果率是否不同？", "二分类结果 + 地区"),
+    ("C", "outcome_by_trial", "bar + 95%CI", "不同审级的结果率是否不同？", "二分类结果 + 审级"),
+    ("C", "correlation_heatmap", "correlation heatmap", "变量之间是否存在明显相关/共线？", "≥2 个数值/二元变量"),
+    ("C", "scatter_{}_{}", "scatter + OLS", "两个变量是否相关？", "相关性最高的 3 对数值变量"),
+    ("D", "violin_{}", "violin + box + points", "该变量在不同类别间是否不同？", "前 2 个数值变量 + 分组"),
+    ("D", "scatter_matrix", "scatter matrix", "数值变量两两之间是否存在非线性/离群结构？", "数值变量 ≥2"),
+    ("D", "two_rate_gap_dumbbell", "dumbbell", "两类处理比例差距多大？", "config.dumbbell 指定两个 0/1 列"),
+    ("D", "pca_scree", "scree + cumulative", "前几个主成分解释了多少方差？", "数值变量 ≥3"),
+    ("D", "pca_biplot", "PCA biplot", "样本在主轴平面上是否形成类别结构？", "数值变量 ≥3"),
+    ("D", "pca_loadings", "PCA loadings heatmap", "哪些变量在主轴上的载荷最高？", "数值变量 ≥3"),
+    ("D", "cluster_dendrogram", "dendrogram", "样本/变量是否形成自然聚类？", "数值变量 ≥2 且 N≥min-n"),
+    ("D", "cluster_mds", "classical MDS", "样本在低维相似性空间中是否分离？", "同上且重复行 <25%"),
+    ("E", "sample_trend", "bar", "各年份样本量如何变化？", "时间变量"),
+    ("E", "outcome_trend", "line + 95%CI", "结果比例随年份如何变化？", "二分类结果"),
+    ("E", "outcome_control", "p control chart", "结果比例是否出现超出 3σ 的异常年份？", "二分类结果且 ≥3 个年份"),
+    ("E", "outcome_trend_mean", "line + 95%CI", "结果均值随年份如何变化？", "连续结果"),
+    ("E", "outcome_control_mean", "X-bar control chart", "结果均值是否出现超出 3σ 的异常年份？", "连续结果且 ≥3 个年份"),
+    ("E", "outcome_composition_trend", "100% stacked bar", "结果类别构成随年份如何变化？", "多分类结果"),
+    ("E", "treatment_composition_trend", "100% stacked bar", "处理阶段构成随年份如何变化？", "时间 + 处理变量"),
+    ("E", "treatment_composition_area", "100% stacked area", "处理阶段构成随年份如何变化？", "时间 + 处理变量"),
+    ("F", "forest_{}", "forest plot", "该模型的系数方向与不确定性如何？", "--coef（每模型 1 张）"),
+    ("F", "model_roc", "ROC", "模型的区分度如何？", "--pred"),
+    ("F", "model_calibration", "calibration curve", "模型预测概率是否校准？", "--pred"),
+    ("F", "model_pred_distribution", "histogram", "预测概率在两类之间是否分离？", "--pred"),
+    ("F", "model_confusion", "confusion matrix", "阈值 0.5 下的分类错误主要在哪里？", "--pred"),
+    ("F", "model_pr", "precision-recall", "正类较少时精确率-召回率表现如何？", "--pred"),
+    ("F", "model_lift", "decile lift", "高预测概率组的提升倍数有多大？", "--pred"),
+    ("F", "survival_km", "Kaplan-Meier", "不同组的生存/未再犯概率如何变化？", "--survival-time/--survival-event"),
+    ("G", "correspondence_biplot", "correspondence analysis biplot", "类别与处理阶段是否存在对应结构？", "分组 + 处理变量"),
+    ("G", "pareto_group", "Pareto", "类别分布是否高度集中？", "识别到分组变量"),
+]
+
+# Manifest section → letter, for the catalogue table.
+SECTION_LETTERS = {name: letter for letter, name in SECTIONS.items()}
+
+
+def split_multi(values) -> list[str]:
+    """Flatten repeated CLI values, splitting each on commas (ASCII or full width)."""
+    out: list[str] = []
+    for raw in values or []:
+        for part in re.split(r"[,，]", str(raw)):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return out
+
+
+def print_catalog(stream=None) -> int:
+    stream = stream or sys.stdout
+    print(f"auto_chart_pack.py 图型清单：{len(CHART_CATALOG)} 项"
+          "（--only 接受 slug、slug 前缀片段或图号 F05）", file=stream)
+    print("段\tslug\t图型\t回答的问题\t触发条件", file=stream)
+    for letter, slug, chart_type, question, when in CHART_CATALOG:
+        print(f"{letter}\t{slug}\t{chart_type}\t{question}\t{when}", file=stream)
+    print("", file=stream)
+    print("示例：--only pca_biplot,model_roc   --sections C,D   --max-charts 20",
+          file=stream)
+    return 0
+
+
 class ChartPack:
+    # Manifest N scope used when neither the caller nor the config names one.
+    n_scope_default = "sample"
+    # model_id written into the manifest when the caller/config supplies none.
+    model_id_default = ""
+
     def __init__(self, df: pd.DataFrame, out_dir: str, cfg: dict, formats: list[str],
-                 top_n: int, min_n: int):
+                 top_n: int, min_n: int, key_cols: list[str] | None = None):
         self.df = df
         self.out_dir = out_dir
         self.fig_dir = os.path.join(out_dir, "figures")
@@ -157,6 +386,21 @@ class ChartPack:
         self.rate_label = "比例（0–1）"
         self.rate_pct_label = "比例（%）"
         self.mean_label = "均值"
+        # manifest v2 provenance
+        self.key_cols = list(key_cols or [])
+        self.data_hash = data_fingerprint(df, self.key_cols)
+        self.n_scope_default = self.norm_scope(
+            (cfg or {}).get("n_scope") or type(self).n_scope_default)
+        self.model_id_default = str((cfg or {}).get("model_id")
+                                    or type(self).model_id_default or "")
+        # selection / budgeting
+        self.max_charts = None
+        self.only_selectors: list[str] = []
+        self.wanted_sections: list[str] | None = None
+        self._seq = 0
+        self.filtered = 0
+        self.limited = 0
+        self.errors = 0
 
     def set_outcome(self, outcome: str | None, kind: str, outcome_map: dict | None = None):
         self.outcome = outcome
@@ -193,36 +437,308 @@ class ChartPack:
             return s[s <= cap].values, "clip"
         return s.values, ""
 
+    @staticmethod
+    def norm_scope(value) -> str:
+        """Coerce *value* to one of CONTRACTS §3's ``n_scope`` values."""
+        scope = str(value or "sample").strip().lower()
+        if scope in N_SCOPES:
+            return scope
+        print(f"WARN: unknown n_scope {value!r}; using 'sample'", file=sys.stderr)
+        return "sample"
+
+    def configure_filters(self, only=None, sections=None, max_charts=None):
+        """Restrict the pack to a subset of charts.
+
+        ``only`` accepts manifest ids (``F05``), slugs (``pca_biplot``), slug
+        fragments (``scatter``) and ``prefix*`` wildcards.  ``sections`` accepts
+        letters (``A``) or section names (``数据质量``).  Chart ids keep their
+        original numbering, so ``--only F05`` still reports ``F05``.  ``max_charts``
+        of 0 or a negative number means "no cap".
+        """
+        self.only_selectors = [str(s).strip() for s in (only or []) if str(s).strip()]
+        if sections is not None:
+            wanted, unknown = [], []
+            for token in split_multi(sections):
+                name = self._section_name(token)
+                wanted.append(name) if name else unknown.append(token)
+            for token in unknown:
+                print(f"WARN: unknown --sections value {token!r}; known: "
+                      f"{', '.join(SECTIONS)}", file=sys.stderr)
+            self.wanted_sections = wanted or None
+        if max_charts is not None:
+            value = int(max_charts)
+            self.max_charts = value if value > 0 else None
+
+    @staticmethod
+    def _section_name(token: str) -> str | None:
+        text = str(token).strip()
+        if not text:
+            return None
+        if text.upper() in SECTIONS:
+            return SECTIONS[text.upper()]
+        for name in SECTIONS.values():
+            if text == name or text in name:
+                return name
+        return None
+
+    def _keep(self, cid: str, slug: str, section: str) -> bool:
+        if self.wanted_sections is not None and section not in self.wanted_sections:
+            return False
+        if not self.only_selectors:
+            return True
+        cid_l, slug_l = cid.lower(), slug.lower()
+        for raw in self.only_selectors:
+            sel = raw.lower()
+            if sel == cid_l or sel == slug_l or sel in slug_l:
+                return True
+            if sel.endswith("*") and (slug_l.startswith(sel[:-1])
+                                      or cid_l.startswith(sel[:-1])):
+                return True
+        return False
+
+    def ok_charts(self) -> list[dict]:
+        return [m for m in self.manifest if m.get("status") == "ok"]
+
+    def status_counts(self) -> dict:
+        counts = {"ok": 0, "skipped": 0, "error": 0}
+        for row in self.manifest:
+            status = str(row.get("status", ""))
+            if status == "ok":
+                counts["ok"] += 1
+            elif status.startswith("skipped"):
+                counts["skipped"] += 1
+            elif status.startswith("error"):
+                counts["error"] += 1
+        return counts
+
+    def rel_path(self, path: str) -> str:
+        """Manifest artifact path: relative to the manifest directory, POSIX style.
+
+        The manifest then survives ``mv output/chart_pack other_machine`` -- the
+        figure is still at ``figures/fig01_x.png`` next to the manifest it was
+        listed in.  A path on another drive cannot be made relative, so it is
+        written as-is (POSIX separators) rather than raising.
+        """
+        if not path:
+            return ""
+        try:
+            rel = os.path.relpath(os.path.abspath(path),
+                                  os.path.abspath(self.out_dir))
+        except ValueError:                       # different drive on Windows
+            return str(path).replace("\\", "/")
+        return rel.replace("\\", "/")
+
     def save(self, fig, slug: str, section: str, question: str, chart_type: str,
-             variables: list[str], n: int, caption: str, note: str = ""):
-        if int(n) <= 0:
-            self.skip(section, question, "no valid observations (N=0)")
+             variables: list[str], n=None, caption: str = "", note: str = "",
+             n_scope: str | None = None, model_id: str | None = None,
+             extra: dict | None = None):
+        """Write one figure and its manifest-v2 row.
+
+        ``n`` accepts what CONTRACTS §3 allows: an int, ``"2,713"``, a range such as
+        ``"3111→2713"`` (the first integer is stored, the range stays in the
+        caption) or an ``N=2713`` prefixed string.  ``n_scope`` defaults to the
+        pack's ``n_scope_default`` (normally ``sample``); ``corpus`` is the only
+        scope that may report an ``n`` larger than the number of data rows.
+
+        ``extra`` carries chart-specific facts (e.g. a forest plot's ``metric`` and
+        ``rows_dropped``): they land in ``chart_pack.json`` and the Markdown digest
+        but are not added to the CSV, whose columns are fixed by the contract.
+
+        A figure that cannot be produced is still recorded: ``n<=0`` or an
+        ``n``-vs-row-count violation becomes a manifest row whose ``status`` says
+        why, instead of vanishing without a trace.
+        """
+        self._seq += 1
+        cid = f"F{self._seq:02d}"
+        if not self._keep(cid, slug, section):
+            self.filtered += 1
             plt.close(fig)
             return
-        idx = len(self.manifest) + 1
-        name = f"fig{idx:02d}_{slug}"
-        caption = re.sub(r"N=[\d,]+", f"N={int(n):,}", caption, count=1)
+        if self.max_charts is not None and len(self.ok_charts()) >= self.max_charts:
+            self.limited += 1
+            plt.close(fig)
+            return
+
+        value, display = parse_n(n if n is not None else len(self.df))
+        scope = self.norm_scope(n_scope or self.n_scope_default)
+        row = {
+            "id": cid, "section": section, "question": question,
+            "chart_type": chart_type,
+            "variables": "; ".join(str(v) for v in variables),
+            "n": value if value is not None else "",
+            "n_scope": scope, "png": "", "pdf": "", "tiff": "",
+            "caption": fill_caption_n(caption, display or f"{len(self.df):,}"),
+            "note": note, "dpi": "", "px_width": "",
+            "model_id": model_id or self.model_id_default,
+            "data_hash": self.data_hash, "status": "ok",
+        }
+        if extra:
+            row.update({str(k): v for k, v in extra.items()})
+
+        if value is None:
+            return self._record_skip(fig, row, "skipped: n 无法解析")
+        if value <= 0:
+            return self._record_skip(fig, row, "skipped: n<=0", stderr=False)
+        if value > len(self.df) and scope != "corpus":
+            reason = (f"error: n={value:,} > 数据行数 {len(self.df):,}"
+                      f"（n_scope={scope}；语料级图请用 n_scope='corpus'）")
+            self.errors += 1
+            print(f"ERROR: {row['id']} {slug}: {reason}", file=sys.stderr)
+            row["status"] = reason
+            self.manifest.append(row)
+            plt.close(fig)
+            return
+
+        name = f"fig{self._seq:02d}_{slug}"
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 fig.tight_layout(pad=0.4)
         except Exception:
             pass
-        paths = save_fig(fig, self.fig_dir, name, formats=self.formats)
+        try:
+            before_right = float(fig.subplotpars.right)
+            lift = chart_type in TOP_LEGEND_CHART_TYPES or slug.startswith("stacked")
+            top = self.adjust(fig, force=chart_type in FORCE_TOP_CHART_TYPES, lift=lift)
+            note_parts = [note.strip(), f"top={top:.3f}"]
+            after_right = float(fig.subplotpars.right)
+            if abs(after_right - before_right) > 1e-6:
+                note_parts.append(f"right={after_right:.3f}")
+            row["note"] = "; ".join(x for x in note_parts if x)
+            paths = save_fig(fig, self.fig_dir, name, formats=self.formats)
+        except Exception as exc:                 # 一张图失败不该毁掉整包
+            reason = f"error: {type(exc).__name__}: {exc}"[:240]
+            self.errors += 1
+            row["status"] = reason
+            self.manifest.append(row)
+            print(f"ERROR: {row['id']} {slug}: {reason}", file=sys.stderr)
+            try:
+                plt.close(fig)
+            except Exception:
+                pass
+            return
         by_ext = {os.path.splitext(p)[1].lower().lstrip("."): p for p in paths}
-        self.manifest.append({
-            "id": f"F{idx:02d}", "section": section, "question": question,
-            "chart_type": chart_type, "variables": "; ".join(variables),
-            "n": n, "png": by_ext.get("png", ""), "pdf": by_ext.get("pdf", ""),
-            "tiff": by_ext.get("tiff", ""), "caption": caption, "note": note,
-            "status": "ok",
+        dpi, px_width = png_pixel_info(by_ext.get("png", ""))
+        row.update({
+            "png": self.rel_path(by_ext.get("png", "")),
+            "pdf": self.rel_path(by_ext.get("pdf", "")),
+            "tiff": self.rel_path(by_ext.get("tiff", "")),
+            "dpi": dpi or "", "px_width": px_width or "",
         })
+        self.manifest.append(row)
+
+    def _record_skip(self, fig, row: dict, reason: str, stderr: bool = True):
+        """Keep a manifest row for a chart that was not produced, and say so."""
+        row["status"] = reason
+        self.manifest.append(row)
+        self.skip(row["section"], row["question"], reason)
+        if stderr:
+            print(f"WARN: {row['id']} {row['question']}: {reason}", file=sys.stderr)
+        else:
+            print(f"skip {row['id']} {row['question']}: {reason}")
+        plt.close(fig)
+
+    def adjust(self, fig, top: float | None = None, force: bool = False,
+               lift: bool = False, pad: float = 0.008,
+               min_top: float = 0.55, passes: int = 4) -> float:
+        """Reserve canvas margin for a legend that lives outside the axes.
+
+        ``tight_layout`` only accounts for artists *inside* the axes, so a legend
+        anchored above them (``stacked_bar``/``stacked_area``) is either clipped by
+        the figure edge or -- when its anchor keeps it on the canvas -- drawn on
+        top of the bars.  CONTRACTS §7 bans ``bbox_inches="tight"`` (it silently
+        lowers the DPI), so the margin has to come from shrinking the axes:
+        ``fig.subplots_adjust(top=...)`` and, for a legend parked beside the axes
+        (``pie_chart``), ``right=...``.
+
+        ``lift`` re-anchors a top legend to sit just above the axes instead of over
+        the data; ``force`` guarantees a margin even when the first measurement
+        finds no overflow (stacked/pie/donut are the known offenders).
+
+        Returns the resulting ``fig.subplotpars.top`` for the manifest ``note``.
+        """
+        if top is not None:
+            fig.subplots_adjust(top=max(min_top, min(0.98, float(top))))
+            return float(fig.subplotpars.top)
+        if lift:
+            for ax in fig.axes:
+                self._lift_legend(ax)
+        reserved = False
+        for _ in range(max(1, int(passes))):
+            cur_top = float(fig.subplotpars.top)
+            cur_right = float(fig.subplotpars.right)
+            dx, dy = self._legend_overflow(fig)
+            new_top, new_right = cur_top, cur_right
+            if dy > 1e-3:
+                new_top = cur_top - (dy + pad) * 1.2
+            elif force and not reserved:
+                new_top = cur_top - 0.10      # flat margin for known offenders
+            if dx > 1e-3:
+                new_right = cur_right - (dx + pad) * 1.2
+            new_top = max(min_top, min(cur_top, new_top))
+            new_right = max(0.55, min(cur_right, new_right))
+            if new_top >= cur_top - 1e-6 and new_right >= cur_right - 1e-6:
+                break
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                fig.subplots_adjust(top=new_top, right=new_right)
+            reserved = True
+        return float(fig.subplotpars.top)
+
+    @staticmethod
+    def _lift_legend(ax) -> None:
+        """Anchor an axes legend just *above* the axes so it never covers data."""
+        legend = ax.get_legend()
+        if legend is None:
+            return
+        try:
+            legend.set_loc("lower center")
+            legend.set_bbox_to_anchor((0.5, 1.012), transform=ax.transAxes)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _legend_overflow(fig) -> tuple[float, float]:
+        """How far (figure fraction) an axes-external legend sticks out.
+
+        Returns the raw ``(dx, dy)`` overhang past the canvas edge, so a legend
+        that merely touches the edge is not treated as a layout problem.  A legend
+        entirely inside its axes is skipped -- that is an ordinary in-axes legend,
+        which ``tight_layout`` already accounts for.
+        """
+        entries = [(None, lg) for lg in getattr(fig, "legends", [])]
+        for ax in fig.axes:
+            legend = ax.get_legend()
+            if legend is not None:
+                entries.append((ax, legend))
+        if not entries:
+            return 0.0, 0.0
+        try:
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+        except Exception:
+            return 0.0, 0.0
+        inv = fig.transFigure.inverted()
+        dx = dy = 0.0
+        for ax, legend in entries:
+            try:
+                box = legend.get_window_extent(renderer).transformed(inv)
+                if ax is not None:
+                    ax_box = ax.get_window_extent(renderer).transformed(inv)
+                    if (float(box.y1) <= float(ax_box.y1) + 1e-6
+                            and float(box.x1) <= float(ax_box.x1) + 1e-6):
+                        continue          # inside the axes: tight_layout saw it
+            except Exception:
+                continue
+            dx = max(dx, float(box.x1) - 1.0)
+            dy = max(dy, float(box.y1) - 1.0)
+        return max(0.0, dx), max(0.0, dy)
 
     def skip(self, section: str, question: str, reason: str):
         self.skipped.append({"section": section, "question": question, "reason": reason})
 
-    def caption(self, extra: str = "") -> str:
-        parts = [f"N={len(self.df):,}"]
+    def caption(self, extra: str = "", n: int | None = None) -> str:
+        parts = [f"N={int(n if n is not None else len(self.df)):,}"]
         if extra:
             parts.append(extra)
         parts.append("数据来源：分析数据集")
@@ -303,10 +819,16 @@ class ChartPack:
             ax.text(i, hi[i] * 100 + 2.0, f"{v * 100:.1f}%", ha="center",
                     va="bottom", fontsize=7.8)
         ax.set_ylim(0, 105)
+        # One chart, up to 10 variables, each with its own valid N: there is no
+        # single sample size. Report the span with n_scope="subgroup" instead of
+        # a bare min(), which read as if the whole chart used that N.
+        n_span = min(sizes) if min(sizes) == max(sizes) else f"{min(sizes)}→{max(sizes)}"
         self.save(fig, "binary_prevalence", "A 数据质量",
                   "关键二元变量的发生率是多少？", "bar + 95%CI",
-                  cols, min(sizes),
-                  self.caption("横轴标注各变量有效 N；误差线为 95% Wilson CI"))
+                  cols, n_span,
+                  self.caption("横轴标注各变量有效 N；误差线为 95% Wilson CI"),
+                  note=f"per-variable n {min(sizes)}-{max(sizes)}",
+                  n_scope="subgroup")
 
     def outcome_distribution(self, outcome):
         if not outcome:
@@ -342,7 +864,7 @@ class ChartPack:
                       self.caption("结果变量分布" +
                                    ("；已用 log10 变换" if note == "log" else
                                     "；横轴截断至 P99" if note == "clip" else "")))
-            fig, ax = plt.subplots(figsize=(4.8, 3.8))
+            fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
             r = qq_plot(ax, s)
             self.save(fig, "outcome_qq", "B 单变量",
                       "结果变量是否接近正态分布？", "normal Q-Q",
@@ -440,7 +962,7 @@ class ChartPack:
                           [treatment], int(vc.sum()),
                           self.caption(f"按 {self.vlabel(treatment)} 统计"))
                 if 2 <= len(vc) <= 6:
-                    fig, ax = plt.subplots(figsize=(4.8, 3.8))
+                    fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
                     pie_chart(ax, [self.glabel(x, treatment) for x in vc.index],
                               vc.values, sort=False)
                     self.save(fig, "treatment_donut", "B 单变量",
@@ -954,8 +1476,26 @@ class ChartPack:
         c = p.sum(axis=0)
         s = (p - np.outer(r, c)) / np.sqrt(np.outer(r, c))
         u, sv, vt = np.linalg.svd(s, full_matrices=False)
+        inertia = sv ** 2
+        total_inertia = float(inertia.sum())
+        question = "类别与处理阶段是否存在对应结构？"
+        if not np.isfinite(total_inertia) or total_inertia <= 0:
+            self.skip("G 附录", question, "对应分析总惰性为零（行与列完全独立），无结构可展示")
+            return
+        # 只有一个非平凡维度时二维双标图没有意义：第二维奇异值退化为
+        # ~1e-17 会让 y 轴数据跨度变成 1e-16 量级，文本坐标在 600 dpi 下
+        # 溢出 int64，matplotlib 在 _set_transform 里直接抛 TypeError。
+        if sv.size < 2 or inertia[1] / total_inertia < 1e-6:
+            share = float(inertia[1] / total_inertia) if sv.size >= 2 else 0.0
+            self.skip("G 附录", question,
+                      f"对应分析第二维退化（第二维仅占惰性 {share:.2e}，"
+                      f"第一维 {(inertia[0]/total_inertia*100):.1f}%），二维双标图无统计意义")
+            return
         row = (u[:, :2] * sv[:2]) / np.sqrt(r)[:, None]
         col = (vt[:2].T * sv[:2]) / np.sqrt(c)[:, None]
+        if not (np.isfinite(row).all() and np.isfinite(col).all()):
+            self.skip("G 附录", question, "对应分析坐标含非有限值，跳过绘图")
+            return
         fig, ax = plt.subplots(figsize=(FIG_W, 5.2))
         ax.scatter(row[:, 0], row[:, 1], s=28, color=BLUE, label="类别", zorder=3)
         ax.scatter(col[:, 0], col[:, 1], s=28, color=ORANGE, marker="s", label="阶段", zorder=3)
@@ -967,7 +1507,13 @@ class ChartPack:
                     fontsize=7, color=ORANGE)
         ax.axhline(0, color=LGRAY, linewidth=0.5)
         ax.axvline(0, color=LGRAY, linewidth=0.5)
-        total_inertia = float(np.sum(sv ** 2))
+        # 显式给定范围：文本不参与自动缩放，若某轴数据跨度极小，
+        # 自动缩放会留下一个数值上退化（~1e-16）的窗口。
+        for setter, values in ((ax.set_xlim, np.concatenate([row[:, 0], col[:, 0]])),
+                               (ax.set_ylim, np.concatenate([row[:, 1], col[:, 1]]))):
+            lo, hi = float(np.min(values)), float(np.max(values))
+            pad = (hi - lo) * 0.08 if hi > lo else 0.05
+            setter(lo - pad, hi + pad)
         ax.set_xlabel(f"维度 1（{sv[0]**2/total_inertia*100:.1f}%）")
         ax.set_ylabel(f"维度 2（{sv[1]**2/total_inertia*100:.1f}%）")
         ax.legend(frameon=False, fontsize=7)
@@ -1108,52 +1654,142 @@ class ChartPack:
                           f"coef CSV 无法读取: {type(exc).__name__}: {exc}"[:200])
                 c = None
         if coef_path and c is not None:
-            rename = {x.lower(): x for x in c.columns}
-            term = rename.get("term") or rename.get("variable")
-            est = rename.get("or") or rename.get("estimate")
-            lo = rename.get("ci_low") or rename.get("low")
-            hi = rename.get("ci_high") or rename.get("high")
-            model = rename.get("model")
-            metric_col = rename.get("metric")
-            n_col = rename.get("n")
-            if term and est and lo and hi:
-                c = c.copy()
-                for col in (est, lo, hi):
-                    c[col] = pd.to_numeric(c[col], errors="coerce")
-                c = c[c[[term, est, lo, hi]].notna().all(axis=1)]
-                if c.empty:
+            rename = {str(x).lower().replace(" ", "_"): x for x in c.columns}
+
+            def pick(*names):
+                return next((rename[n] for n in names if n in rename), None)
+
+            term = pick("term", "variable", "coef_name", "name")
+            model = pick("model")
+            metric_col = pick("metric")
+            n_col = pick("n")
+            # Two column families can coexist in one file when the stats layer fits
+            # logit and OLS models: ``or/or_low/or_high`` (ratio scale, log axis) and
+            # ``beta/ci_low/ci_high`` (linear scale).  The old code chose one family
+            # for the whole file, so an OLS row whose ``or`` was empty got filtered
+            # out and the forest plot silently lost half the models.
+            generic_lo = pick("ci_low", "low", "ci_lower", "lcl")
+            generic_hi = pick("ci_high", "high", "ci_upper", "ucl")
+            log_family = (pick("or", "hr", "rr"),
+                          pick("or_low", "hr_low", "rr_low") or generic_lo,
+                          pick("or_high", "hr_high", "rr_high") or generic_hi)
+            lin_family = (pick("beta", "estimate", "coef", "b"), generic_lo, generic_hi)
+            log_label = ("OR" if pick("or") else "HR" if pick("hr")
+                         else "RR" if pick("rr") else "OR")
+
+            def numbers(row, cols) -> list[float] | None:
+                """[est, lo, hi] if this row fills all three columns, else None."""
+                if not all(cols):
+                    return None
+                values = []
+                for col in cols:
+                    try:
+                        value = pd.to_numeric(row.get(col), errors="coerce")
+                    except Exception:
+                        return None
+                    if pd.isna(value):
+                        return None
+                    values.append(float(value))
+                return values
+
+            def resolve(row) -> tuple[str, str, list[float] | None]:
+                """(scale, metric label, [est, lo, hi]) for one coefficient row.
+
+                A ``metric`` cell wins; otherwise the family this row actually fills
+                decides.  Either way the row is kept when *any* family is complete,
+                so mixed logit/OLS files no longer lose their OLS rows.
+                """
+                declared = ""
+                if metric_col is not None:
+                    raw = row.get(metric_col)
+                    if pd.notna(raw):
+                        declared = str(raw).strip()
+                upper = declared.upper()
+                attempts: list[tuple[str, str]] = []
+                if upper in LOG_METRICS:
+                    attempts.append(("log", upper))
+                elif upper in LIN_METRICS:
+                    attempts.append(("lin", "β"))
+                for attempt in (("log", log_label), ("lin", "β")):
+                    if attempt not in attempts:
+                        attempts.append(attempt)
+                for scale, label in attempts:
+                    values = numbers(row, log_family if scale == "log" else lin_family)
+                    if values:
+                        return scale, label, values
+                return "", declared.upper(), None
+
+            if term and any(all(family) for family in (log_family, lin_family)):
+                records, dropped_by_model = [], {}
+                for _, row in c.iterrows():
+                    scale, metric, values = resolve(row)
+                    term_text = row.get(term)
+                    if values is None or pd.isna(term_text):
+                        key = str(row[model]) if model else "model"
+                        dropped_by_model[key] = dropped_by_model.get(key, 0) + 1
+                        continue
+                    n_value = (pd.to_numeric(row.get(n_col), errors="coerce")
+                               if n_col is not None else np.nan)
+                    records.append({
+                        "term": str(term_text), "scale": scale, "metric": metric,
+                        "model": str(row[model]) if model else "model",
+                        "est": values[0], "lo": values[1], "hi": values[2], "n": n_value,
+                    })
+                if not records:
                     self.skip("F 模型诊断", "模型系数图",
                               "coef CSV 的 estimate/CI 列没有可用数值")
-                    groups = []
                 else:
-                    groups = c.groupby(model) if model else [("model", c)]
-                for m, sub in groups:
-                    try:
-                        metric = str(sub[metric_col].iloc[0]).upper() if metric_col else "OR"
-                        log_scale = metric in {"OR", "HR", "RR"}
-                        ref = 1.0 if log_scale else 0.0
-                        n_model = len(self.df)
-                        if n_col and sub[n_col].notna().any():
-                            try:
-                                n_model = int(float(sub[n_col].iloc[0]))
-                            except (TypeError, ValueError):
-                                pass
-                        term_labels = self.cfg.get("term_labels", {})
-                        fig, ax = plt.subplots(figsize=(FIG_W, max(3.2, 0.4 * len(sub) + 1.2)))
-                        forest_plot(ax, [term_labels.get(str(x), short_label(x)) for x in sub[term]],
-                                    sub[est].values, sub[lo].values, sub[hi].values,
-                                    ref=ref, log_scale=log_scale,
-                                    xlabel=f"{metric}（95%CI）")
-                        self.save(fig, f"forest_{re.sub(r'[^A-Za-z0-9]+', '_', str(m))}",
-                                  "F 模型诊断", f"{m} 的系数方向与不确定性如何？",
-                                  "forest plot", [term, est, lo, hi], n_model,
-                                  f"注：N={n_model:,}；模型 {m}；点为 {metric}，线为 95%CI；"
-                                  f"参考线 {metric}={ref:g}；数据来源：分析数据集。")
-                    except Exception as exc:
-                        self.skip("F 模型诊断", f"{m} 的系数图",
-                                  f"无法绘制: {type(exc).__name__}: {exc}"[:200])
+                    tidy = pd.DataFrame(records)
+                    per_model_scales = tidy.groupby("model")["scale"].nunique()
+                    term_labels = self.cfg.get("term_labels", {})
+                    for (m, scale), sub in tidy.groupby(["model", "scale"], sort=False):
+                        try:
+                            metric = str(sub["metric"].iloc[0]) or (
+                                "OR" if scale == "log" else "β")
+                            log_scale = scale == "log"
+                            ref = 1.0 if log_scale else 0.0
+                            n_model = len(self.df)
+                            if sub["n"].notna().any():
+                                try:
+                                    n_model = int(float(sub["n"].dropna().iloc[0]))
+                                except (TypeError, ValueError):
+                                    pass
+                            # n comes from the coef CSV (model rows), not from the data
+                            # rows: when it exceeds them the scope is not row-level.
+                            n_scope = "sample" if n_model <= len(self.df) else "corpus"
+                            rows_dropped = int(dropped_by_model.get(str(m), 0))
+                            slug = f"forest_{re.sub(r'[^A-Za-z0-9]+', '_', str(m))}"
+                            if int(per_model_scales.get(m, 1)) > 1:
+                                slug += "_" + (re.sub(r"[^A-Za-z0-9]+", "", metric.lower())
+                                               or scale)
+                            fig, ax = plt.subplots(
+                                figsize=(FIG_W, max(3.2, 0.4 * len(sub) + 1.2)))
+                            forest_plot(ax,
+                                        [term_labels.get(str(x), short_label(x))
+                                         for x in sub["term"]],
+                                        sub["est"].values, sub["lo"].values,
+                                        sub["hi"].values,
+                                        ref=ref, log_scale=log_scale,
+                                        xlabel=f"{metric}（95%CI）")
+                            family = log_family if log_scale else lin_family
+                            caption = (f"注：N={n_model:,}；模型 {m}；点为 {metric}，线为 95%CI；"
+                                       f"参考线 {metric}={ref:g}；数据来源：分析数据集。")
+                            if rows_dropped:
+                                caption = (caption[:-1] +
+                                           f"（{rows_dropped} 行缺 estimate/CI，未绘）。")
+                            self.save(fig, slug, "F 模型诊断",
+                                      f"{m} 的系数方向与不确定性如何？", "forest plot",
+                                      [term, family[0], family[1], family[2]], n_model,
+                                      caption, n_scope=n_scope, model_id=str(m),
+                                      extra={"metric": metric, "rows_plotted": len(sub),
+                                             "rows_dropped": rows_dropped})
+                        except Exception as exc:
+                            self.skip("F 模型诊断", f"{m} 的系数图",
+                                      f"无法绘制: {type(exc).__name__}: {exc}"[:200])
             else:
-                self.skip("F 模型诊断", "模型系数图", "coef CSV 缺少 term/estimate/ci_low/ci_high")
+                self.skip("F 模型诊断", "模型系数图",
+                          "coef CSV 缺少 term 与 estimate/OR/beta 及 ci_low/ci_high"
+                          "（也接受 or/or_low/or_high、low/high）")
         if pred_path:
             try:
                 p = read_csv_auto(pred_path)
@@ -1263,11 +1899,18 @@ class ChartPack:
              .replace({"nan": "未记载", "None": "未记载", "<NA>": "未记载"})
              if group in self.df.columns else None)
         fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
-        kaplan_meier(ax, sub["t"], sub["e"], group=g)
+        try:
+            kaplan_meier(ax, sub["t"], sub["e"], group=g)
+        except Exception as exc:
+            plt.close(fig)
+            self.skip("F 模型诊断", "生存/随访时间如何变化？",
+                      f"无法绘制 Kaplan-Meier: {type(exc).__name__}: {exc}"[:200])
+            return
         self.save(fig, "survival_km", "F 模型诊断",
                   "不同组的生存/未再犯概率如何变化？", "Kaplan-Meier",
                   [tcol, ecol] + ([group] if g is not None else []), len(sub),
-                  self.caption("阶梯线为 Kaplan–Meier 估计；短竖线为删失点"))
+                  self.caption("阶梯线为 Kaplan–Meier 估计；短竖线为删失点",
+                               n=len(sub)))
 
     # ------------------------------------------------------------------
     # G. Appendix
@@ -1284,23 +1927,43 @@ class ChartPack:
 
     def write(self, meta: dict):
         mpath = os.path.join(self.out_dir, "chart_manifest.csv")
-        pd.DataFrame(self.manifest).to_csv(mpath, index=False, encoding="utf-8-sig")
+        frame = pd.DataFrame(self.manifest)
+        if not frame.empty:
+            frame = frame.reindex(columns=[c for c in MANIFEST_COLUMNS if c in frame.columns])
+        frame.to_csv(mpath, index=False, encoding="utf-8-sig")
+        # ``counts.skipped`` counts manifest rows; ``skipped_total`` also counts the
+        # pre-flight skips (no figure was ever drawn, e.g. missing --coef), so the
+        # JSON and the Markdown headline cannot tell different stories.
+        counts = self.status_counts()
+        counts["skipped_total"] = len(self.skipped)
         with open(os.path.join(self.out_dir, "chart_pack.json"), "w", encoding="utf-8") as fh:
-            json.dump({"meta": meta, "charts": self.manifest, "skipped": self.skipped},
-                      fh, ensure_ascii=False, indent=2)
+            json.dump({"meta": meta, "charts": self.manifest, "skipped": self.skipped,
+                       "counts": counts}, fh, ensure_ascii=False, indent=2)
         lines = ["# 图表包", "",
-                 f"- 数据：`{meta['data']}`",
-                 f"- 分析样本：{meta['n']:,}",
-                 f"- 图表数：{len(self.manifest)}",
-                 f"- 跳过：{len(self.skipped)}",
+                 f"- 数据：`{meta.get('data', '')}`",
+                 f"- 分析样本：{int(meta.get('n') or 0):,}",
+                 f"- 图表数：{counts['ok']}",
+                 f"- manifest 行数：{len(self.manifest)}",
+                 f"- 跳过：{len(self.skipped)}（其中 {counts['skipped']} 条记入 manifest）",
+                 f"- 数据指纹（data_hash）：`{self.data_hash}`",
                  "", "## 图表清单", ""]
         for m in self.manifest:
+            n_text = f"{m['n']:,}" if isinstance(m.get("n"), int) else "—"
             lines += [f"### {m['id']} {m['question']}", "",
                       f"- 类型：{m['chart_type']}",
                       f"- 变量：{m['variables']}",
-                      f"- N：{m['n']:,}",
-                      f"- 文件：`{os.path.basename(m['png'])}` / `{os.path.basename(m['pdf'])}`",
-                      f"- 图注：{m['caption']}", ""]
+                      f"- N：{n_text}（n_scope={m.get('n_scope') or 'sample'}）",
+                      f"- 状态：{m.get('status', 'ok')}"]
+            if m.get("metric") or m.get("rows_dropped") is not None:
+                extra_bits = [f"标度：{m.get('metric') or '—'}"]
+                if m.get("rows_plotted") is not None:
+                    extra_bits.append(f"绘制行 {m['rows_plotted']}")
+                extra_bits.append(f"未绘行 {m.get('rows_dropped', 0)}")
+                lines += ["- " + "；".join(extra_bits)]
+            if m.get("png"):
+                lines += [f"- 文件：`{os.path.basename(m['png'])}` / "
+                          f"`{os.path.basename(m.get('pdf', ''))}`"]
+            lines += [f"- 图注：{m['caption']}", ""]
         if self.skipped:
             lines += ["## 跳过项", ""]
             for s in self.skipped:
@@ -1311,21 +1974,51 @@ class ChartPack:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate a comprehensive chart pack.")
-    parser.add_argument("--data", required=True)
+    parser = argparse.ArgumentParser(
+        description="Generate a comprehensive chart pack.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=("常规产出约 40–55 张图（见 references/07-chart-atlas.md）；"
+                f"--max-charts 默认 {MAX_CHARTS}，只会更少不会更多。\n"
+                "用 --list-charts 查看全部图型，再用 --only / --sections 挑子集。"))
+    parser.add_argument("--data", default=None,
+                        help="analysis CSV（--list-charts 时可省略）")
     parser.add_argument("--out", default="output/chart_pack")
     parser.add_argument("--config", default=None)
-    parser.add_argument("--coef", default=None, help="CSV: model,term,estimate/or,ci_low,ci_high,p")
+    parser.add_argument("--coef", default=None,
+                        help="CSV: model,term,estimate/OR/beta,ci_low/ci_high,p"
+                             "（or/or_low/or_high 与 beta/ci_low/ci_high 均可）")
     parser.add_argument("--pred", default=None, help="CSV: y_true,y_prob")
     parser.add_argument("--top-n", type=int, default=8)
     parser.add_argument("--min-n", type=int, default=10)
     parser.add_argument("--max-categories", type=int, default=12)
+    parser.add_argument("--only", action="append", metavar="IDS",
+                        help="只产出这些图：图号（F05）、slug（pca_biplot）、"
+                             "片段（scatter、model_*）；逗号分隔，可重复")
+    parser.add_argument("--sections", action="append", metavar="NAMES",
+                        help="只产出这些段：A,B,… 或段名（数据质量）；逗号分隔，可重复")
+    parser.add_argument("--max-charts", type=int, default=MAX_CHARTS, metavar="N",
+                        help=f"最多产出多少张图（默认 {MAX_CHARTS}；"
+                             "常规包约 40–55 张，调小可加快试跑）；"
+                             "0 或负数 = 不限制")
+    parser.add_argument("--n-scope", choices=N_SCOPES, default=None,
+                        help="manifest 的 n_scope 默认值；corpus 允许 n>数据行数的"
+                             "语料级/漏斗类图（缺省 sample，config.n_scope 可覆盖）")
+    parser.add_argument("--list-charts", action="store_true",
+                        help="打印可用图型清单后退出")
     parser.add_argument("--survival-time", default=None, help="follow-up time column for Kaplan-Meier")
     parser.add_argument("--survival-event", default=None, help="event/censor column (1=event, 0=censor)")
     parser.add_argument("--survival-group", default=None, help="group column for Kaplan-Meier")
-    parser.add_argument("--tiff", action="store_true", help="also write LZW TIFF")
+    parser.add_argument("--tiff", dest="tiff", action="store_true", default=True,
+                        help="写 LZW TIFF（默认开启；这是默认行为，保留该开关只为兼容旧命令）")
+    parser.add_argument("--no-tiff", dest="tiff", action="store_false",
+                        help="不写 TIFF，只出 png+pdf（三格式约慢 30%%）")
     args = parser.parse_args()
 
+    if args.list_charts:
+        return print_catalog()
+    if not args.data:
+        print("ERROR: --data is required (or use --list-charts)", file=sys.stderr)
+        return 2
     if not os.path.isfile(args.data):
         print(f"ERROR: data not found: {args.data}", file=sys.stderr)
         return 2
@@ -1446,37 +2139,72 @@ def main() -> int:
 
     out_dir = os.path.abspath(args.out)
     formats = ["png", "pdf"] + (["tiff"] if args.tiff else [])
+    if args.n_scope:
+        cfg["n_scope"] = args.n_scope
     set_style()
-    pack = ChartPack(df, out_dir, cfg, formats, args.top_n, args.min_n)
+    key_cols = []
+    for col in [outcome_col, group_col, treatment_col, time_col, id_col] + numeric[:4]:
+        if col and col in df.columns and col not in key_cols:
+            key_cols.append(col)
+    pack = ChartPack(df, out_dir, cfg, formats, args.top_n, args.min_n, key_cols=key_cols)
     pack.set_outcome(outcome_col, kind, outcome_map)
+    pack.configure_filters(only=split_multi(args.only),
+                           sections=split_multi(args.sections) if args.sections else None,
+                           max_charts=args.max_charts)
 
     prevalence_binaries = binary_predictors[:]
     if outcome_col and kind == "binary":
         prevalence_binaries = [outcome_col] + prevalence_binaries
 
-    pack.data_quality(group_col, time_col, region_col)
-    pack.binary_prevalence(outcome_col, prevalence_binaries)
-    pack.outcome_distribution(outcome_col)
-    pack.univariate(numeric, categorical, treatment_col)
-    pack.bivariate(group_col, treatment_col, outcome_col, region_col, trial_col)
+    def stage(label: str, fn, *call_args, **call_kwargs):
+        """Run one chart family; a crash there must not destroy the whole pack.
+
+        Failing here means the *statistics* for that family broke (bad assumptions,
+        degenerate table, missing column), not the drawing.  The failure is counted
+        and reported, the remaining families still run, and the process exits 2 so
+        the failure stays visible in CI.
+        """
+        try:
+            fn(*call_args, **call_kwargs)
+        except Exception as exc:
+            pack.errors += 1
+            msg = f"error: {type(exc).__name__}: {exc}"[:240]
+            print(f"ERROR: {label}: {msg}", file=sys.stderr)
+            pack.skipped.append({"section": label, "question": label, "reason": msg})
+            try:
+                plt.close("all")
+            except Exception:
+                pass
+
+    stage("A 数据质量", pack.data_quality, group_col, time_col, region_col)
+    stage("A 数据质量", pack.binary_prevalence, outcome_col, prevalence_binaries)
+    stage("B 单变量", pack.outcome_distribution, outcome_col)
+    stage("B 单变量", pack.univariate, numeric, categorical, treatment_col)
+    stage("C 双变量", pack.bivariate, group_col, treatment_col, outcome_col,
+          region_col, trial_col)
     corr_numeric = numeric + ([outcome_col] if outcome_col and kind == "continuous"
                               and outcome_col not in numeric else [])
     corr_binaries = binary_predictors + ([outcome_col] if outcome_col and kind in {"binary", "continuous"}
                                          and outcome_col not in binary_predictors else [])
-    pack.correlations(corr_numeric, corr_binaries)
+    stage("C 双变量", pack.correlations, corr_numeric, corr_binaries)
     multivariate_numeric = (([outcome_col] if outcome_col and kind == "continuous"
                              and outcome_col not in numeric else []) + numeric)
-    pack.multivariate(multivariate_numeric, group_col, treatment_col)
-    pack.pca(numeric, group_col)
-    pack.clustering(numeric, group_col)
-    pack.time_trends(time_col, outcome_col, treatment_col)
-    pack.model_charts(args.coef, args.pred)
-    pack.survival(cfg)
-    pack.correspondence(group_col, treatment_col)
-    pack.appendix(group_col)
-    if not pack.manifest:
-        print("ERROR: no charts could be generated; check data columns and filter",
-              file=sys.stderr)
+    stage("D 多变量", pack.multivariate, multivariate_numeric, group_col, treatment_col)
+    stage("D 多变量", pack.pca, numeric, group_col)
+    stage("D 多变量", pack.clustering, numeric, group_col)
+    stage("E 时间", pack.time_trends, time_col, outcome_col, treatment_col)
+    stage("F 模型", pack.model_charts, args.coef, args.pred)
+    stage("F 模型", pack.survival, cfg)
+    stage("G 附录", pack.correspondence, group_col, treatment_col)
+    stage("G 附录", pack.appendix, group_col)
+    counts = pack.status_counts()
+    if counts["ok"] == 0:
+        hint = ""
+        if pack.filtered:
+            hint = ("（--only/--sections 过滤掉了全部图："
+                    f"only={split_multi(args.only)} sections={split_multi(args.sections)}）")
+        print("ERROR: no charts could be generated; check data columns and filter"
+              + hint, file=sys.stderr)
         return 3
 
     meta = {
@@ -1489,12 +2217,22 @@ def main() -> int:
         "survival_time": cfg.get("survival_time"),
         "survival_event": cfg.get("survival_event"),
         "survival_group": cfg.get("survival_group"),
+        "n_scope": pack.n_scope_default,
+        "data_hash": pack.data_hash,
+        "max_charts": pack.max_charts,
+        "only": pack.only_selectors,
+        "sections": pack.wanted_sections,
     }
     mpath = pack.write(meta)
-    print(f"charts: {len(pack.manifest)}  skipped: {len(pack.skipped)}")
+    total_errors = counts["error"] + pack.errors
+    print(f"charts: {counts['ok']}  skipped: {len(pack.skipped)}"
+          f"  filtered: {pack.filtered}  limited: {pack.limited}"
+          f"  errors: {total_errors}")
+    print(f"data_hash: {pack.data_hash}  n_scope: {pack.n_scope_default}"
+          f"  manifest rows: {len(pack.manifest)}")
     print(f"manifest: {mpath}")
     print(f"figures: {pack.fig_dir}")
-    return 0
+    return 2 if total_errors else 0
 
 
 if __name__ == "__main__":

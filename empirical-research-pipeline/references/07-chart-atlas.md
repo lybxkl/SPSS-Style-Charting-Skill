@@ -7,52 +7,76 @@
 - **一个主发现至少两张图。** 一张主结果图，一张稳健性/诊断/异质性图。
 - **图数不设上限。** 正文放 7–10 张主图，其余放附录；附录 20–50 张很正常。
 - **同一变量同一颜色、同一顺序。** 跨图比较时不要重新排序或换色。
-- **每张图有清单。** 图号、问题、变量、N、图注、文件路径，全部写进 `chart_manifest.csv`。
+- **每张图有清单。** 图号、问题、变量、N、`n_scope`、图注、dpi、`data_hash`、文件路径，全部写进 `chart_manifest.csv`；画不出来的图也留一行说明为什么。
 
 ## 1. 默认图表包
 
-`auto_chart_pack.py` 在通用分析数据上默认生成约 40–55 张图：二分类约 44 张，带 `--coef`/`--pred` 约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动，实际以 `chart_manifest.csv` 为准。分为：
+`auto_chart_pack.py` 在通用分析数据上默认生成约 40–55 张图：二分类约 44 张，带 `--coef`/`--pred` 约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动，实际以 `chart_manifest.csv` 为准。`--max-charts`（默认 **60**）是硬上限：超出的图不画，stdout 里报 `limited: N`，manifest 不记这些行；传 `0` 或负数则**不限制**。
 
-| 组 | 图 | 回答的问题 |
-|---|---|---|
-| A 数据质量 | 缺失率条形图 | 哪些变量缺失最严重？ |
-| A | 样本类别/年份/地区分布 | 样本结构是否偏斜？ |
-| A | 二元变量发生率（含 95%CI） | 关键情节有多普遍？ |
-| B 单变量 | 核心结果总发生率 | 基线水平是多少？ |
-| B | 结果变量分布（二分类/连续/多分类） | 结果本身是偏态、双峰还是多类？ |
-| B | 连续结果 Q-Q 图 | 结果是否接近正态？ |
-| B | 处理/分组构成（条形+环形） | 主要阶段如何分布、占比如何？ |
-| B | 数值变量直方图+箱线 | 是否偏态、多峰、有异常值？ |
-| B | 类别变量条形图 | 类别构成如何？ |
-| C 双变量 | 类别×结果率（95%CI） | 不同类别结果率是否趋同？ |
-| C | 阶段×结果率（95%CI） | 结果率随阶段如何变化？ |
-| C | 类别×阶段热图/堆叠柱 | 阶段构成是否不同？ |
-| C | 类别×阶段×结果热图 | 结构差异在哪？ |
-| C | 地区/审级×结果率 | 是否存在地区/审级差异？ |
-| C | 连续结果：组/阶段/地区/审级的均值+95%CI | 连续结果的组间均值是否不同？ |
-| C | 多分类结果：组内结果构成 100% 堆叠图 | 不同组的结果类别构成是否不同？ |
-| C | 相关热图 | 是否存在共线/强关联？ |
-| C | 散点+拟合线 | 两个连续变量是否相关？ |
-| C | 结果率×样本量气泡图 | 差异是否只是样本量造成？ |
-| D 多变量 | 提琴图+箱线+散点 | 连续变量在组间是否不同？ |
-| D | 散点矩阵 | 多变量是否存在非线性/离群结构？ |
-| D | 两类处理比例哑铃图 | 两类处理比例差距多大？ |
-| D | PCA 碎石图+双标图+载荷热图 | 是否存在潜在维度、哪些变量载荷高？ |
-| D | Ward 聚类树状图 | 样本/变量是否形成自然聚类？ |
-| D | 经典 MDS 图 | 样本在低维相似性空间中是否分离？ |
-| E 时间 | 结果率/均值年度趋势（95%CI） | 结果随时间如何变化？ |
-| E | 3σ 控制图 | 是否有异常年份超出过程波动？ |
-| E | 多分类结果构成趋势 | 结果类别构成随时间如何变化？ |
-| E | 年度样本量 | 趋势是否被样本量变化驱动？ |
-| E | 阶段构成堆叠柱/面积图 | 阶段结构随时间如何变化？ |
-| F 模型诊断 | 森林图 | 系数方向与不确定性？ |
-| F | ROC / PR / 校准 / 预测分布 | 模型区分度与校准？ |
-| F | 混淆矩阵 / 十分位 Lift | 阈值 0.5 下错在哪、头部提升多大？ |
-| F | Kaplan–Meier | 有随访时间时，生存/未再犯概率如何变化？ |
-| G 附录 | 对应分析双标图 | 类别与阶段是否对应？ |
-| G | Pareto | 类别是否高度集中？ |
+所有图统一 **15 cm 宽**（`FIG_W = 15/2.54 in`，600 dpi 下 `px_width = 3543`，方图也是一样），高度随内容变；默认三种格式 `png + pdf + tiff`，`--no-tiff` 可回到只出 `png + pdf`。
 
-模型图需要 `--coef`（系数表）或 `--pred`（预测表）；没有就跳过，并在清单里写明原因。`--coef` 建议带 `metric`（OR/HR/RR/beta）与 `n`；`--pred` 支持 0/1 与“是/否”标签，常数预测或单一类别会跳过 ROC/PR/校准/混淆矩阵/Lift。`term_labels` 可把模型项名映射为中文。双比例哑铃图需在 config 的 `dumbbell` 里指定两个 0/1 列。`--top-n` 控制每图最多类别数，`--min-n` 控制最小分析单元；小样本下脚本宁可不画，也不画误导性组间比较。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可选 `--survival-group`）画 Kaplan–Meier；没有随访数据会在 manifest 的 skipped 中写明。
+下表就是脚本里的 `CHART_CATALOG`，`--list-charts` 打印的是同一份清单；改代码时请同步改这张表，**图型、slug、触发条件以代码为准**。
+
+| 组 | slug | 图型 | 回答的问题 | 触发条件 |
+|---|---|---|---|---|
+| A 数据质量 | `missingness` | horizontal bar | 哪些变量缺失最严重？ | 存在缺失列 |
+| A | `sample_by_group` | bar | 样本在主要类别上如何分布？ | 识别到分组变量 |
+| A | `sample_by_time` | bar | 样本随年份如何变化？ | 识别到时间变量 |
+| A | `sample_by_region` | bar | 样本在地区上如何分布？ | 识别到地区列 |
+| A | `binary_prevalence` | bar + 95%CI | 关键二元变量的发生率是多少？ | ≥1 个可用二元变量 |
+| B 单变量 | `outcome_distribution` | bar / histogram + box | 结果变量的分布如何？ | 识别到结果变量 |
+| B | `outcome_qq` | normal Q-Q | 结果变量是否接近正态分布？ | 连续结果 |
+| B | `treatment_distribution` | bar | 处理阶段/核心分组的构成如何？ | 识别到处理变量 |
+| B | `treatment_donut` | donut | 处理阶段/核心分组的占比如何？ | 处理变量 2–6 类 |
+| B | `dist_{}` | histogram + box | 该变量的分布是否偏态/多峰/有异常值？ | 前 6 个数值变量 |
+| B | `cat_{}` | bar | 该变量的类别构成如何？ | 前 6 个类别变量 |
+| C 双变量 | `outcome_mean_by_{}` | bar + 95%CI | 连续结果的组间均值是否不同？ | 连续结果 + 分组/处理/地区/审级 |
+| C | `outcome_composition_by_{}` | 100% stacked bar | 多分类结果的构成是否不同？ | 多分类结果 + 分组/处理/地区/审级 |
+| C | `outcome_by_group` | bar + 95%CI | 不同类别的结果率是否趋同？ | 二分类结果 |
+| C | `group_rate_bubble` | bubble | 类别结果率与样本量是什么关系？ | 二分类结果 |
+| C | `outcome_by_treatment` | bar + 95%CI | 不同处理阶段的结果率如何变化？ | 二分类结果 + 处理变量 |
+| C | `group_treatment_heatmap` | heatmap（行百分比） | 各类别内部的处理阶段构成是否不同？ | 分组 + 处理变量 |
+| C | `group_treatment_stacked` | 100% stacked bar | 各类别内部的处理阶段构成是否不同？ | 分组 + 处理变量 |
+| C | `outcome_group_treatment_heatmap` | heatmap | 类别×阶段的结果率是否存在结构差异？ | 二分类 + 分组 + 处理 |
+| C | `outcome_by_region` | bar + 95%CI | 不同地区的结果率是否不同？ | 二分类结果 + 地区 |
+| C | `outcome_by_trial` | bar + 95%CI | 不同审级的结果率是否不同？ | 二分类结果 + 审级 |
+| C | `correlation_heatmap` | correlation heatmap | 变量之间是否存在明显相关/共线？ | ≥2 个数值/二元变量 |
+| C | `scatter_{}_{}` | scatter + OLS | 两个变量是否相关？ | 相关性最高的 3 对数值变量 |
+| D 多变量 | `violin_{}` | violin + box + points | 该变量在不同类别间是否不同？ | 前 2 个数值变量 + 分组 |
+| D | `scatter_matrix` | scatter matrix | 数值变量两两之间是否存在非线性/离群结构？ | 数值变量 ≥2 |
+| D | `two_rate_gap_dumbbell` | dumbbell | 两类处理比例差距多大？ | config.dumbbell 指定两个 0/1 列 |
+| D | `pca_scree` | scree + cumulative | 前几个主成分解释了多少方差？ | 数值变量 ≥3 |
+| D | `pca_biplot` | PCA biplot | 样本在主轴平面上是否形成类别结构？ | 数值变量 ≥3 |
+| D | `pca_loadings` | PCA loadings heatmap | 哪些变量在主轴上的载荷最高？ | 数值变量 ≥3 |
+| D | `cluster_dendrogram` | dendrogram | 样本/变量是否形成自然聚类？ | 数值变量 ≥2 且 N≥min-n |
+| D | `cluster_mds` | classical MDS | 样本在低维相似性空间中是否分离？ | 同上且重复行 <25% |
+| E 时间 | `sample_trend` | bar | 各年份样本量如何变化？ | 时间变量 |
+| E | `outcome_trend` | line + 95%CI | 结果比例随年份如何变化？ | 二分类结果 |
+| E | `outcome_control` | p control chart | 结果比例是否出现超出 3σ 的异常年份？ | 二分类结果且 ≥3 个年份 |
+| E | `outcome_trend_mean` | line + 95%CI | 结果均值随年份如何变化？ | 连续结果 |
+| E | `outcome_control_mean` | X-bar control chart | 结果均值是否出现超出 3σ 的异常年份？ | 连续结果且 ≥3 个年份 |
+| E | `outcome_composition_trend` | 100% stacked bar | 结果类别构成随年份如何变化？ | 多分类结果 |
+| E | `treatment_composition_trend` | 100% stacked bar | 处理阶段构成随年份如何变化？ | 时间 + 处理变量 |
+| E | `treatment_composition_area` | 100% stacked area | 处理阶段构成随年份如何变化？ | 时间 + 处理变量 |
+| F 模型诊断 | `forest_{}` | forest plot | 该模型的系数方向与不确定性如何？ | `--coef`（每模型 1 张） |
+| F | `model_roc` | ROC | 模型的区分度如何？ | `--pred` |
+| F | `model_calibration` | calibration curve | 模型预测概率是否校准？ | `--pred` |
+| F | `model_pred_distribution` | histogram | 预测概率在两类之间是否分离？ | `--pred` |
+| F | `model_confusion` | confusion matrix | 阈值 0.5 下的分类错误主要在哪里？ | `--pred` |
+| F | `model_pr` | precision-recall | 正类较少时精确率-召回率表现如何？ | `--pred` |
+| F | `model_lift` | decile lift | 高预测概率组的提升倍数有多大？ | `--pred` |
+| F | `survival_km` | Kaplan-Meier | 不同组的生存/未再犯概率如何变化？ | `--survival-time/--survival-event` |
+| G 附录 | `correspondence_biplot` | correspondence analysis biplot | 类别与处理阶段是否存在对应结构？ | 分组 + 处理变量 |
+| G | `pareto_group` | Pareto | 类别分布是否高度集中？ | 识别到分组变量 |
+
+选图与裁剪：
+
+- `--only <ids>` 只跑指定图：接受完整 slug（`group_treatment_stacked`）、slug 片段（`stacked` 命中所有含该片段的图）、前缀通配（`model_*`）或图号（`F21`）；逗号分隔、可重复。
+- `--sections <name,name>` 只跑某几段：接受字母（`A,C`）或中文段名（`数据质量,附录`）。
+- `--list-charts` 打印上面这份清单后退出，不读数据，适合先挑图再跑。
+- `--max-charts N` 限制张数（默认 60，`0` 或负数 = 不限制）；`--top-n` 控制每图最多类别数，`--min-n` 控制最小分析单元。
+
+模型图需要 `--coef`（系数表）或 `--pred`（预测表）；没有就跳过，并在清单里写明原因。`--coef` 的列名同时接受 `term`/`estimate`+`ci_low`/`ci_high`、`or`/`or_low`/`or_high`（`beta`/`beta_low`/`beta_high` 亦可），建议带 `metric`（OR/HR/RR/beta）与 `n` —— 没有 `metric` 时按每一行实际填了哪族列来定：`or*`→OR（对数轴，参考线 1）、`hr*`→HR、`rr*`→RR，只有 `beta` 的行走线性轴（参考线 0）。**同一个文件里混排 logit 行与 OLS 行不会丢行**：按 `metric`（或按行实测的列族）分组，各自成图，图名在多尺度时追加后缀；该图的 `metric`、`rows_plotted`、`rows_dropped` 写进 `chart_pack.json` 与 `chart_pack.md`，有未绘行时图注也会注明。`--pred` 支持 0/1 与“是/否”标签，常数预测或单一类别会跳过 ROC/PR/校准/混淆矩阵/Lift。`term_labels` 可把模型项名映射为中文。双比例哑铃图需在 config 的 `dumbbell` 里指定两个 0/1 列。小样本下脚本宁可不画，也不画误导性组间比较。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可选 `--survival-group`）画 Kaplan–Meier；参数缺失、列名不存在或绘图失败只会在 manifest 的 `status` 里注明 skipped，不会中断整包。
 
 **样本对齐**：配置里的 `filter_query` 必须和论文分析样本完全一致。示例：`in_analysis == 1 and stage > 0` 得到 1,200；漏掉 `stage > 0` 会得到 1,260。图 N 与表 N 不一致，通常就是这里漏了条件。
 
@@ -175,21 +199,34 @@ SPSS 原生没有“森林图/小提琴图/相关热图”的标准入口时，�
 
 经验法则：**每个主发现至少 2 张图；每个模型至少 1 张系数图 + 1 张诊断图；每个关键变量至少 1 张分布图和 1 张分组图。** 图多不是问题，图重复、图无信息才是问题。
 
+`--max-charts`（默认 60）只防失控：一张图 600 dpi 的 png+pdf（默认还带 tiff）大约 1–3 秒，60 张接近两分钟，超过就该拆成多次跑（`--sections`/`--only`）而不是盲目调大上限；`--max-charts 0` 表示不限制，用在确实需要全量的场景。
+
 ## 6. 图表清单 manifest
 
-每张图至少记录：
+`chart_manifest.csv` 是 manifest v2，契约原文见 `docs/CONTRACTS.md` §3：
 
 ```csv
-id,section,question,chart_type,variables,n,png,pdf,tiff,caption,note,status
-F01,A 数据质量,哪些变量缺失最严重？,horizontal bar,amount_max;amount_min,1200,...,...,...,注：N=1,200；...,...,ok
+id,question,chart_type,variables,n,n_scope,png,pdf,caption,dpi,px_width,model_id,data_hash,tiff,note,section,status
+F01,哪些变量缺失最严重？,horizontal bar,amount;duration_days,120,sample,figures/fig01_missingness.png,figures/fig01_missingness.pdf,注：N=120；数据来源：分析数据集。,600,3543,,1c0ccdae,figures/fig01_missingness.tiff,top=0.977,A 数据质量,ok
 ```
+
+- `png` / `pdf` / `tiff` 是**相对 manifest 所在目录**的 POSIX 路径（`figures/fig01_xxx.png`），整个 `output/chart_pack` 目录可以随意搬动或拷贝到另一台机器而不失效；读取侧以 `chart_manifest.csv` 所在目录为基准拼绝对路径。
+- `n` 允许三种写法：整数、区间（`3111→2713`，取第一个整数，图注里保留区间原文）、`N=2713` 前缀。caption 里**每个** `N=` 都会同步成解析出的值。
+- `n_scope`：`sample`（默认，n 不得超过数据行数）、`subgroup`（子样本）、`corpus`（语料级/流程级计数，允许 n > 行数，如漏斗图里的“原始文献 N”）。超额且不是 `corpus` 时该图记 `status=error: …`、计入 `errors`，脚本退出码 2。
+- `dpi` / `px_width` 从落盘的 PNG 读回（PIL），是**实际**像素，不是声明值。
+- `data_hash` 是输入数据的列名 + 行数 + 关键列统计的 md5 前 8 位，用来核对“这张图是不是这批数据画的”。
+- `note` 记录版式留白：`top=0.977` 是 `subplots_adjust(top=…)` 之后的坐标区上边界，图例越界时该值会变小；出现 `right=0.880` 表示右侧也为轴外图例让了位（饼图/环形图的侧边图例）。
+- `status`：`ok`，或 `skipped: …` / `error: …` —— **画不出来的图同样有一行**，不再静默消失。
+- `tiff` 默认就写（P-09 收掉），`--no-tiff` 时该列为空。
+- 森林图另外在 `chart_pack.json` / `chart_pack.md` 里记 `metric`（OR/HR/RR/β）、`rows_plotted`、`rows_dropped`——混排 logit 与 OLS 系数时，未绘行数必须能追溯。
 
 用途：
 
 - 正文引用图号时直接从 manifest 取。
-- 投稿时按 manifest 检查图数、图注、N。
-- 附录排序按 manifest 的 section。
-- 复现时按 manifest 的脚本参数重跑。
+- 投稿时按 manifest 检查图数、图注、N、dpi。
+- 附录排序按 manifest 的 `section`。
+- `qa_outputs.py` 按 `n` / `n_scope` 校验图与表、图与正文的 N 是否一致。
+- 复现时按 manifest 的 `data_hash` 与脚本参数重跑。
 
 ## 7. 常见错误
 

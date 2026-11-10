@@ -135,13 +135,27 @@ fig.savefig(f"{out}/{name}.tiff", dpi=600, facecolor="white",
 - 颜色在灰度打印下仍可区分（或加线型/标记）。
 - 图注中的 N 与数据、表、正文一致。
 - 每张图都有独立源文件，不依赖 Word 截图。
+- **对数轴的次刻度标签必须关掉**：`forest_plot` 只设置了主刻度格式器，次刻度仍是 `LogFormatterSciNotation`，会渲染出 `3×10⁻¹ 6×10⁻¹` 与 `0.1 1 10` 混排。修法不是清空 locator（那会让主刻度只剩下 1–2 个点），而是关掉次刻度**标注**并显式给主刻度：
+
+```python
+from matplotlib.ticker import NullFormatter, FuncFormatter
+
+ax.xaxis.set_minor_formatter(NullFormatter())
+ax.tick_params(axis="x", which="minor", length=0)
+ax.set_xticks([0.1, 1, 10, 100])
+ax.xaxis.set_major_formatter(FuncFormatter(lambda v, p: f"{v:g}"))
+```
+
+- **不要用 `bbox_inches="tight"` 补留白**。它会把画布裁掉：15 cm 宽的图从 885 px 变成 724 px，600 dpi 下从 3543 px 掉到 2899 px，反而跌破 3000 px 门槛。要留白就用 `fig.subplots_adjust(top=0.86)` 或给整图加 `constrained_layout`，宽度保持不变。
+- 轴外图例是有条件的风险：`stacked_bar`/`stacked_area` 把图例放在 `bbox_to_anchor=(0.5, 1.16)`，默认 `top=0.88` 时余量约 −26 px（已经压边）；`top=0.92/0.95/0.99` 分别溢出 40/91/158 px。要么把 `top` 压到 0.80 以下，要么改用轴内图例。
 
 ## Word 导 PDF 的陷阱
 
-Word 导 PDF 时会把嵌入图重采样到约 200 dpi。文件看起来正常，但印刷会糊。解决：
+Word 导 PDF 时会把嵌入图重采样到约 200 dpi（600 dpi 的 3543×1590 会变成 1180×529）。文件看起来正常，但印刷会糊。解决：
 
 1. Word 里保留 600 dpi PNG。
 2. 导出 PDF 后用 `export_pdf_hires.py` 按图题定位并回填原图。图题 tag 有数字边界，`图1` 不会匹配 `图10`；优先匹配行首图题，避免被正文“见图1”带偏。
-3. 用 PyMuPDF 检查每张内嵌图宽度 ≥3000 px（15 cm 宽时约 600 dpi）。`qa_outputs.py` 只检查图幅足够大的图，logo/公式碎片不会误报；低分辨率大图仍会报错。
+3. **回填后必须清内容流**，否则旧位图留在 `/Resources`：`page.replace_image(xref, filename=png)` 后接 `page.clean_contents(sanitize=True)`，最后 `doc.save(out, garbage=4, deflate=True)`。实测不清会从 4 张图变 8 张、体积 10.5 MB 涨到 21.1 MB。
+4. 用**有效 dpi** 检查（像素宽 ÷ 版面英寸），不要用像素宽：15 cm 宽时 3000 px 只有 508 dpi，3543 px 才是 600 dpi。`qa_outputs.py --min-dpi 600` 按此判定，并按图幅过滤 logo/公式碎片（`rect_w_pt ≥ 56.7` 或面积 ≥ 200 000）。
 
 不要用“另存为 PDF”后直接投稿，除非已验证内嵌图分辨率。

@@ -44,7 +44,7 @@ from pubfig import (  # noqa: E402
     pie_chart, qq_plot, control_chart, dendrogram_plot, classical_mds,
     mds_plot, pr_curve, lift_chart, confusion_heatmap, kaplan_meier,
     short_label as _pubfig_short_label,
-    BLUE, ORANGE, GRAY, LGRAY, INK,
+    BLUE, ORANGE, GRAY, LGRAY, INK, CATEGORICAL,
 )
 from analysis_utils import (  # noqa: E402
     apply_filter, encode_binary, is_constant, is_id_like, outcome_kind,
@@ -65,7 +65,7 @@ N_SCOPES = ("sample", "corpus", "subgroup")
 MANIFEST_COLUMNS = [
     "id", "question", "chart_type", "variables", "n", "n_scope",
     "png", "pdf", "caption", "dpi", "px_width", "model_id", "data_hash",
-    "tiff", "note", "section", "status",
+    "tiff", "note", "section", "status", "palette",
 ]
 
 # Sections as they are written into the manifest; the CLI accepts the letter.
@@ -393,6 +393,10 @@ class ChartPack:
             (cfg or {}).get("n_scope") or type(self).n_scope_default)
         self.model_id_default = str((cfg or {}).get("model_id")
                                     or type(self).model_id_default or "")
+        # The categorical cycle the figures draw from, recorded per manifest row so
+        # qa_outputs can check grayscale separability without guessing colours.
+        palette = (cfg or {}).get("palette") or CATEGORICAL
+        self.palette_cell = "|".join(str(c) for c in palette)
         # selection / budgeting
         self.max_charts = None
         self.only_selectors: list[str] = []
@@ -571,6 +575,9 @@ class ChartPack:
             "note": note, "dpi": "", "px_width": "",
             "model_id": model_id or self.model_id_default,
             "data_hash": self.data_hash, "status": "ok",
+            # The cycle these figures draw from; qa_outputs checks it for
+            # grayscale separability, so it has to be recorded per row.
+            "palette": self.palette_cell,
         }
         if extra:
             row.update({str(k): v for k, v in extra.items()})
@@ -1310,12 +1317,20 @@ class ChartPack:
                         if i == k - 1:
                             ax.set_xlabel(self.vlabel(b) + ("（log10）" if notes[b] == "log" else
                                                             "（≤P99）" if notes[b] == "clip" else ""),
-                                          fontsize=7)
+                                          fontsize=7.4)
                         if j == 0:
                             ax.set_ylabel(self.vlabel(a) + ("（log10）" if notes[a] == "log" else
                                                             "（≤P99）" if notes[a] == "clip" else ""),
-                                          fontsize=7)
-                        ax.tick_params(labelsize=6)
+                                          fontsize=7.4)
+                        # 7.4 pt 是排版硬下限，网格里靠"少画刻度"腾地方而不是缩字：
+                        # 只保留外圈刻度标签、每轴最多 3 个刻度。
+                        ax.tick_params(labelsize=7.4)
+                        if k >= 4:
+                            ax.locator_params(axis="both", nbins=3)
+                        if i < k - 1:
+                            ax.tick_params(labelbottom=False)
+                        if j > 0:
+                            ax.tick_params(labelleft=False)
                         ax.ticklabel_format(style="plain", axis="both")
                         style_axis(ax, "both")
                 self.save(fig, "scatter_matrix", "D 多变量",
@@ -1376,7 +1391,7 @@ class ChartPack:
                 m = groups == g
                 ax.scatter(scores[m, 0], scores[m, 1], s=7, alpha=0.28,
                            linewidths=0, label=self.glabel(g, group))
-            ax.legend(frameon=False, fontsize=6.8, loc="best")
+            ax.legend(frameon=False, fontsize=7.4, loc="best")
         else:
             ax.scatter(scores[:, 0], scores[:, 1], s=7, alpha=0.28,
                        color=BLUE, linewidths=0)
@@ -1392,7 +1407,7 @@ class ChartPack:
                      color=ORANGE, width=0.002, head_width=0.03,
                      length_includes_head=True, alpha=0.9)
             ax.text(loadings[i, 0] * scale * 1.06, loadings[i, 1] * scale * 1.06,
-                    self.vlabel(c), fontsize=6.6, color=INK)
+                    self.vlabel(c), fontsize=7.4, color=INK)
         ax.axhline(0, color=LGRAY, linewidth=0.5)
         ax.axvline(0, color=LGRAY, linewidth=0.5)
         ax.set_xlabel(f"PC1（{ev[0]:.1f}%）")
@@ -1501,10 +1516,10 @@ class ChartPack:
         ax.scatter(col[:, 0], col[:, 1], s=28, color=ORANGE, marker="s", label="阶段", zorder=3)
         for i, lab in enumerate(tab.index):
             ax.text(row[i, 0] + 0.02, row[i, 1] + 0.02, self.glabel(lab, group),
-                    fontsize=7, color=BLUE)
+                    fontsize=7.4, color=BLUE)
         for i, lab in enumerate(tab.columns):
             ax.text(col[i, 0] + 0.02, col[i, 1] + 0.02, self.glabel(lab, treatment),
-                    fontsize=7, color=ORANGE)
+                    fontsize=7.4, color=ORANGE)
         ax.axhline(0, color=LGRAY, linewidth=0.5)
         ax.axvline(0, color=LGRAY, linewidth=0.5)
         # 显式给定范围：文本不参与自动缩放，若某轴数据跨度极小，
@@ -1516,7 +1531,7 @@ class ChartPack:
             setter(lo - pad, hi + pad)
         ax.set_xlabel(f"维度 1（{sv[0]**2/total_inertia*100:.1f}%）")
         ax.set_ylabel(f"维度 2（{sv[1]**2/total_inertia*100:.1f}%）")
-        ax.legend(frameon=False, fontsize=7)
+        ax.legend(frameon=False, fontsize=7.4)
         style_axis(ax, "both")
         self.save(fig, "correspondence_biplot", "G 附录",
                   "类别与处理阶段是否存在对应结构？", "correspondence analysis biplot",

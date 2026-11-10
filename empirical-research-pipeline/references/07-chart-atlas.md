@@ -206,8 +206,8 @@ SPSS 原生没有“森林图/小提琴图/相关热图”的标准入口时，�
 `chart_manifest.csv` 是 manifest v2，契约原文见 `docs/CONTRACTS.md` §3：
 
 ```csv
-id,question,chart_type,variables,n,n_scope,png,pdf,caption,dpi,px_width,model_id,data_hash,tiff,note,section,status
-F01,哪些变量缺失最严重？,horizontal bar,amount;duration_days,120,sample,figures/fig01_missingness.png,figures/fig01_missingness.pdf,注：N=120；数据来源：分析数据集。,600,3543,,1c0ccdae,figures/fig01_missingness.tiff,top=0.977,A 数据质量,ok
+id,question,chart_type,variables,n,n_scope,png,pdf,caption,dpi,px_width,model_id,data_hash,tiff,note,section,status,palette
+F01,哪些变量缺失最严重？,horizontal bar,amount;duration_days,120,sample,figures/fig01_missingness.png,figures/fig01_missingness.pdf,注：N=120；数据来源：分析数据集。,600,3543,,1c0ccdae,figures/fig01_missingness.tiff,top=0.977,A 数据质量,ok,#174B77|#C66E4A|#4B6E52|#A7A7A7|#C9C9C9|#5E0800
 ```
 
 - `png` / `pdf` / `tiff` 是**相对 manifest 所在目录**的 POSIX 路径（`figures/fig01_xxx.png`），整个 `output/chart_pack` 目录可以随意搬动或拷贝到另一台机器而不失效；读取侧以 `chart_manifest.csv` 所在目录为基准拼绝对路径。
@@ -217,6 +217,7 @@ F01,哪些变量缺失最严重？,horizontal bar,amount;duration_days,120,sampl
 - `data_hash` 是输入数据的列名 + 行数 + 关键列统计的 md5 前 8 位，用来核对“这张图是不是这批数据画的”。
 - `note` 记录版式留白：`top=0.977` 是 `subplots_adjust(top=…)` 之后的坐标区上边界，图例越界时该值会变小；出现 `right=0.880` 表示右侧也为轴外图例让了位（饼图/环形图的侧边图例）。
 - `status`：`ok`，或 `skipped: …` / `error: …` —— **画不出来的图同样有一行**，不再静默消失。
+- `palette`：这张图取色所用的分类色环（`|` 分隔的十六进制）。`qa_outputs.py --graycheck` 逐行解析它，两两 `ΔL* < 10` 就判 error；色环本身的 8 个具名色（INK/RED/BLUE/GREEN/ORANGE/GRAY/LGRAY/GRID）排在 12.4 的 L\* 阶梯上，因此任意子集在黑白打印时仍然可分。
 - `tiff` 默认就写（P-09 收掉），`--no-tiff` 时该列为空。
 - 森林图另外在 `chart_pack.json` / `chart_pack.md` 里记 `metric`（OR/HR/RR/β）、`rows_plotted`、`rows_dropped`——混排 logit 与 OLS 系数时，未绘行数必须能追溯。
 

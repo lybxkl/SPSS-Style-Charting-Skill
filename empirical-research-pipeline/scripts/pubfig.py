@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 import os
+import sys
 import re
 from typing import Iterable, Sequence
 
@@ -29,14 +30,23 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FixedLocator, FuncFormatter, NullFormatter, NullLocator
 
 CM = 1 / 2.54
-INK = "#1A1A1A"
-GRID = "#E4E4E4"
-BLUE = "#2F5C8A"
-ORANGE = "#B45F3C"
-GREEN = "#5B7F62"
-GRAY = "#8A8A8A"
-LGRAY = "#C9C9C9"
-RED = "#8E3324"
+INK = "#121212"
+GRID = "#ECECEC"
+BLUE = "#1C4E7B"
+ORANGE = "#E18560"
+GREEN = "#4B6E52"
+GRAY = "#BABABA"
+LGRAY = "#D8D8D8"
+RED = "#67130A"
+GREY5 = LGRAY  # backwards-compatible alias used by older palettes
+PURPLE = "#1D1932"   # deepest step: reads almost black, still violet by hue
+TEAL = "#588B78"     # the second new hue the audit asked for (deep green)
+
+#: The categorical cycle every multi-series helper draws from.  These eight
+#: colours sit on a 10.8 L* ladder (10.5, 21.5, ... 86.3), so any subset is
+#: separable in grayscale as well as in colour, and eight series never repeat a
+#: colour.  ``INK``/``GRID`` stay out of the cycle: they are structure, not data.
+CATEGORICAL = [BLUE, ORANGE, GREEN, RED, TEAL, PURPLE, GRAY, LGRAY]
 
 POSITIVE_LABELS = {
     "是": 1, "否": 0, "有": 1, "无": 0, "发生": 1, "未发生": 0,
@@ -72,6 +82,92 @@ def binary_array(values, positive: str | None = None) -> np.ndarray:
     return mapped.to_numpy(dtype=float)
 
 
+#: Families that ship a usable CJK glyph set; used only to explain a failure.
+_CJK_FAMILY_HINTS = (
+    "SimSun", "宋体", "NSimSun", "SimHei", "黑体", "KaiTi", "楷体", "FangSong",
+    "仿宋", "Microsoft YaHei", "微软雅黑", "Microsoft JhengHei", "Songti SC",
+    "STSong", "Noto Sans CJK", "Noto Serif CJK", "Source Han", "WenQuanYi",
+    "PingFang", "Hiragino Sans GB", "Droid Sans Fallback", "AR PL",
+)
+_CJK_TOKEN_RE = None  # built lazily; no module-level regex import needed
+
+
+def _looks_cjk(name: str) -> bool:
+    """True for a font family name that plausibly carries Han glyphs."""
+    if any("\u4e00" <= ch <= "\u9fff" for ch in name):
+        return True
+    lowered = name.lower()
+    for token in _CJK_FAMILY_HINTS:
+        if token.lower() in lowered:
+            return True
+    return False
+
+
+def cjk_font_candidates(limit: int = 10) -> list[str]:
+    """Installed families that can actually draw Chinese (for error messages)."""
+    try:
+        from matplotlib import font_manager
+        entries = list(font_manager.fontManager.ttflist)
+    except Exception:
+        return []
+    names = []
+    for entry in entries:
+        fname = str(getattr(entry, "fname", "") or "")
+        if not fname.lower().endswith((".ttf", ".ttc", ".otf")):
+            continue
+        name = str(getattr(entry, "name", "") or "").strip()
+        if not name or not _looks_cjk(name) or name in names:
+            continue
+        names.append(name)
+    return sorted(names)[:limit]
+
+
+def check_cjk_font(name: str) -> None:
+    """Strict variant: raise unless ``name`` itself is installed."""
+    from matplotlib import font_manager
+    try:
+        font_manager.findfont(name, fallback_to_default=False)
+        return
+    except Exception:
+        pass
+    _raise_no_font(name)
+
+
+def _raise_no_font(name: str) -> None:
+    candidates = cjk_font_candidates()
+    hint = "、".join(candidates) if candidates else "（本机未发现中文字体）"
+    raise RuntimeError(
+        f"中文字体 {name!r} 不存在：图里的中文会画成方框（豆腐块）。"
+        f"本机可用的中文字体：{hint}。"
+        f"请用 set_style(font_cjk=...) 指定其中一个，或安装 SimSun / Noto Sans CJK。"
+    )
+
+
+def resolve_cjk_font(name: str) -> tuple[str, str | None]:
+    """Return ``(family_to_use, warning_or_None)`` for a requested CJK family.
+
+    Three tiers, each of them audible:
+
+    1. the family is installed -> use it;
+    2. it is missing but some CJK family exists -> substitute the first one and
+       say so on stderr (silently drawing tofu boxes is the bug we are fixing,
+       and hard-failing would break machines that only draw Latin figures);
+    3. no CJK family at all -> RuntimeError, because nothing can be substituted.
+    """
+    from matplotlib import font_manager
+    try:
+        font_manager.findfont(name, fallback_to_default=False)
+        return name, None
+    except Exception:
+        pass
+    candidates = cjk_font_candidates()
+    if not candidates:
+        _raise_no_font(name)
+    substitute = candidates[0]
+    return substitute, (f"warning: 字体 {name!r} 不存在，已改用 {substitute!r}；"
+                        f"如需固定请 set_style(font_cjk=...)")
+
+
 def set_style(width_cm: float = 15.0,
               font_cjk: str = "SimSun",
               font_latin: str = "Times New Roman",
@@ -85,8 +181,14 @@ def set_style(width_cm: float = 15.0,
     An explicit ``figsize=`` at the call site still wins.
     """
     width_in = width_cm * CM
+    font_cjk, font_warning = resolve_cjk_font(font_cjk)
+    if font_warning:
+        print(font_warning, file=sys.stderr)
     plt.rcParams.update({
         "font.family": [font_latin, font_cjk],
+        # The resolved CJK family leads the sans list, so a missing Latin face
+        # still lands on a font that can draw Chinese.
+        "font.sans-serif": [font_cjk, "DejaVu Sans"],
         "font.size": base_size,
         "axes.labelsize": base_size,
         "axes.titlesize": base_size,
@@ -123,8 +225,17 @@ def style_axis(ax, grid_axis: str | None = "y") -> None:
     ax.tick_params(axis="both", colors="#333333")
 
 
-def panel_label(ax, letter: str, x: float = -0.02, y: float = 1.035) -> None:
-    ax.text(x, y, letter, transform=ax.transAxes, fontsize=9,
+def panel_letter_size(fontsize=None) -> float:
+    """Panel letters are the body size or one step larger, never smaller."""
+    if fontsize is not None:
+        return float(fontsize)
+    return max(8.5, float(plt.rcParams.get("font.size", 8.5)))
+
+
+def panel_label(ax, letter: str, x: float = -0.02, y: float = 1.035,
+                fontsize=None) -> None:
+    ax.text(x, y, letter, transform=ax.transAxes,
+            fontsize=panel_letter_size(fontsize),
             fontweight="bold", ha="left", va="bottom", color=INK)
 
 
@@ -288,6 +399,48 @@ def wilson_ci(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     return (max(0.0, min(center - half, p)), min(1.0, max(center + half, p)))
 
 
+def _apply_pad(fig, pad):
+    """Inset the axes by ``pad`` inches without ``bbox_inches="tight"``.
+
+    Tight bounding boxes crop/scale the canvas and therefore change the effective
+    resolution ``qa_outputs.py`` measures (884 -> 724 px).  Adjusting the subplot
+    parameters keeps the canvas and the dpi intact.
+    """
+    if not pad:
+        return
+    try:
+        fw, fh = (float(v) for v in fig.get_size_inches()[:2])
+        dx, dy = float(pad) / max(fw, 1e-9), float(pad) / max(fh, 1e-9)
+        sp = fig.subplotpars
+        left = min(max(sp.left + dx, 0.0), 0.45)
+        right = max(min(sp.right - dx, 1.0), 0.55)
+        bottom = min(max(sp.bottom + dy, 0.0), 0.45)
+        top = max(min(sp.top - dy, 1.0), 0.55)
+        if left < right and bottom < top:
+            fig.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
+    except Exception:  # pragma: no cover - defensive: never break export
+        pass
+
+
+def _write_formats(fig, out_dir: str, name: str,
+                   formats: Sequence[str] = ("png", "pdf", "tiff"),
+                   dpi: int = 600) -> list[str]:
+    """Write one figure in every requested format; returns the written paths."""
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    for ext in formats:
+        path = os.path.join(out_dir, f"{name}.{ext}")
+        if ext == "tiff":
+            fig.savefig(path, dpi=dpi, facecolor="white",
+                        pil_kwargs={"compression": "tiff_lzw"})
+        elif ext == "png":
+            fig.savefig(path, dpi=dpi, facecolor="white")
+        else:
+            fig.savefig(path, facecolor="white")
+        paths.append(path)
+    return paths
+
+
 def save_fig(fig, out_dir: str, name: str,
              formats: Sequence[str] = ("png", "pdf", "tiff"),
              dpi: int = 600, pad: float | None = None) -> list[str]:
@@ -311,33 +464,452 @@ def save_fig(fig, out_dir: str, name: str,
         bounding boxes crop/scale the figure and therefore change the effective
         resolution that ``qa_outputs.py`` measures.
     """
-    if pad:
-        try:
-            fw, fh = (float(v) for v in fig.get_size_inches()[:2])
-            dx, dy = float(pad) / max(fw, 1e-9), float(pad) / max(fh, 1e-9)
-            sp = fig.subplotpars
-            left = min(max(sp.left + dx, 0.0), 0.45)
-            right = max(min(sp.right - dx, 1.0), 0.55)
-            bottom = min(max(sp.bottom + dy, 0.0), 0.45)
-            top = max(min(sp.top - dy, 1.0), 0.55)
-            if left < right and bottom < top:
-                fig.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
-        except Exception:  # pragma: no cover - defensive: never break export
-            pass
-    os.makedirs(out_dir, exist_ok=True)
-    paths = []
-    for ext in formats:
-        path = os.path.join(out_dir, f"{name}.{ext}")
-        if ext == "tiff":
-            fig.savefig(path, dpi=dpi, facecolor="white",
-                        pil_kwargs={"compression": "tiff_lzw"})
-        elif ext == "png":
-            fig.savefig(path, dpi=dpi, facecolor="white")
-        else:
-            fig.savefig(path, facecolor="white")
-        paths.append(path)
+    _apply_pad(fig, pad)
+    paths = _write_formats(fig, out_dir, name, formats, dpi)
     plt.close(fig)
     return paths
+
+
+# --------------------------------------------------------------- composition
+# A figure in a journal is a *grid* of panels, not one axes.  ``compose_figure``
+# builds that grid with an explicit ``GridSpec`` so every panel's physical size
+# is computable (``panel_sizes_cm``), which is what the QA step needs to decide
+# whether a 6 pt label will still be legible after the figure is placed.
+
+def _rc_size(key: str, fallback: float = 8.5) -> float:
+    """Read a font size from rcParams, tolerating the string values matplotlib allows."""
+    try:
+        return float(plt.rcParams.get(key, fallback))
+    except (TypeError, ValueError):
+        return float(fallback)
+
+
+def _styled_label(letter: str, style: str = "(a)") -> str:
+    """``(a)`` / ``a)`` / ``a.`` / ``a`` / ``(A)`` from a single lowercase letter."""
+    text = str(style or "(a)")
+    if "(" in text and ")" in text:
+        out = f"({letter})"
+    elif ")" in text:
+        out = f"{letter})"
+    elif "." in text:
+        out = f"{letter}."
+    else:
+        out = letter
+    if any(ch.isupper() for ch in text):
+        out = out.upper()
+    return out
+
+
+def _panel_letters(count: int, style: str = "(a)") -> list[str]:
+    out = []
+    for i in range(max(0, int(count))):
+        if i < 26:
+            letter = chr(ord("a") + i)
+        else:  # aa, ab, ... (a 2x2 figure never reaches this, a 5x6 might)
+            letter = chr(ord("a") + (i // 26) - 1) + chr(ord("a") + i % 26)
+        out.append(_styled_label(letter, style))
+    return out
+
+
+def _figure_texts(fig, axes) -> list:
+    items = []
+    for ax in axes:
+        try:
+            items.extend(list(ax.texts))
+            items.extend([ax.xaxis.label, ax.yaxis.label, ax.title])
+            legend = ax.get_legend()
+            if legend is not None:
+                items.extend(list(legend.get_texts()))
+            items.extend(list(ax.get_xticklabels()))
+            items.extend(list(ax.get_yticklabels()))
+        except Exception:  # pragma: no cover - artist without font properties
+            continue
+    try:
+        items.extend(list(fig.texts))
+        for legend in getattr(fig, "legends", []):
+            items.extend(list(legend.get_texts()))
+    except Exception:  # pragma: no cover
+        pass
+    return items
+
+
+def _measure_min_fontsize(fig, axes) -> float:
+    """Smallest *actually rendered* font size inside the figure, in points.
+
+    ``rcParams`` is not the answer: a panel may pass ``fontsize=6`` to one label
+    and the figure then carries 6 pt type while every other string is 8.5 pt.
+    Drawing first and reading ``get_fontsize()`` off the artists catches that.
+    """
+    try:
+        fig.canvas.draw()
+    except Exception:  # pragma: no cover - headless edge case
+        pass
+    sizes = []
+    for text in _figure_texts(fig, axes):
+        try:
+            if not str(text.get_text() or "").strip():
+                continue
+            sizes.append(float(text.get_fontsize()))
+        except Exception:  # pragma: no cover
+            continue
+    return float(min(sizes)) if sizes else float("nan")
+
+
+def _measure_panel_sizes_cm(fig, axes) -> list[list[float]]:
+    """Physical panel sizes in cm, from ``get_position()`` and the figure size.
+
+    This is exact for a GridSpec figure.  It is geometry, not typography: type
+    does not shrink with the panel, it shrinks with the ratio of the placed
+    figure width to the designed width, which is what ``qa_outputs`` models.
+    """
+    try:
+        fig.canvas.draw()
+    except Exception:  # pragma: no cover
+        pass
+    width_in, height_in = (float(v) for v in fig.get_size_inches()[:2])
+    out = []
+    for ax in axes:
+        pos = ax.get_position()
+        out.append([round(float(pos.width) * width_in * 2.54, 2),
+                    round(float(pos.height) * height_in * 2.54, 2)])
+    return out
+
+
+def _legend_overhang(fig, axes=None) -> tuple[float, float]:
+    """How far legends and panel titles stick out past the canvas.
+
+    ``tight_layout``/``subplots_adjust`` move the axes but not an
+    ``bbox_to_anchor`` outside them, so a legend placed above the axes (or a
+    title pushed above a lifted legend) is what runs off the canvas; only the
+    top/right margins can absorb it. Everything drawn outside its own axes is
+    measured: legends, titles, and free-standing ``ax.text`` labels.
+    """
+    axes = list(fig.axes) if axes is None else list(axes)
+    targets: list[tuple[object, object]] = []
+    for ax in axes:
+        legend = ax.get_legend()
+        if legend is not None:
+            targets.append((ax, legend))
+        title = getattr(ax, "title", None)
+        if title is not None and str(title.get_text() or "").strip():
+            targets.append((ax, title))
+        for text in getattr(ax, "texts", []):
+            if str(text.get_text() or "").strip():
+                targets.append((ax, text))
+    for text in getattr(fig, "texts", []):
+        if str(text.get_text() or "").strip():
+            targets.append((None, text))
+    for legend in getattr(fig, "legends", []):
+        targets.append((None, legend))
+    if not targets:
+        return (0.0, 0.0)
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+    except Exception:  # pragma: no cover
+        return (0.0, 0.0)
+    inverse = fig.transFigure.inverted()
+    dx = dy = 0.0
+    for ax, artist in targets:
+        try:
+            box = artist.get_window_extent(renderer).transformed(inverse)
+            if ax is not None:
+                abox = ax.get_window_extent(renderer).transformed(inverse)
+                if box.y1 <= abox.y1 + 1e-6 and box.x1 <= abox.x1 + 1e-6:
+                    continue  # fully inside its own axes: no margin needed
+            dx = max(dx, float(box.x1) - 1.0)
+            dy = max(dy, float(box.y1) - 1.0)
+        except Exception:  # pragma: no cover
+            continue
+    return (max(0.0, dx), max(0.0, dy))
+
+
+def _lift_above_legend(ax) -> None:
+    """Re-anchor a legend that straddles the top edge of its axes, above it."""
+    legend = ax.get_legend()
+    if legend is None:
+        return
+    try:
+        legend.set_loc("lower center")
+        legend.set_bbox_to_anchor((0.5, 1.012), transform=ax.transAxes)
+    except Exception:  # pragma: no cover
+        pass
+
+
+def _collect_colors(axes) -> list[str]:
+    """Colours actually painted on ``axes`` (patches, lines, collections).
+
+    Pure white and the near-white background/frame shades are skipped, and the
+    order is first-seen, so a caller can record "the palette this figure used".
+    """
+    from matplotlib.colors import to_hex
+
+    seen: list[str] = []
+    skip = {"#FFFFFF", "#000000"}
+    for ax in axes:
+        artists = list(getattr(ax, "patches", []) or [])
+        artists += list(getattr(ax, "lines", []) or [])
+        artists += list(getattr(ax, "collections", []) or [])
+        for artist in artists:
+            candidates = []
+            for getter in ("get_facecolor", "get_color", "get_edgecolor"):
+                try:
+                    candidates.append(getattr(artist, getter)())
+                except Exception:
+                    continue
+            for value in candidates:
+                try:
+                    rgba = value[0] if len(value) and isinstance(value[0], (list, tuple)) else value
+                    if len(rgba) < 3:
+                        continue
+                    if len(rgba) == 4 and float(rgba[3]) == 0.0:
+                        continue
+                    hex_value = to_hex(rgba).upper()
+                except Exception:
+                    continue
+                if hex_value in skip or hex_value in seen:
+                    continue
+                seen.append(hex_value)
+    return seen
+
+
+def compose_figure(panels, out_dir: str | None = None, name: str = "figure",
+                   nrows: int = 1, ncols: int = 1, width_cm: float = 15.0,
+                   height_cm: float | None = None, panel_w_cm: float | None = None,
+                   label_style: str = "(a)", space=None, share_x: bool = False,
+                   share_y: bool = False, formats: Sequence[str] = ("png", "pdf", "tiff"),
+                   dpi: int = 600, title: str | None = None) -> dict:
+    """Assemble several panels into ONE publication figure.
+
+    Parameters
+    ----------
+    panels:
+        List of dicts::
+
+            {"draw": callable(ax),        # required: draw the panel on this axes
+             "label": "(a)",              # optional; default runs (a), (b), ...
+             "title": "分罪名",            # optional panel title
+             "xlabel": "...", "ylabel": "...",
+             "legend": {"loc": "upper right", "frameon": False}}  # optional
+
+        The callable receives the axes created inside the GridSpec; it must not
+        save the figure itself.
+    out_dir / name / formats / dpi:
+        Passed to the writer. ``out_dir=None`` measures and returns without
+        writing anything (useful in tests).
+    nrows / ncols:
+        Grid shape. Unused cells in the last row stay blank.
+    width_cm / height_cm:
+        Physical canvas. ``width_cm`` defaults to the 15 cm journal column. When
+        ``height_cm`` is ``None`` a panel height of ~0.74 x panel width is used.
+    panel_w_cm:
+        Per-panel width instead of a total width: ``width_cm`` becomes
+        ``panel_w_cm * ncols``.
+    label_style:
+        Panel-label format: ``"(a)"``, ``"a)"``, ``"a."``, ``"a"`` (upper-case
+        variants keep the case).
+    space:
+        Float (applied to both wspace/hspace) or a dict of ``subplots_adjust``
+        keys (``left/right/top/bottom/wspace/hspace``).
+    share_x / share_y:
+        Share tick ranges per column / per row.
+    title:
+        Optional figure title drawn above the grid.
+
+    Returns
+    -------
+    dict with ``fig`` (left OPEN: close it yourself), ``paths``,
+    ``panel_sizes_cm`` (one ``[w, h]`` per panel), ``min_fontsize_pt`` (smallest
+    font actually rendered), ``width_cm``, ``height_cm``, plus ``dpi``,
+    ``px_width`` and a ``note`` string for the chart manifest.
+
+    Notes
+    -----
+    Layout uses ``GridSpec`` + explicit ``subplots_adjust``; ``bbox_inches="tight"``
+    is never used because it crops the canvas and silently lowers the resolution
+    QA measures (884 -> 724 px). The PNG is read back after writing and a
+    ``RuntimeError`` is raised when ``px / (width_cm / 2.54)`` does not
+    reproduce ``dpi`` within 1 dpi.
+    """
+    panels = list(panels or [])
+    if not panels:
+        raise ValueError("compose_figure needs at least one panel")
+    nrows, ncols = int(nrows), int(ncols)
+    if nrows <= 0 or ncols <= 0:
+        raise ValueError("nrows and ncols must be positive")
+    if len(panels) > nrows * ncols:
+        raise ValueError(f"{len(panels)} panel(s) do not fit in {nrows}x{ncols}")
+    for i, panel in enumerate(panels):
+        if not isinstance(panel, dict) or not callable(panel.get("draw")):
+            raise TypeError(f"panel {i} must be a dict with a callable 'draw'")
+
+    if panel_w_cm:
+        width_cm = float(panel_w_cm) * ncols
+    width_cm = float(width_cm)
+    if width_cm <= 0:
+        raise ValueError("width_cm must be positive")
+    if height_cm is None:
+        per_row = (float(panel_w_cm) if panel_w_cm else width_cm / ncols) * 0.74
+        height_cm = per_row * nrows + (0.85 if title else 0.15)
+    height_cm = float(height_cm)
+    if height_cm <= 0:
+        raise ValueError("height_cm must be positive")
+
+    try:
+        if float(plt.rcParams.get("font.size", 10.0)) == 10.0:
+            set_style(width_cm)  # caller did not configure the house style
+    except (TypeError, ValueError):  # pragma: no cover
+        pass
+    base_size = _rc_size("axes.labelsize", 8.5)
+
+    fig = plt.figure(figsize=(width_cm * CM, height_cm * CM))
+    try:
+        fig.set_layout_engine("none")
+    except Exception:  # pragma: no cover - older matplotlib
+        pass
+    grid = fig.add_gridspec(nrows, ncols)
+    adjust = {"left": 0.085, "right": 0.985, "bottom": 0.115,
+              "top": 0.885 if title else 0.950, "wspace": 0.35, "hspace": 0.48}
+    if isinstance(space, dict):
+        adjust.update({k: float(v) for k, v in space.items() if k in adjust})
+    elif space is not None:
+        adjust["wspace"] = adjust["hspace"] = float(space)
+    fig.subplots_adjust(**adjust)
+
+    axes: list = []
+    first_in_col: dict[int, object] = {}
+    first_in_row: dict[int, object] = {}
+    for index, panel in enumerate(panels):
+        row, col = divmod(index, ncols)
+        shared = {}
+        if share_x and col in first_in_col:
+            shared["sharex"] = first_in_col[col]
+        if share_y and row in first_in_row:
+            shared["sharey"] = first_in_row[row]
+        ax = fig.add_subplot(grid[row, col], **shared)
+        first_in_col.setdefault(col, ax)
+        first_in_row.setdefault(row, ax)
+        axes.append(ax)
+
+    letters = _panel_letters(len(panels), label_style)
+    for index, (ax, panel) in enumerate(zip(axes, panels)):
+        try:
+            panel["draw"](ax)
+        except Exception as exc:
+            raise RuntimeError(
+                f"panel {index} ({panel.get('label') or letters[index]}) failed to draw: "
+                f"{type(exc).__name__}: {exc}") from exc
+        if panel.get("xlabel"):
+            ax.set_xlabel(str(panel["xlabel"]))
+        if panel.get("ylabel"):
+            ax.set_ylabel(str(panel["ylabel"]))
+        if panel.get("title"):
+            ax.set_title(str(panel["title"]), fontsize=base_size, pad=3)
+        label = panel.get("label") or letters[index]
+        if label:
+            ax.text(-0.02 if index % ncols == 0 else 0.0, 1.035, str(label),
+                    transform=ax.transAxes, fontsize=panel_letter_size(base_size),
+                    fontweight="bold", ha="left", va="bottom", color=INK)
+        legend_spec = panel.get("legend")
+        if legend_spec:
+            if isinstance(legend_spec, dict):
+                ax.legend(**legend_spec)
+            else:
+                ax.legend()
+
+    # A legend anchored above the axes overlaps the panel it belongs to; lift it
+    # above the top edge, then let the margins absorb whatever still overhangs.
+    # A panel title would then collide with the lifted legend, so the whole row's
+    # titles move above the legend (titles stay level across the row).
+    title_pad_by_row: dict[int, float] = {}
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        inverse = fig.transFigure.inverted()
+        for index, ax in enumerate(axes):
+            legend = ax.get_legend()
+            if legend is None:
+                continue
+            box = legend.get_window_extent(renderer).transformed(inverse)
+            abox = ax.get_window_extent(renderer).transformed(inverse)
+            if float(box.y1) > float(abox.y1) + 1e-6 and float(box.y1) > float(abox.y0):
+                _lift_above_legend(ax)
+                if panels[index].get("title"):
+                    fig.canvas.draw()
+                    box = legend.get_window_extent(renderer).transformed(inverse)
+                    abox = ax.get_window_extent(renderer).transformed(inverse)
+                    height_in = float(fig.get_size_inches()[1])
+                    pad = (float(box.y1) - float(abox.y1)) * height_in * 72.0 + 2.0
+                    row = index // ncols
+                    title_pad_by_row[row] = max(title_pad_by_row.get(row, 0.0), pad)
+    except Exception:  # pragma: no cover
+        pass
+    for index, ax in enumerate(axes):
+        panel_title = panels[index].get("title")
+        pad = title_pad_by_row.get(index // ncols)
+        if panel_title and pad:
+            ax.set_title(str(panel_title), fontsize=base_size, pad=max(3.0, pad))
+
+    for _ in range(4):
+        dx, dy = _legend_overhang(fig, axes)
+        if max(dx, dy) <= 1e-4:
+            break
+        pars = fig.subplotpars
+        new_top = max(0.55, float(pars.top) - (dy + 0.008) * 1.2)
+        new_right = max(0.75, float(pars.right) - (dx + 0.008) * 1.2)
+        if new_top >= float(pars.top) - 1e-6 and new_right >= float(pars.right) - 1e-6:
+            break
+        fig.subplots_adjust(top=new_top, right=new_right)
+
+    if title:
+        fig.suptitle(str(title), fontsize=base_size + 0.5, y=0.985)
+
+    used_colors = _collect_colors(axes)
+    panel_sizes = _measure_panel_sizes_cm(fig, axes)
+    min_fontsize = _measure_min_fontsize(fig, axes)
+    pars = fig.subplotpars
+
+    paths: list[str] = []
+    if out_dir:
+        paths = _write_formats(fig, out_dir, name, formats, dpi)
+
+    px_width = None
+    png_path = next((p for p in paths if str(p).lower().endswith(".png")), None)
+    if png_path:
+        try:
+            from PIL import Image
+            with Image.open(png_path) as image:
+                px_width = int(image.size[0])
+        except Exception:  # pragma: no cover - PIL missing
+            px_width = None
+        if px_width is not None:
+            measured = px_width / (width_cm * CM) if width_cm else 0.0
+            if abs(measured - float(dpi)) > 1.0:
+                raise RuntimeError(
+                    f"compose_figure: {name}.png is {px_width}px at {width_cm:g} cm, "
+                    f"i.e. {measured:.1f} dpi instead of {dpi}")
+    elif width_cm:
+        px_width = int(round(width_cm * CM * float(dpi)))
+
+    return {
+        "fig": fig,
+        "paths": paths,
+        "panel_sizes_cm": panel_sizes,
+        "colors": used_colors,
+        "min_fontsize_pt": min_fontsize,
+        "width_cm": round(width_cm, 3),
+        "height_cm": round(height_cm, 3),
+        "dpi": int(dpi),
+        "px_width": px_width,
+        "nrows": nrows,
+        "ncols": ncols,
+        "top": round(float(pars.top), 3),
+        "right": round(float(pars.right), 3),
+        "left": round(float(pars.left), 3),
+        "bottom": round(float(pars.bottom), 3),
+        "note": f"panel={nrows}x{ncols}; top={float(pars.top):.3f}; "
+                f"right={float(pars.right):.3f}",
+    }
 
 
 def _clip_huge_span(ax, est, lo, hi, ref: float = 1.0,
@@ -378,7 +950,7 @@ def _clip_huge_span(ax, est, lo, hi, ref: float = 1.0,
     if x1 > x0:
         ax.set_xlim(10.0 ** x0, 10.0 ** x1)
     ax.text(0.995, 0.012, "部分 CI 超出显示范围", transform=ax.transAxes,
-            ha="right", va="bottom", fontsize=6.2, color=GRAY)
+            ha="right", va="bottom", fontsize=7.4, color=GRAY)
     return True
 
 
@@ -648,7 +1220,11 @@ def stacked_bar(ax, row_labels: Sequence[str], series: Sequence[Iterable[float]]
         totals = np.sum(mats, axis=0)
         totals[totals == 0] = 1
         mats = [m / totals for m in mats]
-    palette = list(colors or [BLUE, ORANGE, GREEN, GRAY, LGRAY, RED])
+    palette = list(colors or CATEGORICAL)
+    if len(series_labels) > len(palette):
+        warnings.warn(
+            f"{len(series_labels)} series cycle a {len(palette)}-colour palette; "
+            "at least two series share a colour", RuntimeWarning, stacklevel=2)
     colors = [palette[i % len(palette)] for i in range(len(series_labels))]
     n = len(labels)
     if horizontal:
@@ -736,7 +1312,7 @@ def heatmap(ax, matrix, row_labels: Sequence[str], col_labels: Sequence[str],
                 if val != val:
                     continue
                 ax.text(j, i, format(val, fmt), ha="center", va="center",
-                        fontsize=6.8, color="white" if val > vmid else INK)
+                        fontsize=7.4, color="white" if val > vmid else INK)
     ax.tick_params(length=0)
     for spine in ax.spines.values():
         spine.set_visible(False)
@@ -770,7 +1346,7 @@ def corr_heatmap(ax, df, method: str = "pearson", cmap: str = "RdBu_r",
                     continue
                 val = corr.iloc[i, j]
                 ax.text(j, i, f"{val:.2f}", ha="center", va="center",
-                        fontsize=6.4, color="white" if abs(val) > 0.55 else INK)
+                        fontsize=7.4, color="white" if abs(val) > 0.55 else INK)
     ax.tick_params(length=0)
     fig = ax.get_figure()
     fig.colorbar(im, ax=ax, fraction=0.035, pad=0.02)
@@ -906,7 +1482,7 @@ def calibration_plot(ax, y_true: Iterable[int], y_prob: Iterable[float],
     if annotate_n:
         for xx, yy, nn in zip(xs, ys, ns):
             ax.annotate(f"n={nn}", (xx, yy), xytext=(4, -8),
-                        textcoords="offset points", fontsize=6.2, color=INK)
+                        textcoords="offset points", fontsize=7.4, color=INK)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_xlabel("预测概率")
@@ -971,7 +1547,7 @@ def biplot(ax, scores, loadings, labels: Sequence[str] | None = None,
                      color=arrow_color, width=0.001, head_width=0.025,
                      length_includes_head=True, alpha=0.9)
             ax.text(ld[i, 0] * scale * 1.08, ld[i, 1] * scale * 1.08, lab,
-                    fontsize=6.8, color=INK)
+                    fontsize=7.4, color=INK)
     ax.set_xlabel("成分 1")
     ax.set_ylabel("成分 2")
     style_axis(ax, "both")
@@ -1006,8 +1582,8 @@ def slopegraph(ax, labels: Sequence[str], left: Iterable[float],
         col = color_up if b >= a else color_down
         ax.plot([0, 1], [a, b], color=col, marker="o", markersize=3,
                 linewidth=0.8, alpha=0.75)
-        ax.text(-0.03, a, f"{lab} {a:.1f}", ha="right", va="center", fontsize=6.6)
-        ax.text(1.03, b, f"{b:.1f}", ha="left", va="center", fontsize=6.6)
+        ax.text(-0.03, a, f"{lab} {a:.1f}", ha="right", va="center", fontsize=7.4)
+        ax.text(1.03, b, f"{b:.1f}", ha="left", va="center", fontsize=7.4)
     ax.set_xlim(-0.25, 1.2)
     ax.set_xticks([0, 1])
     ax.set_xticklabels([left_label, right_label])
@@ -1055,7 +1631,11 @@ def stacked_area(ax, x: Sequence[float], series: Sequence[Iterable[float]],
         totals = np.sum(mats, axis=0)
         totals[totals == 0] = 1
         mats = [m / totals for m in mats]
-    palette = list(colors or [BLUE, ORANGE, GREEN, GRAY, LGRAY, RED])
+    palette = list(colors or CATEGORICAL)
+    if len(series_labels) > len(palette):
+        warnings.warn(
+            f"{len(series_labels)} bands cycle a {len(palette)}-colour palette; "
+            "at least two bands share a colour", RuntimeWarning, stacklevel=2)
     cols = [palette[i % len(palette)] for i in range(len(series_labels))]
     ax.stackplot(xv, *mats, labels=list(series_labels), colors=cols, alpha=alpha)
     if len(xv) == 1:
@@ -1094,7 +1674,7 @@ def bubble(ax, x: Iterable[float], y: Iterable[float], size: Iterable[float],
                edgecolor="white", linewidth=0.5, zorder=2)
     for xx, yy, lab in zip(xv, yv, labels):
         ax.annotate(str(lab), (xx, yy), xytext=(3, 3), textcoords="offset points",
-                    fontsize=6.6, color=INK)
+                    fontsize=7.4, color=INK)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     style_axis(ax, "both")
@@ -1145,19 +1725,23 @@ def pie_chart(ax, labels: Sequence[str], values: Iterable[float],
             vals = np.r_[vals[keep], rest]
             labs = [l for l, k in zip(labs, keep) if k] + ["其他"]
     total = vals.sum()
-    palette = list(colors or [BLUE, ORANGE, GREEN, GRAY, RED, "#7B6D8D"])
+    palette = list(colors or CATEGORICAL)
+    if len(vals) > len(palette):
+        warnings.warn(
+            f"{len(vals)} slices cycle a {len(palette)}-colour palette; "
+            "at least two slices share a colour", RuntimeWarning, stacklevel=2)
     palette = (palette * (len(vals) // len(palette) + 1))[:len(vals)]
     wedges, _, autotexts = ax.pie(
         vals, labels=None, colors=palette, startangle=90, counterclock=False,
         autopct=lambda p: f"{p:.0f}%" if p >= min_pct else "",
         pctdistance=0.75, wedgeprops={"linewidth": 0.6, "edgecolor": "white"},
-        textprops={"fontsize": 7},
+        textprops={"fontsize": 7.4},
     )
     for t in autotexts:
         t.set_color("white")
-        t.set_fontsize(7)
+        t.set_fontsize(7.4)
     ax.legend(wedges, [f"{l}（{v / total * 100:.1f}%）" for l, v in zip(labs, vals)],
-              frameon=False, fontsize=6.8, loc="center left",
+              frameon=False, fontsize=7.4, loc="center left",
               bbox_to_anchor=(0.94, 0.5))
     if donut:
         ax.add_artist(plt.Circle((0, 0), 0.52, color="white", zorder=5))
@@ -1230,7 +1814,7 @@ def control_chart(ax, x: Sequence, y: Iterable[float],
     ax.set_ylim(min(lower, float(np.nanmin(yv))) - 0.05,
                 max(upper, float(np.nanmax(yv))) + 0.05)
     style_axis(ax, "y")
-    ax.legend(frameon=False, fontsize=6.6, loc="best")
+    ax.legend(frameon=False, fontsize=7.4, loc="best")
 
 
 def dendrogram_plot(ax, matrix, labels: Sequence[str] | None = None,
@@ -1293,18 +1877,18 @@ def mds_plot(ax, coords, labels: Sequence[str] | None = None,
     if groups is not None:
         g = pd.Series(list(groups)).astype(str).replace(
             {"nan": "未记载", "None": "未记载", "<NA>": "未记载"})
-        palette = [BLUE, ORANGE, GREEN, GRAY, RED, "#7B6D8D"]
+        palette = list(CATEGORICAL)
         for i, level in enumerate(g.value_counts().head(6).index):
             m = (g == level).to_numpy()
             ax.scatter(xy[m, 0], xy[m, 1], s=9, alpha=0.45, linewidths=0,
                        color=palette[i % len(palette)], label=str(level))
-        ax.legend(frameon=False, fontsize=6.6, loc="best")
+        ax.legend(frameon=False, fontsize=7.4, loc="best")
     else:
         ax.scatter(xy[:, 0], xy[:, 1], s=9, alpha=0.4, color=BLUE, linewidths=0)
     if labels is not None and len(labels) == xy.shape[0] and len(labels) <= 20:
         for i, lab in enumerate(labels):
             ax.annotate(str(lab), (xy[i, 0], xy[i, 1]), xytext=(3, 3),
-                        textcoords="offset points", fontsize=6.2, color=INK)
+                        textcoords="offset points", fontsize=7.4, color=INK)
     qx = np.nanquantile(xy[:, 0], [0.01, 0.99])
     qy = np.nanquantile(xy[:, 1], [0.01, 0.99])
     ax.set_xlim(qx[0] - 0.1 * (qx[1] - qx[0] + 1e-9),
@@ -1384,7 +1968,7 @@ def lift_chart(ax, y_true: Iterable, y_score: Iterable[float],
     ax.set_xlabel("按预测概率十分位（D1=最高）")
     ax.set_ylabel("提升倍数（Lift）")
     style_axis(ax, "y")
-    ax.legend(frameon=False, fontsize=6.8)
+    ax.legend(frameon=False, fontsize=7.4)
     return tab
 
 
@@ -1429,7 +2013,7 @@ def kaplan_meier(ax, time: Iterable[float], event: Iterable,
          .replace({"nan": "未记载", "None": "未记载", "<NA>": "未记载"}).to_numpy()
          if group is not None else np.array(["全体"] * len(t), dtype=object))
     g = g[mask]
-    palette = [BLUE, ORANGE, GREEN, GRAY, RED, "#7B6D8D"]
+    palette = list(CATEGORICAL)
     for i, level in enumerate(pd.Series(g).value_counts().head(6).index):
         m = g == level
         tt, ee = t[m], e[m]
@@ -1463,4 +2047,4 @@ def kaplan_meier(ax, time: Iterable[float], event: Iterable,
     ax.set_ylabel("生存概率")
     style_axis(ax, "both")
     if group is not None:
-        ax.legend(frameon=False, fontsize=6.8, loc="best")
+        ax.legend(frameon=False, fontsize=7.4, loc="best")

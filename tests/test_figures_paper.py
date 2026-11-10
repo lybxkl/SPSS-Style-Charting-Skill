@@ -75,6 +75,23 @@ def make_bitmap_pdf(path, width_cm=15.0, height_cm=9.0, px_width=60):
     plt.close(fig)
 
 
+
+
+class BoldFaceTest(unittest.TestCase):
+    """A family without a bold face must be reported, not silently downgraded."""
+
+    def test_missing_bold_face_is_reported_on_stderr(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stderr(buffer):
+            pf.check_cjk_font("SimSun")
+        if not pf.has_bold_face("SimSun"):
+            self.assertIn("没有 bold 字重", buffer.getvalue())
+        else:
+            self.assertEqual(buffer.getvalue(), "")
+
+    def test_a_present_font_is_not_reported_as_missing(self):
+        self.assertIsNone(pf.resolve_cjk_font("SimSun")[1])
+
 class ComposeFigureCase(TempCase):
     """B1: panels assembled on one computed canvas."""
 
@@ -316,6 +333,37 @@ class PaperFiguresCase(TempCase):
         self.assertTrue(rows[1]["status"].startswith("skipped"), rows[1]["status"])
         self.assertIn("n_missing", rows[1]["note"])
         self.assertTrue(os.path.isfile(os.path.join(self.p("no"), rows[1]["png"])))
+
+    def test_n_auto_reads_the_analysis_rows_and_says_so(self):
+        """n='auto' is the only sanctioned inference, and it must leave a trace."""
+        data = self.p("analysis.csv")
+        write_csv(data, ["a", "b"], [[1, 2]] * 37)
+        spec = {"figures": [{"id": "FigAuto", "question": "q", "n": "auto",
+                             "n_scope": "sample", "caption": "图（N=0）。",
+                             "panels": [{"chart": "bar",
+                                         "data": {"x": ["a", "b"], "y": [1, 2]}}]}]}
+        path = self.p("auto.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(spec, handle, ensure_ascii=False)
+        out = run("paper_figures.py", "--paper", path, "--data", data,
+                  "--out", self.p("au"))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        row = read_csv(self.p("au", "paper_figures_manifest.csv"))[0]
+        self.assertEqual(row["n"], "37")
+        self.assertIn("N=37", row["caption"])
+        self.assertIn("n_from=data rows", row["note"])
+
+    def test_n_auto_without_data_is_an_error_not_a_guess(self):
+        spec = {"figures": [{"id": "FigAuto2", "question": "q", "n": "auto",
+                             "caption": "图（N=0）。",
+                             "panels": [{"chart": "bar",
+                                         "data": {"x": ["a"], "y": [1]}}]}]}
+        path = self.p("auto2.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(spec, handle, ensure_ascii=False)
+        out = run("paper_figures.py", "--paper", path, "--out", self.p("au2"))
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn("no analysis data was given", out.stderr)
 
     def test_second_different_n_is_kept_and_noted(self):
         """Only the first N= belongs to the figure; a different second one stays."""

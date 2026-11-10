@@ -1,5 +1,5 @@
 {
-  "_note": "复制本文件，按项目替换列名。示例列名与数值均为占位，不对应任何真实数据。filter 为空/省略时，如果存在 in_analysis 列，默认只用 in_analysis=1。文本结果为“是/否”时加 outcome_map（如 {\"是\":1,\"否\":0}）；term_labels 用于把 lv3 等模型项名映射成中文；有随访数据时加 survival_time/survival_event（可选 survival_group），或改用命令行 --survival-time/--survival-event/--survival-group。",
+  "_note": "复制本文件，按项目替换列名。示例列名与数值均为占位，不对应任何真实数据；本文件的列名全是占位：缺列时脚本会打印候选列并退出 2，按提示改名即可。filter 为空/省略时，如果存在 in_analysis 列，默认只用 in_analysis=1（先闸门后筛选）。filter_query 里的列名必须是数据里真有的列，否则脚本会列出候选列并退出。文本结果为“是/否”时加 outcome_map（如 {\"是\":1,\"否\":0}）；term_labels 用于把 lv3 等模型项名映射成中文；有随访数据时加 survival_time/survival_event（可选 survival_group），或改用命令行 --survival-time/--survival-event/--survival-group。",
   "id": "id",
   "time": "year",
   "group": "category",
@@ -10,7 +10,7 @@
   "filter": {
     "in_analysis": 1
   },
-  "filter_query": "in_analysis == 1 and stage > 0",
+  "filter_query": "in_analysis == 1",
   "numeric": [
     "text_length",
     "amount_max",

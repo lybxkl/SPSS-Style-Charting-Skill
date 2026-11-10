@@ -189,11 +189,11 @@ def check_palette(colors: list[str], colorblind: bool = False,
                 cv_pairs.append({"a": name_a, "b": name_b,
                                  "delta_e": round(worst, 2), "sim": worst_kind,
                                  "delta_chroma": round(chroma, 2)})
-                if worst < min_delta_e and chroma < MIN_DELTA_CHROMA:
+                if chroma < MIN_DELTA_CHROMA:
                     result["warnings"].append(
                         f"colour blind ({worst_kind}): {name_a} vs {name_b} "
-                        f"ΔE={worst:.1f} < {min_delta_e:g} and chromatic "
-                        f"distance={chroma:.1f} < {MIN_DELTA_CHROMA:g}: the two "
+                        f"chromatic distance={chroma:.1f} < {MIN_DELTA_CHROMA:g} "
+                        f"(ΔE={worst:.1f}): the two "
                         f"series look alike to colour-blind readers")
         result["cvd_pairs"] = cv_pairs
         result["min_delta_e"] = round(min((p["delta_e"] for p in cv_pairs), default=0.0), 2)
@@ -368,6 +368,12 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
                                "height": info["height"],
                                "rect_w_pt": round(rect.width, 1),
                                "dpi": round(dpi, 1)})
+                if not raster_expected:
+                    # A figure PDF is judged per page, not per image: an imshow
+                    # panel (heatmap, matrix) is a legitimate raster element and
+                    # its axis labels are vector text.  Only a page that carries
+                    # essentially no text at all is a rasterised export.
+                    continue
                 inside = 0
                 for _entry, bbox in page_fonts:
                     cx = (bbox[0] + bbox[2]) / 2.0
@@ -375,9 +381,10 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
                     if (rect.x0 - 1.0 <= cx <= rect.x1 + 1.0
                             and rect.y0 - 1.0 <= cy <= rect.y1 + 1.0):
                         inside += 1
-                if not inside:
-                    # A figure box with no text inside is a bitmap: its labels
-                    # cannot be measured, so the type gate would pass vacuously.
+                if not inside and rect.width >= 56.7 and rect.height >= 56.7:
+                    # A figure-sized box with no text inside is a bitmap: its
+                    # labels cannot be measured, so the type gate would pass
+                    # vacuously.  Thin boxes (colour bars, rules) are skipped.
                     raster_figures.append({
                         "page": i + 1,
                         "width": info["width"],
@@ -385,6 +392,15 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
                         "rect_w_pt": round(rect.width, 1),
                         "dpi": round(info["width"] / (rect.width / 72.0), 1),
                     })
+            if not raster_expected and page_images and len(page_fonts) < 3:
+                info = page_images[0][2]
+                raster_figures.append({
+                    "page": i + 1,
+                    "width": info["width"],
+                    "height": info["height"],
+                    "rect_w_pt": round(page_images[0][1].width, 1),
+                    "dpi": round(info["width"] / (page_images[0][1].width / 72.0), 1),
+                })
     finally:
         doc.close()
     # Ignore logos, rules, equation fragments, and unused replacement xrefs:
@@ -392,6 +408,10 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
     def is_figure(w: dict) -> bool:
         return (w.get("rect_w_pt", 0) >= 56.7 or w["width"] * w["height"] >= 200_000)
     figure_images = [w for w in widths if is_figure(w)]
+    # Say how many bitmaps were skipped as non-figures: silently dropping 40
+    # xrefs made "0 figures" look like a clean PDF.
+    result["images_checked"] = len(figure_images)
+    result["images_skipped"] = len(widths) - len(figure_images)
     low = [w for w in figure_images if min_width and w["width"] < min_width]
     # 15 cm at 600 dpi is 3543.3 px, so an exact 3543 px figure measures 599.9.
     # Judge with a 0.5% tolerance instead of failing perfect output on rounding.
@@ -824,8 +844,13 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
                     f"{len(result['files'])} raster file(s): pixel images have no "
                     f"text layer, so the {float(min_fontsize):g} pt minimum was not "
                     f"verified; check the source figure PDF (qa_outputs --pdf)")
-    if not result["files"]:
-        result["warnings"].append("no image files found")
+    if not result["files"] and not result.get("pdfs"):
+        # "0 figures checked" is not a pass: it is the usual symptom of pointing
+        # --figures at the chart-pack folder instead of chart-pack/figures, and a
+        # silent pass hides that the whole resolution gate was skipped.
+        result["errors"].append(
+            f"no image or PDF files found under {result['dir']}; point --figures at the "
+            f"folder that holds the figures (e.g. chart_pack/figures), or drop the flag")
     if low:
         result["errors"].append(
             f"{len(low)} figure(s) below {min_dpi} dpi at {width_cm} cm wide: {low[:8]}")
@@ -881,14 +906,20 @@ def main() -> int:
         target_cm = args.figure_width_cm
     if target_cm is not None and target_cm <= 0:
         target_cm = None  # explicit opt-out of the placement scaling
-    # Default 7.2 pt, but a figure that is a bitmap is only an ERROR when the
-    # caller explicitly asked about type: a resolution-only run must stay green.
-    strict_type = args.min_fontsize is not None
-    raw_fontsize = 7.2 if args.min_fontsize is None else args.min_fontsize
-    min_fontsize = raw_fontsize if raw_fontsize and raw_fontsize > 0 else None
+    # Font size is always *measured* and reported, but it is only enforced when the
+    # caller asks for it: a resolution-only run must not fail on type it was not
+    # asked about.
+    strict_type = bool(args.min_fontsize and args.min_fontsize > 0)
+    min_fontsize = float(args.min_fontsize) if strict_type else None
     raster_is_error = strict_type and not args.allow_raster_text
+    if args.min_width:
+        # Documented as retired: pixel width ignores the printed width, so a
+        # 3543 px figure is fine at 15 cm and wrong at 5 cm.  Keep parsing the
+        # flag so old commands run, but do not let it veto figures.
+        print("warning: --min-width is retired (use --min-dpi / "
+              "--target-width-cm); the value is ignored", file=sys.stderr)
     if args.pdf:
-        report["checks"]["pdf"] = check_pdf(args.pdf, args.min_width, args.min_dpi,
+        report["checks"]["pdf"] = check_pdf(args.pdf, 0, args.min_dpi,
                                             min_fontsize, target_cm,
                                             not raster_is_error,
                                             raster_expected=True)

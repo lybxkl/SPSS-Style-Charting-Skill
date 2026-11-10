@@ -22,7 +22,6 @@ import re
 import sys
 import warnings
 
-import numpy as np
 
 import matplotlib
 matplotlib.use("Agg")
@@ -321,18 +320,29 @@ def panel_data_length(panel: dict) -> int:
     return best
 
 
-def figure_n(spec: dict):
+def figure_n(spec: dict, data_rows: int | None = None):
     """The declared N, or ``None``.
 
-    It is deliberately *not* inferred from the data: a forest panel has one row
-    per coefficient and a bar panel has one row per category, so "rows of data"
-    can only ever be a coincidentally plausible lie.  A figure without ``n`` is
-    recorded as ``n=NA`` with ``status="skipped: n unknown"``.
+    N is never inferred from the panel data: a forest panel has one row per
+    coefficient and a bar panel has one row per category, so "rows of panel
+    data" can only ever be a coincidentally plausible lie.
+
+    The one sanctioned exception is an explicit ``"n": "auto"`` together with
+    ``--data``: then N is the number of analysis rows, which is exactly the
+    quantity a caption's "N=" is supposed to name.  The row records
+    ``note=n_from=data rows`` so a reader can see it was not typed by hand.
     """
-    if spec.get("n") in (None, ""):
-        return None
-    number, _ = parse_n(spec.get("n"))
-    return int(number) if number is not None else None
+    raw = spec.get("n")
+    if raw in (None, ""):
+        return None, ""
+    if isinstance(raw, str) and raw.strip().lower() == "auto":
+        if not data_rows:
+            raise ValueError(
+                "n is 'auto' but no analysis data was given; pass --data <file> "
+                "or write the sample size explicitly")
+        return int(data_rows), "n_from=data rows"
+    number, _ = parse_n(raw)
+    return (int(number) if number is not None else None), ""
 
 
 def build_panels(spec: dict) -> tuple[list[dict], list[str], list[str]]:
@@ -372,13 +382,13 @@ def build_panels(spec: dict) -> tuple[list[dict], list[str], list[str]]:
 
 
 def build_figure(spec: dict, out_dir: str, formats, dpi: int,
-                 width_cm: float) -> dict:
+                 width_cm: float, data_rows: int | None = None) -> dict:
     """Compose one figure and return its manifest row."""
     fig_id = str(spec.get("id") or "").strip()
     if not fig_id:
         raise ValueError("every figure needs an 'id' (used as the file stem)")
     panels, charts, variables = build_panels(spec)
-    n = figure_n(spec)
+    n, n_note = figure_n(spec, data_rows)
     if n is not None and n <= 0:
         raise ValueError(f"{fig_id}: N must be positive (got {n})")
     scope = str(spec.get("n_scope") or "sample").strip().lower() or "sample"
@@ -388,7 +398,7 @@ def build_figure(spec: dict, out_dir: str, formats, dpi: int,
     # A range keeps its original wording (``3 111→2 713``) in both the manifest
     # cell and the caption; collapsing it to its first number is how the old
     # parser turned 3 111 documents into "N=3".
-    notes = []
+    notes = [n_note] if n_note else []
     if n is None:
         n_cell = "NA"
         status = "skipped: n unknown"
@@ -397,6 +407,8 @@ def build_figure(spec: dict, out_dir: str, formats, dpi: int,
     else:
         status = "ok"
         raw_n = spec.get("n")
+        if isinstance(raw_n, str) and raw_n.strip().lower() == "auto":
+            raw_n = None          # already resolved from --data; do not show "auto"
         if raw_n not in (None, ""):
             number, display = parse_n(raw_n)
             n_cell = display if display not in (f"{n:,}", str(n)) else n
@@ -465,6 +477,8 @@ def main() -> int:
     parser.add_argument("--dpi", type=int, default=600, help="raster dpi (default 600)")
     parser.add_argument("--width-cm", type=float, default=WIDTH_CM,
                         help="figure width in cm (default 15.0)")
+    parser.add_argument("--data", default=None,
+                        help="analysis CSV; required only by figures with n='auto'")
     args = parser.parse_args()
 
     if not os.path.isfile(args.paper):
@@ -485,6 +499,17 @@ def main() -> int:
         print("ERROR: --dpi must be at least 72", file=sys.stderr)
         return 2
 
+    data_rows = None
+    if args.data:
+        try:
+            import pandas as pd
+            data_rows = int(len(pd.read_csv(args.data, low_memory=False)))
+        except Exception as exc:
+            print(f"ERROR: cannot read --data {args.data}: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            return 2
+        print(f"data: {data_rows} rows ({args.data})")
+
     formats = ["png", "pdf"] + (["tiff"] if args.tiff else [])
     os.makedirs(args.out, exist_ok=True)
     try:
@@ -497,7 +522,8 @@ def main() -> int:
     for spec_item in figures:
         fig_id = str(spec_item.get("id") or "?")
         try:
-            row = build_figure(spec_item, args.out, formats, args.dpi, args.width_cm)
+            row = build_figure(spec_item, args.out, formats, args.dpi,
+                               args.width_cm, data_rows)
         except Exception as exc:
             errors += 1
             plt.close("all")

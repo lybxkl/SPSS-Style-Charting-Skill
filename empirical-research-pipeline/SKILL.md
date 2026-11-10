@@ -131,7 +131,8 @@ python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "
 # 确认后执行
 python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit" --apply
 # 反悔：把 move 的移回、把 copy 的删掉（仅当副本 MD5 仍与原件一致）
-python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit" --undo
+# 注意 --undo 后面必须跟 move_log.csv 的路径（--apply 才会生成它），不能只写 --undo
+python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 ```
 
 `--apply` 前会逐组校验 keeper 真的在盘（keeper 被删或改名就整组跳过并在 `move_log.csv` 记 `skipped`，不会把唯一副本搬走）。`move_log.csv` 记 `group/src/dest/action/status/reason`，`--undo` 靠它反演。**移动失败、跳过、或日志里有 conflict 时返回 2**，不能当成功处理；`--undo` 发现没有任何可复原条目时也返回 2（日志全是 copied 时会明确报 `nothing to undo`）。

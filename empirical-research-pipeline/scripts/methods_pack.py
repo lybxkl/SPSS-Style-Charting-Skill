@@ -103,10 +103,10 @@ CATALOG = [
      "family": "model", "slots": [], "fallback": "路径回归 + 中介检验，或安装 semopy",
      "when": "潜变量与多条因果路径；需要专门引擎，本脚本不代算"},
     {"id": "m02", "nr": 2, "cn": "主成分分析", "en": "PCA",
-     "family": "reduce", "slots": ["cluster_vars"], "fallback": "因子分析（m09）",
+     "family": "reduce", "slots": ["cluster_vars"], "fallback": "想要可解释的潜因子时改因子分析（m09）",
      "when": "变量多且相关强，用少数成分概括；看特征值与累计方差"},
     {"id": "m09", "nr": 9, "cn": "因子分析", "en": "Factor analysis",
-     "family": "reduce", "slots": ["items"], "fallback": "主成分（m02）",
+     "family": "reduce", "slots": ["items"], "fallback": "只要降维、不需要潜变量解释时改主成分（m02）",
      "when": "寻找潜在结构；先看 KMO 与 Bartlett，再看载荷与共同度"},
     {"id": "m15", "nr": 15, "cn": "信度分析", "en": "Reliability",
      "family": "measure", "slots": ["items"], "fallback": "",
@@ -681,10 +681,24 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m17" and res.tables:
             tab = res.tables[0][1]
             fig, axes = _fig(h_in=2.9)
-            PF.bar_with_ci(axes[0][0], tab["group"].astype(str).tolist(),
-                           tab["median"].tolist(), tab["p25"].tolist(),
-                           tab["p75"].tolist())
-            axes[0][0].set_ylabel("中位数（P25–P75）")
+            # 中位数是位置量：柱子从 0 起会把"P25–P75 跨 0"画成负高度，
+            # 读者会以为出现了负值。点 + 误差线才是课本画法。
+            _ax = axes[0][0]
+            tab = tab.assign(_k=tab["group"].astype(str)).sort_values("_k")
+            _g = tab["group"].astype(str).tolist()
+            _med = tab["median"].astype(float).tolist()
+            _lo = tab["p25"].astype(float).tolist()
+            _hi = tab["p75"].astype(float).tolist()
+            _x = list(range(len(_g)))
+            _ax.errorbar(_x, _med,
+                         yerr=[[m - l for m, l in zip(_med, _lo)],
+                               [h - m for m, h in zip(_med, _hi)]],
+                         fmt="o", color=PF.BLUE, ecolor=PF.GRAY,
+                         elinewidth=1.0, capsize=3, markersize=5)
+            _ax.set_xticks(_x)
+            _ax.set_xticklabels(_g)
+            _ax.set_xlabel(str(ctx["cfg"].get("group") or "组"))
+            _ax.set_ylabel("中位数（P25–P75）")
             PF.style_axis(axes[0][0])
             fig.subplots_adjust(bottom=0.2)
             run.figure = book.save(fig, "m17_medians", "各组中位数与四分位距")

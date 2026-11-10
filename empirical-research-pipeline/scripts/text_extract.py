@@ -7,9 +7,13 @@ transcription before text analysis. No domain assumptions are made here.
 """
 from __future__ import annotations
 
+import argparse
+import csv
 import html
+import json
 import os
 import re
+import sys
 import zipfile
 from contextlib import contextmanager
 from html.parser import HTMLParser
@@ -43,10 +47,65 @@ SUPPORTED_EXTS = (
 )
 TEXTUAL_EXTS = TEXT_EXTS | PDF_EXTS | DOCX_EXTS | ODT_EXTS | PPTX_EXTS | XLSX_EXTS | HTML_EXTS
 
+# A line that is nothing but "3/26" (page stamp) carries no analyzable content.
+PAGE_NO_RE = re.compile(r"^\s*\d+\s*[/／]\s*\d+\s*$")
+MAX_TEXT_BYTES = 50 * 1024 * 1024
+FALLBACK_ENCODING = "latin-1(fallback)"
+OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def effective_chars(text: str) -> int:
+    """Visible characters after dropping page-number-only lines and whitespace.
+
+    `chars` stays the raw string length for backwards compatibility; this is
+    the number to compare against `--min-chars` and to report as "字数".
+    """
+    if not text:
+        return 0
+    lines = [line for line in text.splitlines() if not PAGE_NO_RE.match(line)]
+    return len(re.sub(r"\s", "", "\n".join(lines)))
+
+
+def text_size(rec: dict) -> int:
+    """Effective character count of an inspect_file() record (falls back to raw)."""
+    value = rec.get("chars_effective")
+    if value is None:
+        value = rec.get("chars")
+    return int(value or 0)
+
+
+def _rec(pages=None, chars=None, images=None) -> dict:
+    """Build a uniform inspect_file() record so every caller sees every key."""
+    return {"pages": pages, "chars": chars, "chars_effective": None,
+            "images": images, "encrypted": 0, "encoding": "",
+            "error": "", "error_kind": ""}
+
+
+def _exc_kind(exc: BaseException) -> str:
+    return "permission" if isinstance(exc, PermissionError) else "broken"
+
+
+def is_ole_container(path: str) -> bool:
+    """True for CFB/OLE files: password-protected Office is not a zip archive."""
+    try:
+        with open(win_path(path), "rb") as fh:
+            return fh.read(8) == OLE_MAGIC
+    except OSError:
+        return False
+
+
+def _read_bytes(path: str) -> bytes:
+    """Read a file once, always closing the handle."""
+    with open(win_path(path), "rb") as fh:
+        return fh.read()
+
 
 def win_path(path: str) -> str:
     path = os.path.abspath(path)
     if os.name == "nt" and len(path) > 240 and not path.startswith("\\\\?\\"):
+        if path.startswith("\\\\"):
+            # UNC shares need \\?\UNC\server\share, not \\?\\\server\share.
+            return "\\\\?\\UNC\\" + path.lstrip("\\")
         return "\\\\?\\" + path
     return path
 
@@ -82,13 +141,37 @@ def kind_of(path: str) -> str:
     return "unknown"
 
 
-def decode_bytes(raw: bytes) -> str:
+def decode_bytes_ex(raw: bytes) -> tuple[str, str]:
+    """Decode bytes and report the encoding that was actually used.
+
+    latin-1 accepts *any* byte sequence, so a fallback here is not proof that
+    the file is text. It is labelled ``latin-1(fallback)`` and callers surface
+    a mojibake warning instead of pretending the decode succeeded.
+    """
     for enc in ("utf-8-sig", "gb18030", "big5", "utf-16", "latin-1"):
         try:
-            return raw.decode(enc)
+            text = raw.decode(enc)
+            return text, FALLBACK_ENCODING if enc == "latin-1" else enc
         except (UnicodeDecodeError, LookupError):
             continue
-    return raw.decode("utf-8", errors="replace")
+    return raw.decode("utf-8", errors="replace"), "utf-8(replace)"
+
+
+def decode_bytes(raw: bytes) -> str:
+    return decode_bytes_ex(raw)[0]
+
+
+def looks_binary(raw: bytes, sample_size: int = 8192) -> bool:
+    """True when a sample looks like binary data (NUL bytes plus control chars).
+
+    Only consulted after a latin-1 fallback, so UTF-16 text with many NUL
+    bytes (which decodes cleanly through the utf-16 codec) never reaches here.
+    """
+    sample = raw[:sample_size]
+    if not sample:
+        return False
+    ctrl = sum(1 for b in sample if b < 9 or 13 < b < 32)
+    return sample.count(0) > 0 and ctrl / len(sample) > 0.05
 
 
 def strip_markup(value: str) -> str:
@@ -314,61 +397,128 @@ def _zip_text(path: str, members: list[str]) -> tuple[str, int, int]:
     return "\n".join(p for p in text_parts if p), images, len(members)
 
 
+def _pdf_pages_text(doc) -> tuple[list[str], int]:
+    """Extract text page by page, tolerating single damaged pages.
+
+    `sort=True` restores reading order for multi-column layouts; a broken page
+    becomes an empty string instead of failing the whole document.
+    """
+    texts: list[str] = []
+    bad = 0
+    for page in doc:
+        try:
+            texts.append(page.get_text("text", sort=True))
+        except Exception:
+            bad += 1
+            texts.append("")
+    return texts, bad
+
+
 def _inspect_pdf(path: str) -> dict:
-    rec = {"pages": None, "chars": None, "images": None, "encrypted": 0, "error": ""}
+    rec = _rec()
     if fitz is None:
         rec["error"] = "PyMuPDF not installed; pip install pymupdf"
+        rec["error_kind"] = "missing_dep"
         return rec
     try:
         doc = fitz.open(win_path(path))
     except Exception as exc:
         rec["error"] = f"open:{type(exc).__name__}:{exc}"[:300]
+        rec["error_kind"] = _exc_kind(exc)
         return rec
     try:
         rec["pages"] = doc.page_count
-        rec["encrypted"] = int(bool(doc.is_encrypted) or bool(doc.needs_pass))
+        meta = doc.metadata or {}
+        rec["encrypted"] = int(
+            bool(doc.is_encrypted)
+            or bool(doc.needs_pass)
+            or bool(meta.get("encryption"))
+        )
         if doc.needs_pass:
+            rec["error_kind"] = "encrypted"
             return rec
-        rec["chars"] = sum(len(page.get_text("text")) for page in doc)
-        rec["images"] = sum(len(page.get_images(full=True)) for page in doc)
+        texts, bad = _pdf_pages_text(doc)
+        rec["chars"] = sum(len(t) for t in texts)
+        rec["chars_effective"] = sum(effective_chars(t) for t in texts)
+        images = 0
+        for page in doc:
+            try:
+                images += len(page.get_images(full=True))
+            except Exception:
+                pass
+        rec["images"] = images
+        if bad:
+            # Salvage readable pages: only a document with zero readable pages
+            # counts as corrupt, otherwise the text is kept and the partial
+            # failure is reported alongside it.
+            rec["error"] = f"read:{bad}/{doc.page_count} pages unreadable"[:300]
+            if bad >= doc.page_count:
+                rec["error_kind"] = "broken"
     except Exception as exc:
         rec["error"] = f"read:{type(exc).__name__}:{exc}"[:300]
+        rec["error_kind"] = _exc_kind(exc)
     finally:
         doc.close()
     return rec
 
 
 def _inspect_text(path: str) -> dict:
-    rec = {"pages": 1, "chars": None, "images": 0, "encrypted": 0, "error": ""}
+    rec = _rec(pages=1, images=0)
     try:
-        raw = open(win_path(path), "rb").read()
+        size = os.path.getsize(win_path(path))
+        if size > MAX_TEXT_BYTES:
+            rec["error"] = "file too large for full-text audit (>50MB)"
+            rec["error_kind"] = "too_large"
+            return rec
+        raw = _read_bytes(path)
     except Exception as exc:
         rec["error"] = f"open:{type(exc).__name__}:{exc}"[:300]
+        rec["error_kind"] = _exc_kind(exc)
         return rec
     ext = ext_of(path)
     if ext == "rtf":
         text = _decode_rtf(raw)
+        rec["encoding"] = "rtf"
     else:
-        text = decode_bytes(raw)
+        text, encoding = decode_bytes_ex(raw)
+        rec["encoding"] = encoding
+        if encoding == FALLBACK_ENCODING:
+            if looks_binary(raw):
+                rec["error"] = "binary content in a text-extension file"
+                rec["error_kind"] = "binary"
+                return rec
+            rec["error"] = "decoded as latin-1; mojibake likely"
+            rec["error_kind"] = "mojibake"
     rec["chars"] = len(text)
+    rec["chars_effective"] = effective_chars(text)
     return rec
 
 
 def _inspect_html(path: str) -> dict:
-    rec = {"pages": 1, "chars": None, "images": 0, "encrypted": 0, "error": ""}
+    rec = _rec(pages=1, images=0)
     try:
+        raw = _read_bytes(path)
+        text, encoding = decode_bytes_ex(raw)
+        rec["encoding"] = encoding
         parser = _HTMLText()
-        parser.feed(decode_bytes(open(win_path(path), "rb").read()))
-        text = "".join(parser.parts)
-        rec["chars"] = len(re.sub(r"\s+", " ", text).strip())
+        parser.feed(text)
+        joined = "".join(parser.parts)
+        rec["chars"] = len(re.sub(r"\s+", " ", joined).strip())
+        rec["chars_effective"] = effective_chars(joined)
         rec["images"] = parser.images
     except Exception as exc:
         rec["error"] = f"read:{type(exc).__name__}:{exc}"[:300]
+        rec["error_kind"] = _exc_kind(exc)
     return rec
 
 
 def _inspect_docx(path: str, ext: str) -> dict:
-    rec = {"pages": None, "chars": None, "images": None, "encrypted": 0, "error": ""}
+    rec = _rec()
+    if is_ole_container(path):
+        rec["encrypted"] = 1
+        rec["error"] = "OLE/CFB container: possibly password-protected Office file"
+        rec["error_kind"] = "encrypted_office"
+        return rec
     try:
         if ext in {"docx", "docm"}:
             text, images, _ = _zip_text(path, ["word/document.xml"])
@@ -383,15 +533,17 @@ def _inspect_docx(path: str, ext: str) -> dict:
             text, images, pages = _zip_text(path, slides)
             rec["pages"] = pages
         rec["chars"] = len(text)
+        rec["chars_effective"] = effective_chars(text)
         rec["images"] = images
     except Exception as exc:
         rec["error"] = f"read:{type(exc).__name__}:{exc}"[:300]
+        rec["error_kind"] = _exc_kind(exc)
     return rec
 
 
 def _inspect_xlsx_zip(path: str) -> dict:
     """Raw-XML fallback; also catches formula-only workbooks without cached values."""
-    rec = {"pages": None, "chars": None, "images": None, "encrypted": 0, "error": ""}
+    rec = _rec()
     with _open_zip(path) as zf:
         names = zf.namelist()
         shared = ""
@@ -406,12 +558,18 @@ def _inspect_xlsx_zip(path: str) -> dict:
             text += "\n" + _xml_text(zf.read(n))
         rec["pages"] = len(sheets)
         rec["chars"] = len(text)
+        rec["chars_effective"] = effective_chars(text)
         rec["images"] = sum(1 for n in names if n.startswith("xl/media/"))
     return rec
 
 
 def _inspect_xlsx(path: str) -> dict:
-    rec = {"pages": None, "chars": None, "images": None, "encrypted": 0, "error": ""}
+    rec = _rec()
+    if is_ole_container(path):
+        rec["encrypted"] = 1
+        rec["error"] = "OLE/CFB container: possibly password-protected Office file"
+        rec["error_kind"] = "encrypted_office"
+        return rec
     primary_error = ""
     try:
         import openpyxl  # optional, more reliable than raw XML when values are cached
@@ -424,6 +582,7 @@ def _inspect_xlsx(path: str) -> dict:
                     chars += sum(len(str(v)) for v in row if v is not None)
             rec["pages"] = pages
             rec["chars"] = chars
+            rec["chars_effective"] = chars
         finally:
             wb.close()
         with _open_zip(path) as zf:
@@ -443,24 +602,34 @@ def _inspect_xlsx(path: str) -> dict:
         if not primary_error:
             primary_error = f"read:{type(exc).__name__}:{exc}"[:300]
     rec["error"] = primary_error
+    rec["error_kind"] = "broken" if primary_error else ""
     return rec
 
 
 def inspect_file(path: str) -> dict:
-    """Return pages/chars/images/encrypted/error for one file."""
+    """Return pages/chars/chars_effective/images/encrypted/encoding/error for one file."""
     ext = ext_of(path)
     kind = kind_of(path)
     if kind == "image":
-        return {"pages": 1, "chars": 0, "images": 1, "encrypted": 0, "error": ""}
+        rec = _rec(pages=1, chars=0, images=1)
+        rec["chars_effective"] = 0
+        return rec
     if kind == "media":
-        return {"pages": None, "chars": 0, "images": 0, "encrypted": 0,
-                "error": "audio/video requires transcription or frame extraction first"}
+        rec = _rec(pages=None, chars=0, images=0)
+        rec["chars_effective"] = 0
+        rec["error"] = "audio/video requires transcription or frame extraction first"
+        rec["error_kind"] = "unsupported"
+        return rec
     if kind == "archive":
-        return {"pages": None, "chars": None, "images": None, "encrypted": 0,
-                "error": "archive: extract first, then audit the extracted files"}
+        rec = _rec()
+        rec["error"] = "archive: extract first, then audit the extracted files"
+        rec["error_kind"] = "unsupported"
+        return rec
     if kind == "legacy_office":
-        return {"pages": None, "chars": None, "images": None, "encrypted": 0,
-                "error": "legacy Office format: convert .doc/.xls/.ppt to docx/xlsx/pptx first"}
+        rec = _rec()
+        rec["error"] = "legacy Office format: convert .doc/.xls/.ppt to docx/xlsx/pptx first"
+        rec["error_kind"] = "unsupported"
+        return rec
     if kind == "pdf":
         return _inspect_pdf(path)
     if kind in {"docx", "odt", "pptx"}:
@@ -471,8 +640,10 @@ def inspect_file(path: str) -> dict:
         return _inspect_html(path)
     if kind == "text":
         return _inspect_text(path)
-    return {"pages": None, "chars": None, "images": None, "encrypted": 0,
-            "error": f"unsupported extension: .{ext or '(none)'}"}
+    rec = _rec()
+    rec["error"] = f"unsupported extension: .{ext or '(none)'}"
+    rec["error_kind"] = "unsupported"
+    return rec
 
 
 def extract_text(path: str) -> str:
@@ -486,7 +657,15 @@ def extract_text(path: str) -> str:
         try:
             if doc.needs_pass:
                 raise ValueError("encrypted PDF: provide a decrypted copy")
-            return "\n".join(page.get_text("text") for page in doc)
+            texts, bad = _pdf_pages_text(doc)
+            text = "\n".join(texts)
+            # EXT-03: keep whatever pages could be read; only a fully
+            # unreadable document is an extraction failure.
+            if bad and bad >= doc.page_count and not text.strip():
+                raise ValueError(
+                    f"corrupt PDF: all {doc.page_count} pages unreadable; "
+                    "repair the PDF first")
+            return text
         finally:
             doc.close()
     if kind == "docx":
@@ -504,13 +683,14 @@ def extract_text(path: str) -> str:
         text, _, _ = _zip_text(path, slides)
         return text
     if kind == "html":
+        # _HTMLText already yields visible text; strip_markup would eat "<...>".
         parser = _HTMLText()
-        parser.feed(decode_bytes(open(win_path(path), "rb").read()))
-        return strip_markup("".join(parser.parts))
+        parser.feed(decode_bytes(_read_bytes(path)))
+        return "".join(parser.parts)
     if ext == "rtf":
-        return _decode_rtf(open(win_path(path), "rb").read())
+        return _decode_rtf(_read_bytes(path))
     if kind == "text":
-        return decode_bytes(open(win_path(path), "rb").read())
+        return decode_bytes(_read_bytes(path))
     if kind == "spreadsheet":
         raise ValueError("tabular spreadsheet: use auto_stats / CSV pipeline, not document coding")
     if kind == "image":
@@ -520,3 +700,126 @@ def extract_text(path: str) -> str:
     if kind == "archive":
         raise ValueError("archive: extract first")
     raise ValueError(f"unsupported extension: .{ext or '(none)'}")
+
+
+def _record(path: str, root: str) -> dict:
+    """inspect_file() as a flat CSV row with a rel_path."""
+    rec = inspect_file(path)
+    ext = ext_of(path)
+    return {
+        "rel_path": os.path.relpath(path, root).replace(os.sep, "/") if root else path,
+        "ext": ext,
+        "kind": kind_of(path),
+        "pages": rec.get("pages"),
+        "chars": rec.get("chars"),
+        "chars_effective": rec.get("chars_effective"),
+        "images": rec.get("images"),
+        "encrypted": rec.get("encrypted"),
+        "encoding": rec.get("encoding") or "",
+        "error": rec.get("error") or "",
+        "error_kind": rec.get("error_kind") or "",
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(
+        description="Extract/inspect text from research materials (offline, no OCR).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Exit codes: 0 ok, 2 parameter error / no input.",
+    )
+    ap.add_argument("--root", help="directory to scan recursively")
+    ap.add_argument("--file", action="append", default=[], help="one file (repeatable)")
+    ap.add_argument("--out", help="output .csv or .jsonl path (default: stdout)")
+    ap.add_argument("--ext", action="append", default=[], help="only these extensions")
+    ap.add_argument("--max-files", type=int, default=0, help="stop after N files (0 = all)")
+    ap.add_argument("--min-chars", type=int, default=0,
+                    help="drop rows whose chars_effective is below N (0 = keep all)")
+    ap.add_argument("--text", action="store_true", help="include the extracted text column")
+    args = ap.parse_args(argv)
+
+    if not args.root and not args.file:
+        print("error: give --root or at least one --file", file=sys.stderr)
+        return 2
+    root = os.path.abspath(args.root) if args.root else os.getcwd()
+    if args.root and not os.path.isdir(root):
+        print(f"error: --root is not a directory: {args.root}", file=sys.stderr)
+        return 2
+    only = {e.lower().lstrip(".") for e in args.ext}
+
+    files: list[str] = []
+    if args.root:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames.sort()
+            for name in sorted(filenames):
+                files.append(os.path.join(dirpath, name))
+    for path in args.file:
+        if not os.path.isfile(path):
+            print(f"error: --file not found: {path}", file=sys.stderr)
+            return 2
+        files.append(os.path.abspath(path))
+
+    # --root and --file may point at the same document; inspect it once.
+    deduped: list[str] = []
+    seen_paths: set[str] = set()
+    for path in files:
+        key = os.path.normcase(os.path.abspath(path))
+        if key in seen_paths:
+            continue
+        seen_paths.add(key)
+        deduped.append(path)
+    files = deduped
+
+    rows: list[dict] = []
+    for path in files:
+        ext = ext_of(path)
+        if only and ext not in only:
+            continue
+        if args.max_files and len(rows) >= args.max_files:
+            break
+        try:
+            row = _record(path, root)
+            if args.text:
+                try:
+                    row["text"] = extract_text(path)
+                except (ValueError, OSError) as exc:
+                    row["text"] = ""
+                    row["error"] = row["error"] or str(exc)[:300]
+            rows.append(row)
+        except Exception as exc:  # one bad file must not kill the whole run
+            rows.append({"rel_path": os.path.relpath(path, root).replace(os.sep, "/"),
+                         "ext": ext, "kind": kind_of(path), "pages": None,
+                         "chars": None, "chars_effective": None, "images": None,
+                         "encrypted": None, "encoding": "", "error_kind": "broken",
+                         "error": f"{type(exc).__name__}:{exc}"[:300]})
+
+    kept = [r for r in rows if (r.get("chars_effective") or 0) >= args.min_chars]
+    fields = ["rel_path", "ext", "kind", "pages", "chars", "chars_effective",
+              "images", "encrypted", "encoding", "error", "error_kind"]
+    if args.text:
+        fields.append("text")
+    if args.out:
+        out = os.path.abspath(args.out)
+        os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+        if out.lower().endswith(".jsonl"):
+            with open(out, "w", encoding="utf-8", newline="\n") as fh:
+                for row in kept:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        else:
+            with open(out, "w", encoding="utf-8-sig", newline="") as fh:
+                writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(kept)
+        print(f"wrote {len(kept)} rows to {out}")
+    else:
+        writer = csv.DictWriter(sys.stdout, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(kept)
+
+    if not kept:
+        print("error: no rows extracted (check --ext / --min-chars / inputs)", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

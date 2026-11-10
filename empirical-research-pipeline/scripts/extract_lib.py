@@ -3,7 +3,7 @@
 """Generic field-extraction primitives.
 
 Everything here is domain-free on purpose. Field knowledge lives in a profile
-JSON (see ``docs/EXTRACT-CONTRACT.md`` and ``profiles/``); this module only
+JSON (see ``references/09-field-extraction.md`` and ``profiles/``); this module only
 provides the ten operations every text-based study needs: numbers, quantities,
 dates, key/value blocks, sections, enumerations, evidence windows, negation
 scope, vocabulary normalisation and de-duplicated counting.
@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import re
 
 __version__ = "1.0.0"
@@ -1145,6 +1144,12 @@ def _hinted(finder, scope_text: str, hint: str, *args, anchor: bool = False):
     return None
 
 
+# How many months one `unit` is worth, for the public `duration` wrapper.
+_MONTHS_PER_UNIT = {"月": 1.0, "个月": 1.0, "年": 12.0, "日": 1 / 30.0,
+                   "天": 1 / 30.0, "周": 7 / 30.0, "星期": 7 / 30.0,
+                   "小时": 1 / 720.0, "分钟": 1 / 43200.0}
+
+
 def duration_find(s: str, unit: str = "月"):
     """Sum a compound duration into one unit.
 
@@ -1181,8 +1186,20 @@ def duration_find(s: str, unit: str = "月"):
 
 
 def duration(s: str, unit: str = "月"):
+    """Compound duration expressed in `unit` (default months).
+
+    `duration_find` always sums into months internally; the `unit` argument
+    used to be accepted and ignored, so `duration("三年", unit="年")` returned
+    36 (months) while claiming to be years.  Convert here, not in the finder.
+    """
     hit = duration_find(s, unit)
-    return hit[0] if hit else None
+    if not hit:
+        return None
+    months = hit[0]
+    per_unit = _MONTHS_PER_UNIT.get(unit)
+    if per_unit is None:
+        return months
+    return round(months / per_unit, 4)
 
 
 def _apply_one(field: dict, text: str, scope_text: str, offset: int,

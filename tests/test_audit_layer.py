@@ -448,14 +448,22 @@ class TestDedupe(TempCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("keepers", proc.stderr)
 
-    def test_ded08_no_duplicate_groups_is_an_error(self):
+    def test_ded08_no_duplicate_groups_is_a_clean_no_op(self):
+        """A corpus without duplicates must not look like a broken step."""
         csv_path = os.path.join(self.tmp, "audit", "nodup.csv")
         write_csv(csv_path, ["rel_path", "relpath", "dup_group", "dup_role"],
                   [["keep.txt", "keep.txt", "", ""]])
         proc = run("dedupe_corpus.py", "--audit", csv_path, "--root", self.root,
                    "--out-dir", self.audit_dir)
-        self.assertEqual(proc.returncode, 2)
-        self.assertIn("no duplicate groups", proc.stderr)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("nothing to do", proc.stdout)
+        plan = os.path.join(self.audit_dir, "dedupe_plan.csv")
+        self.assertTrue(os.path.exists(plan), "an empty plan must still be written")
+        self.assertEqual(read_csv(plan), [], "header only, no planned moves")
+        # --apply on an empty plan is also a success, not a failure
+        proc2 = run("dedupe_corpus.py", "--audit", csv_path, "--root", self.root,
+                    "--out-dir", self.audit_dir, "--apply")
+        self.assertEqual(proc2.returncode, 0, proc2.stderr)
 
 
 class TestTextExtract(TempCase):

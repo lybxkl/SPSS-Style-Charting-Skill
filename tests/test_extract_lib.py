@@ -66,6 +66,14 @@ class NumTest(unittest.TestCase):
                           ("一万零五百", 10500), ("零点五", 0.5)):
             self.assertEqual(E.num(raw), want, raw)
 
+    def test_increasing_magnitude_breaks_the_chain(self):
+        # The reader walks left to right and stops when the next scale is not
+        # smaller; without that guard 5万1亿 was summed as one number.  This is
+        # the inverse of every 1亿5万 case, and the only form that catches it.
+        self.assertEqual(E.num("5万1亿"), 50000)
+        self.assertEqual(E.num("3千5百"), 3500)
+        self.assertEqual(E.quantity("5万元1亿元")[0], 50000)
+
     def test_magnitude_applies_once(self):
         # 15万 must not be read as 15 * 10^4 * 10^4: the suffix belongs to the
         # Arabic branch only, otherwise every Chinese amount explodes.
@@ -163,6 +171,20 @@ class NegationTest(unittest.TestCase):
 
     def test_double_cue_cancels(self):
         self.assertFalse(E.negate("没有不满意", (2, 5)))
+
+    def test_window_limit_is_what_blocks_a_distant_cue(self):
+        # within=12 is a decision, not decoration: the cue must be near the value
+        # or a heading three clauses earlier negates everything below it.
+        text = "没有 事事 事事 事事 事事 修复受损土地"
+        span = text.index("修复"), text.index("修复") + 2
+        self.assertTrue(E.negate(text, span, within=40))
+        self.assertFalse(E.negate(text, span, within=12))
+        # The default is the contract, so assert it without passing ``within``:
+        # widening the default to 40 would otherwise keep every test green.
+        self.assertFalse(E.negate(text, span))
+        near = "没有修复受损土地"
+        near_span = near.index("修复"), near.index("修复") + 2
+        self.assertTrue(E.negate(near, near_span))
 
     def test_charge_name_is_not_a_negation(self):
         # 非法 is part of a charge name, not a negation of the amount beside it.

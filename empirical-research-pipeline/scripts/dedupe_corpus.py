@@ -346,8 +346,16 @@ def main(argv: list[str] | None = None) -> int:
         if group:
             groups[group].append(row)
     if not groups:
-        print("error: no duplicate groups in the audit CSV (nothing to dedupe)", file=sys.stderr)
-        return 2
+        # Nothing to dedupe is a result, not a failure: a clean corpus is what we
+        # want, and returning 2 made a documented step look broken on any corpus
+        # without duplicates.  Still write an empty plan so downstream steps can
+        # tell "ran and found nothing" from "never ran".
+        plan_path = os.path.join(out_dir, "dedupe_plan.csv")
+        write_csv(plan_path, [], PLAN_FIELDS)
+        print("groups: 0, keeper missing: 0")
+        print(f"plan: (no duplicate groups in the audit) -> {plan_path}")
+        print("dedupe: nothing to do")
+        return 0
 
     plan, skipped_groups = build_plan(groups, root, dest_name, args.copy)
     plan_path = os.path.join(out_dir, "dedupe_plan.csv")

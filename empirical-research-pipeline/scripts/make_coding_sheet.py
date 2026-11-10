@@ -81,6 +81,15 @@ SENT_SPLIT_RE = re.compile(r"(?<=[。；;！？!?、，,])|(?<=[.!?])\s+|\n+")
 NEGATION_RE = re.compile(r"(?:不予|不得|禁止|驳回|尚未|未|无|不)")
 EVIDENCE_MAX_CHARS = 200
 
+# One implementation of the `name=snippet@start-end` line lives in extract_lib;
+# importing it here keeps keyword evidence and field evidence byte-identical.
+# The fallback only exists so a lone copy of this script still runs.
+try:
+    from extract_lib import evidence_line as _evidence_line
+except Exception:                                     # pragma: no cover
+    def _evidence_line(name, snippet, span):
+        return f"{name}={snippet}@{int(span[0])}-{int(span[1])}"
+
 # Words that may precede a court name in running text. Only stripped when the
 # remainder still looks like a court name (see _court_ok), so 本溪市 is safe.
 COURT_JUNK_PREFIXES = tuple(sorted((
@@ -413,7 +422,7 @@ def find_signals(
                         "negated": negated,
                         "polarity": "negative" if negated else "positive",
                         "truncated": truncated,
-                        "evidence": f"{category}={snippet}@{sent_start}-{sent_end}",
+                        "evidence": _evidence_line(category, snippet, (sent_start, sent_end)),
                     })
                     included += 1
                     found += 1
@@ -451,9 +460,17 @@ def _read_csv_rows(path: str, label: str) -> tuple[list[str], list[dict]]:
     return fields, rows
 
 
-def read_valid_paths(audit: str | None, dedupe_plan: str | None) -> tuple[set[str] | None, set[str]]:
-    """Read the audit/dedupe filters; the key column follows the contract order."""
+def read_valid_paths(audit: str | None,
+                     dedupe_plan: str | None) -> tuple[set[str] | None, set[str], set[str]]:
+    """Read the audit/dedupe filters.
+
+    Returns ``(keep, removed, listed)`` where ``listed`` is every path the audit
+    file mentions.  Without ``listed`` a wrong ``--root`` is indistinguishable
+    from "the whole corpus failed the audit", and the funnel then reports the
+    wrong reason for every single row.
+    """
     keep: set[str] | None = None
+    listed: set[str] = set()
     if audit:
         fields, rows = _read_csv_rows(audit, "audit CSV")
         status_column = "status" if "status" in fields else ("valid" if "valid" in fields else "")
@@ -469,6 +486,8 @@ def read_valid_paths(audit: str | None, dedupe_plan: str | None) -> tuple[set[st
         keep = set()
         for row in rows:
             rel = _pick_key(row)
+            if rel:
+                listed.add(rel)
             status = str(row.get(status_column) or "").strip().lower()
             if rel and status in {"valid", "1", "true", "yes", "y", "ok"}:
                 keep.add(rel)
@@ -487,7 +506,7 @@ def read_valid_paths(audit: str | None, dedupe_plan: str | None) -> tuple[set[st
             if str(row.get("action") or "").strip().lower() in {"move", "copy"}
             and _pick_key(row)
         }
-    return keep, removed
+    return keep, removed, listed
 
 
 def first_title(text: str, name: str) -> str:
@@ -537,7 +556,7 @@ def main() -> int:
                         help="exit 0 even when no document is extracted")
     parser.add_argument("--extract", default=None, metavar="PROFILE_JSON",
                         help="run a field-extraction profile and write dataset.csv, "
-                             "evidence.jsonl and run.json (see docs/EXTRACT-CONTRACT.md)")
+                             "evidence.jsonl and run.json (contract: references/09-field-extraction.md)")
     args = parser.parse_args()
 
     root = os.path.abspath(args.root)
@@ -574,10 +593,14 @@ def main() -> int:
     if args.profile == "legal" and not cat_map:
         cat_map = load_default_category_map()
         if cat_map:
-            print(f"note: using default category keywords: {DEFAULT_KEYWORDS_PATH}",
+            print(f"note: --profile legal loaded the SHIPPED EXAMPLE keyword "
+                  f"dictionary ({DEFAULT_KEYWORDS_PATH}).  Its categories are "
+                  f"placeholders (示例类别A/B) and do not describe your material; "
+                  f"pass --keywords with your own dictionary for real coding.",
                   file=sys.stderr)
     try:
-        keep_paths, removed_paths = read_valid_paths(args.audit, args.dedupe_plan)
+        keep_paths, removed_paths, listed_paths = read_valid_paths(
+            args.audit, args.dedupe_plan)
     except Exception as exc:
         print(f"ERROR: cannot read audit/dedupe input: {type(exc).__name__}: {exc}",
               file=sys.stderr)
@@ -615,6 +638,11 @@ def main() -> int:
     ds_evidence: list[dict] = []
     ds_field_names: list[str] = []
     ds_na_counts: dict = {}
+    # Why a field is empty matters: "the document never mentions it", "it was
+    # negated", "it was redacted" and "we found text but could not parse it"
+    # are four different facts, and collapsing them is how a coding sheet
+    # quietly turns into a claim that a thing did not happen.
+    ds_na_by_source: dict = {}
     ds_hit_counts: dict = {}
     ds_errors = 0
     extracted = 0
@@ -649,9 +677,20 @@ def main() -> int:
                 kind = kind_of(path)
                 seen += 1
                 if keep_paths is not None and _norm_rel(rel) not in keep_paths:
-                    skip(rel, name, "", 0, "excluded by --audit (status is not valid)",
-                         detail="audit status != valid", skip_stage="audit",
-                         file_kind=kind)
+                    if _norm_rel(rel) not in listed_paths:
+                        # The audit file describes a different root: every single
+                        # path would be "not in the audit", which looks exactly
+                        # like "all files failed the audit".
+                        skip(rel, name, "", 0,
+                             "not listed in the --audit CSV (wrong --root, or the "
+                             "audit was run on another directory)",
+                             detail=f"rel_path={rel} absent from audit rows",
+                             skip_stage="audit", file_kind=kind)
+                    else:
+                        skip(rel, name, "", 0,
+                             "excluded by --audit (status is not valid)",
+                             detail="audit status != valid", skip_stage="audit",
+                             file_kind=kind)
                     excluded += 1
                     continue
                 if _norm_rel(rel) in removed_paths:
@@ -837,6 +876,18 @@ def main() -> int:
                         }
                         if value is None:
                             ds_na_counts[fname] = ds_na_counts.get(fname, 0) + 1
+                            if got.get("negated"):
+                                bucket = "negated"
+                            elif str(got.get("source") or "none") == "none":
+                                bucket = "not_found"
+                            elif got.get("redacted"):
+                                bucket = "redacted"
+                            elif got.get("na"):
+                                bucket = "na_phrase"
+                            else:
+                                bucket = "unparsed"
+                            per_field = ds_na_by_source.setdefault(fname, {})
+                            per_field[bucket] = per_field.get(bucket, 0) + 1
                         else:
                             ds_hit_counts[fname] = ds_hit_counts.get(fname, 0) + 1
                     ds_rows.append(ds_row)
@@ -923,12 +974,72 @@ def main() -> int:
             "generated_by": "make_coding_sheet.py --extract",
             "script_version": SCRIPT_VERSION,
         }
+        na_path = os.path.join(out_dir, "missing_by_source.csv")
+        with open(na_path, "w", newline="", encoding="utf-8-sig") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["field", "bucket", "n", "share_of_na"])
+            for fname in ds_field_names:
+                per_field = ds_na_by_source.get(fname, {})
+                total = sum(per_field.values())
+                for bucket in ("not_found", "negated", "redacted", "na_phrase",
+                               "unparsed"):
+                    count = per_field.get(bucket, 0)
+                    if not count:
+                        continue
+                    writer.writerow([fname, bucket, count,
+                                     f"{count / total:.3f}" if total else ""])
+        print(f"missing: {na_path}")
+        # run.json is shared by every producer that writes into this directory.
+        # Overwriting it wholesale would drop the other script's version stamp,
+        # so each producer stores itself under "producers" and the top level is
+        # kept for compatibility with a single-producer directory.
+        merged = {}
+        if os.path.exists(run_path):
+            try:
+                with open(run_path, encoding="utf-8-sig") as fh:
+                    merged = json.load(fh) or {}
+            except (OSError, json.JSONDecodeError):
+                merged = {}
+        producers = dict(merged.get("producers") or {})
+        producers["make_coding_sheet.py --extract"] = run
+        merged.setdefault("schema", "run.json v2")
+        merged["extract"] = run
+        # Also mirror the scalars at the top level when nobody else claimed them,
+        # so a reader that predates `producers` still finds `documents`/`fields`.
+        for key, value in run.items():
+            merged.setdefault(key, value)
+        merged["producers"] = producers
         with open(run_path, "w", encoding="utf-8") as fh:
-            json.dump(run, fh, ensure_ascii=False, indent=1)
+            json.dump(merged, fh, ensure_ascii=False, indent=1)
         print(f"dataset: {ds_path} ({len(ds_rows)} rows, {len(ds_field_names)} fields)")
         print(f"evidence: {ev_path} ({len(ds_evidence)} rows)")
         print(f"run: {run_path}")
+        # An extractor that hits nothing must not look like success: pointing a
+        # profile at the wrong corpus yields a full dataset of NAs and exit 0.
+        empty = [n for n in ds_field_names if not ds_hit_counts.get(n, 0)]
+        if len(empty) == len(ds_field_names):
+            print(f"ERROR: profile '{extract_profile['profile']}' matched 0 of "
+                  f"{len(ds_field_names)} fields in {len(ds_rows)} document(s); the "
+                  f"profile does not fit this corpus (check --extract, scope and "
+                  f"section markers)", file=sys.stderr)
+            return 2
+        if empty:
+            print(f"warning: {len(empty)}/{len(ds_field_names)} field(s) never hit: "
+                  f"{', '.join(empty[:8])}"
+                  + (" …" if len(empty) > 8 else ""), file=sys.stderr)
 
+    if not rows and keep_paths is not None and listed_paths:
+        # Nothing matched: is this a filter, or a wrong --root?  A mismatch is a
+        # usage error, and saying so is the difference between a five-minute fix
+        # and a fruitless hunt for a corrupt corpus.
+        overlap = len({_norm_rel(r["rel_path"]) for r in skipped} & listed_paths)
+        if overlap == 0:
+            sample_audit = sorted(listed_paths)[0]
+            print("ERROR: --audit lists a different directory than --root "
+                  f"(no path overlap at all). audit example: {sample_audit!r}; "
+                  "re-run audit_corpus.py on this --root or pass the matching "
+                  "--root", file=sys.stderr)
+            return 2
     if not rows:
         if args.allow_empty:
             print("WARNING: extracted 0 documents (--allow-empty)", file=sys.stderr)

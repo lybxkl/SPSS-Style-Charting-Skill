@@ -254,8 +254,14 @@ def resolve_outcome(df: pd.DataFrame, cfg: dict):
         if outcome_col not in df.columns:
             return None, f"outcome column not found: {outcome_col}", []
         return outcome_col, None, []
+    # A bare `outcome` substring also matches `has_outcome` (an auxiliary flag)
+    # and `outcome_len` (a count), which is how the default command ended up
+    # picking a column nobody meant.  Keep the stem match, then require the
+    # column to actually look like a binary outcome.
     regex_hits = [c for c in df.columns
                   if re.search(r"outcome_binary|outcome|target|结果|支持", c, re.I)
+                  and not c.lower().startswith(("has_", "is_", "n_", "num_", "count_"))
+                  and is_binary(df[c])
                   and not is_id_like(c, df[c])]
     if len(regex_hits) == 1:
         return regex_hits[0], None, []
@@ -480,6 +486,31 @@ def correlations(df: pd.DataFrame, numeric: list[str], binaries: list[str],
 # ---------------------------------------------------------------------------
 # Univariate models
 # ---------------------------------------------------------------------------
+def _fit_with_warnings(build, fit_kwargs, sink=None):
+    """Fit a model while recording the warnings statsmodels emits.
+
+    Convergence failures ("Maximum Likelihood optimization failed to converge",
+    perfect separation, Hessian inversion) used to be silenced with a blanket
+    ``simplefilter("ignore")``: the table looked fine and the reader never knew
+    the estimate was shaky.  Collect them instead and surface the texts.
+    """
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        model = build()
+        fitted = model.fit(**fit_kwargs)
+    texts = [str(w.message) for w in caught
+             if issubclass(w.category, (UserWarning, RuntimeWarning, Warning))]
+    uniq = []
+    for text in texts:
+        if text not in uniq:
+            uniq.append(text)
+    if sink is not None and uniq:
+        sink.extend(uniq)
+    if uniq:
+        print(f"warning: fit reported {len(uniq)}: {uniq[0][:160]}", file=sys.stderr)
+    return fitted
+
+
 def _fit_kwargs(cov: str | None, logit: bool) -> dict:
     kwargs = {"disp": 0} if logit else {}
     if cov:
@@ -544,12 +575,12 @@ def univariate_models(df: pd.DataFrame, outcome: str, numeric: list[str],
         try:
             X = sm.add_constant(sub[[c]].astype(float))
             y = sub[outcome].astype(float)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if kind == "binary":
-                    model = sm.Logit(y, X).fit(**_fit_kwargs(cov, True))
-                else:
-                    model = sm.OLS(y, X).fit(**_fit_kwargs(cov, False))
+            if kind == "binary":
+                model = _fit_with_warnings(
+                    lambda: sm.Logit(y, X), _fit_kwargs(cov, True))
+            else:
+                model = _fit_with_warnings(
+                    lambda: sm.OLS(y, X), _fit_kwargs(cov, False))
             coef = model.params[c]
             lo, hi = model.conf_int().loc[c]
             se_type = cov or "nonrobust"
@@ -622,12 +653,12 @@ def univariate_models(df: pd.DataFrame, outcome: str, numeric: list[str],
         try:
             X = sm.add_constant(dummies)
             y = sub["y"].astype(float)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                if kind == "binary":
-                    model = sm.Logit(y, X).fit(**_fit_kwargs(cov, True))
-                else:
-                    model = sm.OLS(y, X).fit(**_fit_kwargs(cov, False))
+            if kind == "binary":
+                model = _fit_with_warnings(
+                    lambda: sm.Logit(y, X), _fit_kwargs(cov, True))
+            else:
+                model = _fit_with_warnings(
+                    lambda: sm.OLS(y, X), _fit_kwargs(cov, False))
             se_type = cov or "nonrobust"
             for term in dummies.columns:
                 coef = model.params[term]
@@ -1067,6 +1098,13 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
     if flow is not None:
         # C2: a declared flow_stage MUST exist in the funnel; an undeclared one
         # is simply not checked (never conflated with "declared but mismatched").
+        # But a funnel passed in and used by nothing is a silent no-op, so say so.
+        declared = [str(m.get("flow_stage") or "").strip() for m in models]
+        if not any(declared):
+            print("warning: --sample-flow was given but no model declares "
+                  "'flow_stage'; the funnel is never compared. Add "
+                  "\"flow_stage\": \"<stage name>\" to the models you want checked",
+                  file=sys.stderr)
         stages = sorted(flow)
         for index, model in enumerate(models):
             mid = str(model.get("id") or f"M{index + 1}").strip()
@@ -1170,6 +1208,15 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
                     "- `vif.csv`" if args.vif else "- `vif.csv`：未运行（加 --vif）",
                     "- `roc.csv`" if args.roc else "- `roc.csv`：未运行（加 --roc）",
                     ""])
+    # Fit warnings belong in the deliverable, not only in a terminal nobody reads.
+    warned = [info for info in infos if info.get("fit_warnings")]
+    summary.extend(["", "## 拟合告警", ""])
+    if warned:
+        for info in warned:
+            for text in info["fit_warnings"]:
+                summary.append(f"- `{info['mid']}`：{text}")
+    else:
+        summary.append("- 无（statsmodels 未报告收敛或奇异矩阵告警）")
     with open(os.path.join(out_dir, "model_summary.md"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(summary) + "\n")
     meta = {"data": os.path.abspath(args.data), "spec": os.path.abspath(args.spec),
@@ -1325,8 +1372,11 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     if mtype == "logit" and yv.nunique() < 2:
         raise SpecError(f"模型 {mid}：结果只有 1 个类别")
     design = sm.add_constant(Xv, has_constant="add")
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    # Record, do not silence: a non-converged fit is still reported, but the
+    # reader has to be told.  The texts go to stderr and into model_summary.md.
+    fit_warnings: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         if mtype == "logit":
             model_obj = sm.Logit(yv, design)
         else:
@@ -1352,6 +1402,14 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             fit = model_obj.fit(**({"disp": 0} if mtype == "logit" else {}))
             se_type = "nonrobust"
 
+    for warn_item in caught:
+        text = str(warn_item.message)
+        if text not in fit_warnings:
+            fit_warnings.append(text)
+    if fit_warnings:
+        print(f"warning: 模型 {mid} 拟合报告 {len(fit_warnings)} 条告警: "
+              f"{fit_warnings[0][:160]}", file=sys.stderr)
+
     n_model = int(len(frame))
     n_events = int(yv.sum()) if mtype == "logit" else np.nan
     rows = _model_rows(mid, mtype, fit, Xv, refs, outcome, n_model, n_events,
@@ -1370,7 +1428,8 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             "rsquared": float(getattr(fit, "rsquared", np.nan)),
             "rsquared_adj": float(getattr(fit, "rsquared_adj", np.nan)),
             "f_pvalue": float(getattr(fit, "f_pvalue", np.nan)),
-            "bic": float(getattr(fit, "bic", np.nan))}
+            "bic": float(getattr(fit, "bic", np.nan)),
+            "fit_warnings": fit_warnings}
     # A3-3: likelihood-ratio statistics for the machine-readable fit table.
     k_params = int(len(fit.params))
     loglik = float(getattr(fit, "llf", np.nan))
@@ -1712,8 +1771,10 @@ def run_screening(df: pd.DataFrame, cfg: dict, args, out_dir: str,
             "robust": args.robust,
             "sections": sorted(sections),
             "warnings": warnings_list}
-    with open(os.path.join(out_dir, "analysis_meta.json"), "w", encoding="utf-8") as fh:
-        json.dump(meta, fh, ensure_ascii=False, indent=2)
+    # `meta` used to be dumped to analysis_meta.json, which nothing ever read
+    # (an orphan artifact).  The markdown report already carries the same
+    # provenance in its header, and models write model_meta.json, so the JSON
+    # copy was pure clutter.
     write_md(os.path.join(out_dir, "analysis_pack.md"), desc, tests, rates, corr,
              uni, skipped, meta)
     print(f"n: {len(df)}  outcome: {outcome_col} ({kind})  "

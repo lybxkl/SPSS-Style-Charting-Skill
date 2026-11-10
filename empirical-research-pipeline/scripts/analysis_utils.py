@@ -169,23 +169,89 @@ def _coerce_filter_value(column: pd.Series, value):
     return value
 
 
-def apply_filter(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, str | None]:
-    """Apply filter_query, then the filter dict, then the in_analysis default.
+def _suggest_columns(name: str, columns) -> list[str]:
+    """Columns that look like the one a broken query asked for.
+
+    A config copied from another project fails on a column that does not exist;
+    the useful answer is "did you mean in_analysis", not a bare NameError.
+    """
+    lowered = str(name).lower()
+    scored = []
+    for col in columns:
+        low = str(col).lower()
+        if low == lowered:
+            score = 0
+        elif low.startswith(lowered) or lowered.startswith(low):
+            score = 1
+        elif lowered in low or low in lowered:
+            score = 2
+        else:
+            continue
+        scored.append((score, str(col)))
+    return [col for _, col in sorted(scored)[:5]]
+
+
+def _query_with_hint(df, query):
+    """Run ``df.query`` and turn an unknown name into a readable error."""
+    try:
+        return df.query(query)
+    except Exception as exc:
+        text = str(exc)
+        unknown = re.search(r"name '([^']+)' is not defined", text)
+        if unknown:
+            name = unknown.group(1)
+            hint = _suggest_columns(name, df.columns)
+            where = f"did you mean: {', '.join(hint)}" if hint else "no similar column"
+            raise ValueError(
+                f"filter_query 用到了数据里没有的列 {name!r}（{where}）；"
+                f"可用列见数据表头，或删掉该条件"
+            ) from exc
+        raise
+
+
+def apply_filter(df: pd.DataFrame, cfg: dict,
+                 keep_out_of_scope: bool | None = None
+                 ) -> tuple[pd.DataFrame, str | None]:
+    """Apply the in_analysis gate, then filter_query / filter, in that order.
 
     Returns ``(filtered_df, description)``. The description always records the
     row counts before and after, so a report can prove how N was reached.
     A filter that matches zero rows raises ``ValueError`` instead of silently
     returning an empty frame.
+
+    The gate comes first on purpose. Applying a condition such as
+    ``{"case_type": "刑事"}`` to the whole file quietly puts out-of-scope rows
+    back into the analysis sample (in one real corpus that meant 129 procedural
+    rulings, +5%), and nothing in the output said so. ``keep_out_of_scope: true``
+    disables the gate; a ``filter_query`` that mentions ``in_analysis`` is
+    treated as addressing the flag itself and therefore also skips the gate.
     """
     before = len(df)
     query = cfg.get("filter_query")
     filt = cfg.get("filter")
     has_default = "in_analysis" in df.columns
+    keep_out = bool(cfg.get("keep_out_of_scope") if keep_out_of_scope is None
+                    else keep_out_of_scope)
     label: str | None = None
     out = df
+    gate_rows = None
+    if has_default and not keep_out:
+        if query and "in_analysis" in str(query):
+            pass  # the query addresses the flag, so it is the gate
+        elif not query and not filt:
+            pass  # the plain default below already does it
+        else:
+            out = df[df["in_analysis"] == 1]
+            gate_rows = len(out)
+            if gate_rows == 0:
+                raise ValueError(
+                    "in_analysis gate left 0 rows: every row is marked out of "
+                    "scope (in_analysis != 1); set keep_out_of_scope to analyse "
+                    "the whole file"
+                )
     try:
         if query:
-            out = df.query(query)
+            out = _query_with_hint(out, query)
             label = str(query)
         elif filt:
             missing = [key for key in filt if key not in df.columns]
@@ -198,8 +264,10 @@ def apply_filter(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, str | None]
                 else:
                     out = out[out[key] == cast]
             label = str(filt)
-        elif has_default:
+        elif has_default and gate_rows is None:
             out = df[df["in_analysis"] == 1]
+            label = "in_analysis == 1"
+        elif gate_rows is not None:
             label = "in_analysis == 1"
         else:
             return df.copy(), None
@@ -209,18 +277,26 @@ def apply_filter(df: pd.DataFrame, cfg: dict) -> tuple[pd.DataFrame, str | None]
     except Exception as exc:
         raise ValueError(f"filter failed ({query or filt}): {exc}") from exc
 
-    if (query or filt) and has_default:
-        print(
-            f"filter: applied {before} → {len(out)} rows (in_analysis ignored)",
-            file=sys.stderr,
+    if query or filt:
+        gate = f"in_analysis gate {before}→{gate_rows}; " if gate_rows is not None else (
+            "in_analysis kept (keep_out_of_scope); " if keep_out else ""
         )
+        print(f"filter: {gate}{label} → {len(out)} rows", file=sys.stderr)
     if len(out) == 0:
         raise ValueError(
             f"filter {label} matched 0 of {before} rows; "
             "check the column dtype and the filter values "
             "(e.g. an int column filtered with the string '1')"
         )
-    return out, f"{label} ({before}→{len(out)} rows)"
+    desc = f"{label} ({before}→{len(out)} rows)"
+    if gate_rows is not None:
+        desc = (f"in_analysis==1 ({before}→{gate_rows}) then "
+                f"{label} ({gate_rows}→{len(out)} rows)")
+    elif keep_out and has_default and (query or filt):
+        # Out-of-scope rows were admitted on purpose; the report must say so, or
+        # every downstream N looks like it was drawn from the analysis sample.
+        desc += "; in_analysis NOT applied (keep_out_of_scope)"
+    return out, desc
 
 
 def _label_value(label: str) -> int | None:

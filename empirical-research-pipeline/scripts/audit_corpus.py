@@ -92,6 +92,7 @@ OUTPUT_NAMES = frozenset({
     "corpus_duplicates.csv",
     "corpus_summary.json",
     "corpus_report.md",
+    "sample_flow.csv",
 })
 
 
@@ -564,6 +565,23 @@ def main(argv: list[str] | None = None) -> int:
         "by_ext": dict(by_ext),
         "by_year": dict(by_year),
     }
+    # The funnel is a machine-readable contract, not a paragraph in the report:
+    # auto_stats --sample-flow and verify_numbers V-06 both read this very file,
+    # and CONTRACTS promised it long before anything wrote it.  Running totals
+    # only, so V-06's monotonicity check means what it says.
+    flow_rows = [
+        {"stage": "资料总数", "n": summary["total_files"],
+         "note": "every file under the root after skip-dir/exclusion filters"},
+        {"stage": "可读取", "n": summary["total_files"] - summary["unreadable_files"],
+         "note": "files that could be opened (unreadable excluded)"},
+        {"stage": "有效资料", "n": summary["valid_files"],
+         "note": f"not metadata/zero-byte, passed the chars_effective gate"},
+        {"stage": "唯一样本", "n": summary["unique_valid_files"],
+         "note": "byte- and content-level duplicates removed (keeper per group)"},
+    ]
+    write_csv(os.path.join(out_dir, "sample_flow.csv"), flow_rows,
+              ["stage", "n", "note"])
+
     summary_path = os.path.join(out_dir, "corpus_summary.json")
     with open(summary_path, "w", encoding="utf-8") as fh:
         json.dump(summary, fh, ensure_ascii=False, indent=2)

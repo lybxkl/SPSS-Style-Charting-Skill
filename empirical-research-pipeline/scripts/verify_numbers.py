@@ -56,7 +56,8 @@ NUMBER_HEADERS = ("figure_no", "fig_no", "figureno", "figure_number", "序号")
 SAMPLE_HEADERS = ("sample", "subset", "子样本", "样本")
 SCOPE_ALIASES = {"corpus": "corpus", "语料": "corpus", "全语料": "corpus",
                  "语料总量": "corpus", "sample": "sample", "样本": "sample",
-                 "分析样本": "sample"}
+                 "分析样本": "sample", "subgroup": "subgroup", "亚组": "subgroup",
+                 "子组": "subgroup", "分组": "subgroup"}
 KIND_HEADERS = ("kind", "类型", "口径")
 NOTE_HEADERS = ("note", "备注", "说明")
 KIND_ALIASES = {"stage": "stage", "阶段": "stage", "累计": "stage", "累计口径": "stage",
@@ -1046,10 +1047,19 @@ def check_model_n(tables, report: Report):
     entries = []
     for table in tables:
         lowered = {col.strip().lower(): col for col in table.header}
-        is_model = bool(MODEL_FILE_RE.match(table.name)) or "n_scope" in lowered
+        # Model tables only.  A chart manifest also declares n_scope, but each
+        # figure is computed on its own variable's valid N (one chart in a real
+        # pack had 462 while another had 2713, both correct), so treating a
+        # manifest row as a model row invents mismatches.  Figure Ns are V-02's
+        # business (caption against table).
+        is_model = bool(MODEL_FILE_RE.match(table.name))
         if not is_model:
             continue
-        n_col = lowered.get("n")
+        # Prefer the estimated N: fit.csv carries both the rows that entered the
+        # model and the rows left after dropping missing values, and comparing a
+        # coefficient table (post-drop) against the pre-drop count reports a
+        # mismatch that the data does not have.
+        n_col = lowered.get("n_dropna") or lowered.get("n")
         if n_col is None:
             continue
         scope_col = next((lowered[key] for key in SCOPE_HEADERS if key in lowered), None)
@@ -1085,6 +1095,20 @@ def check_model_n(tables, report: Report):
                     "source_row": "",
                     "source_col": "V-05-scope",
                     "matched_by": f"excluded: n_scope={declared_scope or scope}",
+                })
+                continue
+            if scope == "subgroup":
+                # A per-subgroup chart has one N per variable by construction;
+                # there is no single N to compare, so comparing them invents
+                # errors.  Recorded rather than silently dropped.
+                report.info("V-05", where, baseline, n,
+                            "n_scope=subgroup：该图按变量分别报 N，不做跨表一致性比较")
+                report.traces.append({
+                    "number": fmt_number(n),
+                    "source_file": where,
+                    "source_row": "",
+                    "source_col": "V-05-subgroup",
+                    "matched_by": "excluded: n_scope=subgroup",
                 })
                 continue
             if n == baseline:
@@ -1274,10 +1298,13 @@ def print_summary(report: Report):
 
 
 def write_run_json(out_dir: str, argv_list, check: str):
-    """Record SCRIPT_VERSION once per output directory; never overwrite a run.json."""
+    """Stamp this run into run.json without dropping another producer's stamp.
+
+    Several scripts may write into one output directory (coding writes a
+    dataset, verification writes a number trace).  Each producer keeps its own
+    entry under ``producers`` so neither schema can silently replace the other.
+    """
     path = os.path.join(out_dir, "run.json")
-    if os.path.exists(path):
-        return None
     payload = {
         "script": "verify_numbers.py",
         "version": SCRIPT_VERSION,
@@ -1285,8 +1312,21 @@ def write_run_json(out_dir: str, argv_list, check: str):
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "argv": list(argv_list),
     }
+    merged = {}
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8-sig") as handle:
+                merged = json.load(handle) or {}
+        except (OSError, json.JSONDecodeError):
+            merged = {}
+    producers = dict(merged.get("producers") or {})
+    producers["verify_numbers.py"] = payload
+    merged["producers"] = producers
+    merged.setdefault("schema", "run.json v2")
+    merged.setdefault("script", payload["script"])
+    merged.setdefault("version", payload["version"])
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        json.dump(merged, handle, ensure_ascii=False, indent=2)
     return path
 
 

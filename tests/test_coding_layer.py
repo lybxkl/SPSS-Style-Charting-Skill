@@ -116,6 +116,21 @@ class TestMakeCodingSheetCLI(TempCase):
         self.assertEqual([int(row["n"]) for row in self._flow()], [2, 1, 1, 1])
         self.assertEqual(len(self._skipped()), 1)
 
+    def test_audit_from_another_root_is_a_usage_error_not_a_filter(self):
+        """A wrong --root must not masquerade as "every file failed the audit"."""
+        self._doc("a.txt", BODY)
+        audit = self.p("audit_other.csv")
+        write_csv(audit, ["rel_path", "status"],
+                  [["elsewhere/a.txt", "valid"], ["elsewhere/b.txt", "valid"]])
+        proc = self._run("--audit", audit, "--min-chars", "1")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("lists a different directory", proc.stderr)
+        self.assertIn("elsewhere/a.txt", proc.stderr)
+        skipped = self._skipped()
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("wrong --root", skipped[0]["reason"])
+        self.assertNotIn("status is not valid", skipped[0]["reason"])
+
     def test_dedupe_plan_exclusion_is_logged(self):
         self._doc("a.txt", BODY)
         self._doc("b.txt", BODY)
@@ -256,7 +271,10 @@ class TestMakeCodingSheetCLI(TempCase):
         self._doc("a-判决书.txt", LEGAL_TEXT)
         proc = self._run("--profile", "legal", "--min-chars", "1")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("using default category keywords", proc.stderr)
+        # The shipped dictionary is a placeholder; saying so is the difference
+        # between "it worked" and "the categories mean nothing".
+        self.assertIn("SHIPPED EXAMPLE keyword dictionary", proc.stderr)
+        self.assertIn("placeholders", proc.stderr)
 
     def test_pdf_is_extracted(self):
         make_text_pdf(os.path.join(self.corpus, "doc.pdf"),
@@ -424,23 +442,35 @@ class TestAnalysisUtils(unittest.TestCase):
         self.assertIn("matched 0 of 2 rows", message)
         self.assertIn("dtype", message)
 
-    def test_explicit_filter_reports_that_in_analysis_is_ignored(self):
-        df = pd.DataFrame({"year": [2021, 2022], "in_analysis": [1, 0]})
+    def test_explicit_filter_still_respects_the_in_analysis_gate(self):
+        # A config-level `filter` used to displace the gate entirely: the rows
+        # excluded from the analysis sample came back silently (+5% in a real
+        # corpus, all of them procedural rulings).
+        df = pd.DataFrame({"year": [2021, 2022, 2021], "in_analysis": [1, 0, 0]})
         buffer = io.StringIO()
         with contextlib.redirect_stderr(buffer):
-            out, _desc = au.apply_filter(df, {"filter": {"year": 2021}})
+            out, desc = au.apply_filter(df, {"filter": {"year": 2021}})
         self.assertEqual(len(out), 1)
-        self.assertIn("filter: applied 2 → 1 rows (in_analysis ignored)",
-                      buffer.getvalue())
+        self.assertIn("in_analysis gate 3→1", buffer.getvalue())
+        self.assertIn("in_analysis", desc)
 
-    def test_filter_query_also_reports_in_analysis(self):
+    def test_keep_out_of_scope_opts_out_of_the_gate_on_purpose(self):
+        df = pd.DataFrame({"year": [2021, 2022], "in_analysis": [1, 0]})
+        with contextlib.redirect_stderr(io.StringIO()):
+            out, desc = au.apply_filter(df, {"filter": {"year": 2021}},
+                                        keep_out_of_scope=True)
+        self.assertEqual(len(out), 1)
+        self.assertIn("out_of_scope", desc)
+
+    def test_filter_query_also_respects_the_gate(self):
         df = pd.DataFrame({"v": [1, 2, 3], "in_analysis": [1, 1, 0]})
         buffer = io.StringIO()
         with contextlib.redirect_stderr(buffer):
             out, desc = au.apply_filter(df, {"filter_query": "v >= 2"})
-        self.assertEqual(len(out), 2)
-        self.assertIn("in_analysis ignored", buffer.getvalue())
-        self.assertIn("3→2", desc)
+        self.assertEqual(len(out), 1)
+        self.assertIn("in_analysis gate 3→2", buffer.getvalue())
+        # The description must show both steps: the gate, then the condition.
+        self.assertIn("in_analysis==1 (3→2) then v >= 2 (2→1 rows)", desc)
 
     def test_in_analysis_default_applies_without_an_explicit_filter(self):
         df = pd.DataFrame({"v": [1, 2, 3], "in_analysis": [1, 0, 1]})

@@ -1,6 +1,6 @@
 # SPSS 分析与结果表
 
-> 先用 `scripts/auto_stats.py` 做描述/双变量/单变量筛查；它只用于发现值得建模的变量，最终模型仍按预设定规格在 SPSS 中估计。
+> 先用 `scripts/auto_stats.py` 做描述/双变量/单变量筛查；它只用于发现值得建模的变量。最终模型用同一脚本的 `--spec` 入口估计（见下节「多变量模型」），或按预设定规格在 SPSS 中估计；参照组、聚类与样本筛选必须在建模前写死。
 
 ## 分析计划先于结果
 
@@ -64,6 +64,32 @@ def wilson(k, n, z=1.96):
 - 每个模型的 N 不同，表注必须分别写。
 - 表中 N 全部为虚构示例，实际项目必须按筛选条件重算。
 
+## 多变量模型：用 `--spec` 生成可审计的系数表
+
+`auto_stats.py` 的单变量结果只是筛查。多变量模型（含聚类稳健标准误、显式参照组）走独立入口 `--spec`，它不会改变单变量筛查的行为：
+
+```bash
+python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack \
+  --spec specs/model_spec.json --separation drop --vif --roc
+```
+
+```json
+{"models": [
+  {"id": "M1", "type": "logit", "outcome": "restore_any",
+   "predictors": ["gongyi", "year_c", "C(charge_f, Treatment('森林资源'))"],
+   "cluster": "province", "cov": "HC1", "dropna": true}
+]}
+```
+
+- `predictors` 里的裸列名按**连续**变量进入；分类变量必须写成 `C(名)` 或 `C(名, Treatment('参照'))`，或在 `ref` 字典里声明参照组。**未声明参照组的分类变量直接报错退出（码 2）**，不再默默用字典序首水平。
+- `cluster`（如 `province`）让标准误按该列聚类（`cov_type="cluster"`，组数写进 `se_type`）；`cov` 取 `HC0/HC1/HC3`；两者并存时 `cluster` 优先。
+- `--separation drop|merge|error` 在**拟合前**检查空单元格（某水平在结果 0 或 1 上为 0 例）：`drop` 剔样本、`merge` 并入参照组、`error` 报错；处理明细写 `separation_report.csv`（`variable,level,n,events,action`）和 `model_summary.md`。估计后还有熔断：`|β|>12` 或 `se>8` 的项不写入系数表，避免分离造成的 `OR≈1e9` 进入正文。
+- 输出：`coef_<id>.csv`（`model,term,beta,se,beta_ci_low,beta_ci_high,p,or,or_low,or_high,ci_low,ci_high,metric,estimate,n,n_events,outcome,ref,note,se_type`）、`model_summary.md`（样本、参照组、分离处理、拟合、VIF/ROC）、`model_meta.json`；`--vif` 写 `vif.csv`，`--roc` 写 `roc.csv`（AUC + 1000 次 bootstrap 95%CI）。logit 的 `ci_low/ci_high` 是 OR 尺度，`beta/se` 是对数尺度；OLS 的 `metric=beta`。
+- `coef_<id>.csv` 可直接交给 `auto_chart_pack.py --coef` 画森林图，不需要再手抄 SPPS 输出。
+- 模型数超过 `--max-models`（默认 20）报错退出；单变量筛查的预测变量上限是 `--max-predictors`（默认 60）。
+
+下面的 SPSS 语法仍适用于必须在 SPSS 内出表的场合；两者应当给出同方向的系数与 CI，若不一致先核对参照组与样本筛选。
+
 ## SPSS 语法骨架
 
 ### 用脚本生成读入语法
@@ -114,7 +140,7 @@ EXECUTE.
 
 ### 二元 Logistic（哑变量版）
 
-多分类自变量（类别、地区、审级、阶段）不要以 1、2、3 直接进协变量；在 SPSS 中用 `CATEGORICAL`/`CONTRAST` 或预先建哑变量。`auto_stats.py` 的自动筛查已对多分类自变量做哑变量化，输出 `变量_水平`。
+多分类自变量（类别、地区、审级、阶段）不要以 1、2、3 直接进协变量；在 SPSS 中用 `CATEGORICAL`/`CONTRAST` 或预先建哑变量。`auto_stats.py` 的自动筛查已对多分类自变量做哑变量化，项名为 `变量[T.水平]`，参照组取该变量出现最多的水平并写入 `ref` 列。注意筛查的自动判定规则：**不同取值 ≤ `--max-categories`（默认 12）的数值列也会被当成分类变量**哑变量化（例如编码好的 `year_c`），所以年份这类变量在筛查表里可能显示为多个哑变量；`--spec` 不受此影响（裸列名按连续处理），要强制分类就写 `C(year_c)`。
 
 ```spss
 SELECT IF (model1_sample = 1).
@@ -164,11 +190,11 @@ OUTPUT EXPORT
 
 ## 诊断
 
-- **完全分离**：某阶段 100% 出现/100% 不出现结果，OR 会爆炸。合并阶段或改用 Firth 惩罚回归，并在局限中说明。
-- **多重共线性**：交互项与主效应相关很高；报告 VIF 或至少检查相关系数。
+- **完全分离**：某阶段 100% 出现/100% 不出现结果，OR 会爆炸。`--spec` 路径先用 `--separation drop|merge|error` 处理（明细见 `separation_report.csv`），估计后还有 `|β|>12`/`se>8` 熔断；单变量筛查则把这类模型写进 `univariate_skipped.csv`。仍需保留时改用 Firth 惩罚回归（SPSS 扩展/R `logistf`，**本脚本未实现**），并在局限中说明。
+- **多重共线性**：交互项与主效应相关很高；`--vif` 输出 `vif.csv`（对设计矩阵逐列回归，含截距版本），常用阈值 VIF>10 提示。
 - **单元格过小**：类别×阶段某些格子 n<10，OR 的 CI 会很宽；不要过度解释。
-- **聚类**：同一机构/同一地区的记录可能相关；如果理论关心，可用稳健标准误或地区固定效应。至少不要假装独立。
-- **缺失值**：报告每个变量缺失数；不要用“完整案例”一句带过。
+- **聚类**：同一机构/同一地区的记录可能相关；spec 里 `"cluster": "province"` 得到聚类稳健标准误，或 `cov: HC1/HC3` 做异方差稳健；单变量筛查可用 `--robust HC1`。聚类只修正标准误，不等于固定效应；要固定效应用 `C(地区)` 哑变量。
+- **缺失值**：报告每个变量缺失数；`dropna` 默认完整案例，`dropna: false` 会在有缺失时报错。**多重插补本脚本未实现**，需外部脚本或 SPSS。
 
 ## 解释措辞
 

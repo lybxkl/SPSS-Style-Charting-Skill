@@ -1201,10 +1201,13 @@ def lda(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
     vecs, vals = vecs[:, keep], vals[keep]
     if vecs.shape[1] == 0:
         raise MethodError("没有可用的判别函数（组间差异被共线性吃掉）")
-    scores = X @ vecs[:, :1]
-    # resubstitution accuracy as a *ceiling*, not a validation estimate
-    pred = np.array([levels[np.argmin([abs(scores[i] - np.mean(scores[yv == lv]))
-                                       for lv in levels])] for i in range(len(X))])
+    # 判别规则要在**全部**判别函数张成的空间里取最近质心。只用 LD1 时，
+    # 三组以上会丢信息：那样的准确率既不是 LDA 的规则，也不能叫"上限"。
+    scores = X @ vecs
+    centroids = {lv: scores[yv == lv].mean(axis=0) for lv in levels}
+    pred = np.array([
+        min(levels, key=lambda lv: float(np.sum((scores[i] - centroids[lv]) ** 2)))
+        for i in range(len(X))])
     acc = float((pred == yv).mean())
     coef = pd.DataFrame({"variable": xs, "LD1": np.round(vecs[:, 0], 3)})
     coef["standardised"] = np.round(vecs[:, 0] * X.std(axis=0), 3)
@@ -1212,7 +1215,8 @@ def lda(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
     verdict = [f"提取 {vecs.shape[1]} 个判别函数，第 1 个解释 "
                f"{vals[0] / vals.sum() * 100:.1f}% 的组间差异；"
                f"Wilks' Λ={wilks:.3f}（=det(W)/det(T)，越小说明组间差异越大）。",
-               f"回代准确率 {acc * 100:.1f}%（这是上限，不是泛化精度；"
+               f"回代准确率 {acc * 100:.1f}%（用全部 {scores.shape[1]} 个判别函数判类；"
+               f"回代是上限，不是泛化精度；"
                f"正式报告请做交叉验证或留一法）。"]
     return Result("lda", [("coefficients", coef),
                           ("summary", pd.DataFrame([{"functions": int(vecs.shape[1]),

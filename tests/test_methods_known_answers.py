@@ -677,6 +677,25 @@ class ClusterTest(Base):
 # 15. discriminant analysis
 # --------------------------------------------------------------------------- #
 class LdaTest(Base):
+    def test_lda_classifies_in_the_full_discriminant_space(self):
+        """三组时 LD1 只解释部分组间差异；只按 LD1 判类得到的数字既不是
+        LDA 的规则，也不能叫"上限"。判定语必须写明用几个判别函数判的。"""
+        rng = np.random.default_rng(31)
+        rows, labels = [], []
+        for k, (mx, my) in enumerate([(0, 0), (6, 0), (0, 6)]):
+            rows.append(np.c_[rng.normal(mx, .8, 60), rng.normal(my, .8, 60),
+                              rng.normal(0, .8, 60)])
+            labels += [f"G{k}"] * 60
+        df = pd.DataFrame(np.vstack(rows), columns=["x", "y", "z"])
+        df["g"] = labels
+        res = ML.lda(df, "g", ["x", "y", "z"])
+        acc = res.stats["accuracy"]
+        self.assertGreater(acc, 0.9)
+        self.assertGreater(acc, 1 / 3)
+        text = " ".join(res.verdict)
+        self.assertIn("判别函数", text)
+        self.assertIn("回代", text)
+
     def test_wilks_lambda_is_det_w_over_det_t(self):
         rng = np.random.default_rng(23)
         g = np.array(["X"] * 45 + ["Y"] * 45)

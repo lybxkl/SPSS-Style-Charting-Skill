@@ -61,7 +61,8 @@ python scripts/methods_pack.py --data data.csv --config methods.json \
 
 - **变量要求**：≥2 个数值列；含分类变量时应转 Spearman。
 - **判据**：脚本按 Shapiro 自动选 Pearson/Spearman；`|r|≥0.7` 强、`0.4–0.7` 中等；同时给 p 与 n。
-- **表**：`correlations.csv`（var1/var2/r/p/n/method）。
+- **表**：`correlations.csv`（`var1,var2,n,r,p,stars,direction,strength`；`method` 记在
+  报告与 `stats` 里——**整张矩阵统一用一种方法**，不是逐对挑 Pearson/Spearman）。
 - **图**：相关矩阵热图（`corr_heatmap`）。
 - **句式**：「r=…，p=…（Pearson/Spearman）。」
 - **误用**：相关当因果；只报 r 不报 n；把 r>0.85 的两个自变量同时放进回归（共线，见 m11）。
@@ -112,7 +113,10 @@ python scripts/methods_pack.py --data data.csv --config methods.json \
 
 - **变量要求**：≥3 个题项（`config.items`，可写 `{"scale": [...]}`）。
 - **前置**：KMO ≥0.6（<0.5 不宜做）、Bartlett `p<0.05`；主成分法 + Kaiser 特征值>1。
-- **表**：`loadings.csv`、`variance.csv`、`kmo_bartlett.csv`。
+- **表**：`loadings.csv`（F1..Fk + 共同度）、`variance.csv`
+  （`eigenvalue,variance_pct,cumulative_pct` 是**未旋转**的；旋转后另给
+  `ss_loading_rotated,variance_pct_rotated,cumulative_pct_rotated`）、`kmo_bartlett.csv`。
+  论文写"旋转后累计解释 …%"必须取 `*_rotated` 那三列。
 - **图**：碎石图。
 - **句式**：「KMO=…，Bartlett χ²(…)=…，p<.001；提取 k 个因子，累计解释 …%。」
 - **误用**：KMO 0.4 还硬做；旋转后不提载荷阈值；把因子个数交给软件默认值而不看碎石图。
@@ -121,8 +125,10 @@ python scripts/methods_pack.py --data data.csv --config methods.json \
 
 - **变量要求**：≥2 个连续变量（`config.cluster_vars`），必须先标准化（脚本自动做 z 分数）。
 - **判据**：轮廓系数（>0.5 结构清晰、0.25–0.5 尚可）；K 由轮廓系数与业务可解释性共同决定。
-- **表**：`centers.csv`、`clusters.csv`、`summary.csv`。
-- **图**：轮廓系数随 K 变化 / 前两主成分散点。
+- **表**：`profile.csv`（**原始单位**的簇均值 + 每簇 n）、`profile_z.csv`（z 分数中心，只看相对贡献）、
+  `summary.csv`（k / n / silhouette）。
+- **图**：`m10_cluster_sizes`（各簇规模柱状图）。轮廓系数随 K 的变化需要自己按 `--only m10`
+  改 `config.cluster_k` 逐次跑，脚本不代做选择。
 - **句式**：「取 K=…，轮廓系数=…，各类规模 n=…。」
 - **误用**：不标准化直接聚类（量纲大的变量支配结果）；用 K-means 处理明显非球形簇；把聚类结果当既定分类再做回归而不说明。
 
@@ -130,7 +136,10 @@ python scripts/methods_pack.py --data data.csv --config methods.json \
 
 - **变量要求**：1 个连续因变量 + ≥1 个自变量；分类自变量自动哑变量化（`drop_first`，参照组=第一水平）。
 - **判据**：R²（>0.5 好、>0.2 可用）、F 检验、系数 t/p、标准化 β、**VIF<5**、残差近似正态、Breusch-Pagan 异方差。
-- **表**：`coefficients.csv`（term/B/se/t/p/beta_std/VIF）、`model.csv`（n/R²/adj R²/F/BP/DW）。
+- **表**：`coefficients.csv`（`term,beta,se,t,p,stars,std_beta,vif`）、
+  `model.csv`（`n,r2,adj_r2,F,F_p,rmse,se_type,durbin_watson,breusch_pagan_p,resid_normality_p`）。
+  默认 **HC1 异方差稳健标准误**（`se_type=HC1`），与 SPSS 的普通 OLS 标准误不同，换软件复算
+  t 值前先对齐口径。
 - **图**：系数森林图（β 与 95%CI，`ref=0`）。
 - **句式**：「R²=…，F(…)=…，p<…；β=…，95%CI […]；VIF 均<5。」
 - **误用**：不报 VIF；用 R² 比较不同因变量的模型；把哑变量系数解释成"每增加 1 个单位"。
@@ -156,11 +165,17 @@ python scripts/methods_pack.py --data data.csv --config methods.json \
 ## 14. 卡诺模型 `m14`
 
 - **变量要求**：每个需求一对列（功能题 + 反功能题），1–5 分；`config.kano = {需求名: [功能列, 反功能列]}`。
-- **判据**：按经典五档表分类为 A（魅力）/O（期望）/M（必备）/I（无差异）/R（反向）；`better`（满足时的满意提升）与 `worse`（不满足时的不满意）系数。
-- **表**：`kano.csv`（feature/category/better/worse/A_count/O_count/M_count/I_count）。
-- **图**：better–worse 四象限散点。
+- **判据**：按经典 5×5 评价表（Berger et al. 1993，行=功能题 1–5、列=反功能题 1–5）
+  分类为 A（魅力）/O（期望）/M（必备）/I（无差异）/R（反向）/Q（可疑）；四个角
+  (5,5) 与 (1,1) 是 Q，(1,5)(5,1)(4,5)(1,4) 等是 R。
+- **系数**：`better=(A+O)/valid`、`worse=-(O+M)/valid`，**分母只含 A/O/M/I**；
+  R（题目写反）与 Q（自相矛盾）记为 `excluded`，算进分母会把系数稀释。
+- **表**：`kano.csv`（feature/n/valid/A/O/M/I/R/Q/excluded/better/worse/category/label）。
+- **图**：`m14_kano`，better(X,0–1) × worse(Y,−1–0)，象限线在 0.5：
+  **右上=魅力型、右下=期望型、左下=必备型、左上=无差异**。
 - **句式**：「‘响应速度’属期望型需求（better=…，worse=…），应作为改进优先项。」
-- **误用**：把"无差异"当"不重要"删掉；不分需求类型就平均排序。
+- **误用**：把"无差异"当"不重要"删掉；不分需求类型就平均排序；用四象限阈值
+  （better/worse 是否过 0.5）替代分档表——两者口径不同，象限只作展示，类别以 5×5 表为准。
 
 ## 15. 信度分析 `m15`
 
@@ -175,7 +190,10 @@ python scripts/methods_pack.py --data data.csv --config methods.json \
 
 - **变量要求**：≥3 个题项。
 - **判据**：结构效度看 KMO、Bartlett、因子载荷是否按预期聚成维度；**内容效度靠专家评审，效标效度需要外部金标准——脚本不替代**。
-- **表**：`loadings.csv`、`variance.csv`、`kmo_bartlett.csv`。
+- **表**：`loadings.csv`（F1..Fk + 共同度）、`variance.csv`
+  （`eigenvalue,variance_pct,cumulative_pct` 是**未旋转**的；旋转后另给
+  `ss_loading_rotated,variance_pct_rotated,cumulative_pct_rotated`）、`kmo_bartlett.csv`。
+  论文写"旋转后累计解释 …%"必须取 `*_rotated` 那三列。
 - **图**：因子载荷热图（`RdBu_r`，−1…1）。
 - **句式**：「KMO=…，Bartlett p<.001；k 个因子累计解释 …%，题项按预期归类。」
 - **误用**：用 EFA 结果声称"内容效度高"；样本量不足时做 EFA（建议 ≥5×题项数）。
@@ -211,7 +229,7 @@ ef=1）。
    连续×连续用相关（m03）。不显著（`p≥α`）的变量先不要放进多因素模型。
 2. **共线检查**：自变量之间 `|r|≥0.85` 视为共线（m03 直接给矩阵），二者只留一个；
    留两个时看 VIF（m11 已算，>5 就要处理）。
-3. **多因素模型**：因变量连续 → 多元线性（m11）；因变量二分类 → 二元 Logistic（m10，
+3. **多因素模型**：因变量连续 → 多元线性（m11）；因变量二分类 → 二元 Logistic（m18，
    `Exp(B)=OR`、报 95%CI、参照类别取第一个水平并在表注写明）。
 4. **稳健性**：换样本范围、换参照组、加/减控制变量各跑一次，看关键结论是否翻转。
 

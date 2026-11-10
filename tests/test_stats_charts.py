@@ -22,6 +22,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 import unittest
 import warnings
@@ -99,6 +100,11 @@ def logit_spec(**overrides) -> dict:
 
 
 class _Base(TempCase):
+    @staticmethod
+    def read_text(path: str) -> str:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+
     def write_data(self, df: pd.DataFrame, name: str = "analysis.csv") -> str:
         path = self.p(name)
         write_csv(path, list(df.columns), df.values.tolist())
@@ -470,6 +476,199 @@ class HelperTest(TempCase):
             self.assertLessEqual(low, high)
             self.assertGreaterEqual(low, prev[0] - 1e-12)
             prev = (low, high)
+
+
+# --------------------------------------------------------------------------- #
+# A3: subset / coef_all.csv / fit.csv, and C2: sample-flow reconciliation
+# --------------------------------------------------------------------------- #
+class ModelTablesTest(_Base):
+    def _run_models(self, spec, *extra, data=None):
+        data = data or self.write_data(make_model_data())
+        spec_path = self.write_json(spec, "spec.json")
+        out = self.p("out")
+        status, err = call_main("--data", data, "--spec", spec_path, "--out", out,
+                                "--only", "models", *extra)
+        return status, err, out
+
+    def test_subset_narrows_sample_and_records_it(self):
+        spec = logit_spec()
+        spec["models"][0]["subset"] = "year_c >= 0"
+        status, err, out = self._run_models(spec)
+        self.assertEqual(status, 0, err)
+        coef = read_csv(os.path.join(out, "coef_M1.csv"))
+        self.assertTrue(coef)
+        self.assertEqual({r["sample"] for r in coef}, {"year_c >= 0"})
+        n_model = int(float(coef[0]["n"]))
+        self.assertLess(n_model, 200)
+        self.assertGreater(n_model, 20)
+        fit = read_csv(os.path.join(out, "fit.csv"))
+        self.assertEqual(fit[0]["subset"], "year_c >= 0")
+        with open(os.path.join(out, "model_meta.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+        self.assertEqual(meta["subsets"]["M1"], "year_c >= 0")
+        summary = self.read_text(os.path.join(out, "model_summary.md"))
+        self.assertIn("子样本", summary)
+        self.assertIn("year_c >= 0", summary)
+
+    def test_subset_empty_sample_exits_2(self):
+        spec = logit_spec()
+        spec["models"][0]["subset"] = "year_c > 999"
+        status, err, _ = self._run_models(spec)
+        self.assertEqual(status, 2)
+        self.assertIn("M1", err)
+        self.assertIn("year_c > 999", err)
+
+    def test_subset_injection_is_rejected(self):
+        spec = logit_spec()
+        spec["models"][0]["subset"] = "__import__('os')"
+        status, err, _ = self._run_models(spec)
+        self.assertEqual(status, 2)
+        self.assertIn("subset", err)
+        self.assertIn("禁止", err)
+
+    def test_coef_all_columns_labels_and_declaration_order(self):
+        m1 = logit_spec()["models"][0]
+        m2 = dict(m1, id="M2", cluster=None, cov=None,
+                  predictors=["gongyi", "year_c"],
+                  labels={"gongyi": "一审子样本公益"})
+        spec = {"labels": {"gongyi": "公益诉讼", "charge_f": "案由"},
+                "models": [m2, m1]}
+        status, err, out = self._run_models(spec)
+        self.assertEqual(status, 0, err)
+        rows = read_csv(os.path.join(out, "coef_all.csv"))
+        self.assertEqual(list(rows[0].keys()), auto_stats.TABLE_COLUMNS["coef_all"])
+        self.assertEqual([r["model"] for r in rows],
+                         ["M2", "M2", "M1", "M1", "M1", "M1"])
+        self.assertEqual([r["term"] for r in rows if r["model"] == "M1"],
+                         ["gongyi", "year_c",
+                          "charge_f[T.土地资源]", "charge_f[T.其他]"])
+        labels = {r["term"]: r["label"] for r in rows if r["model"] == "M1"}
+        self.assertEqual(labels["gongyi"], "公益诉讼")
+        self.assertEqual(labels["charge_f[T.土地资源]"], "案由：土地资源")
+        m2_labels = {r["term"]: r["label"] for r in rows if r["model"] == "M2"}
+        self.assertEqual(m2_labels["gongyi"], "一审子样本公益")
+        for row in rows:
+            self.assertEqual(row["stars"], auto_stats._stars(float(row["p"])))
+
+    def test_stars_thresholds(self):
+        cases = [(0.0009, "***"), (0.009, "**"), (0.04, "*"), (0.09, "."),
+                 (0.2, ""), (float("nan"), "")]
+        for p, expected in cases:
+            self.assertEqual(auto_stats._stars(p), expected, p)
+
+    def test_fit_csv_llr_and_pseudo_r2_match_summary(self):
+        status, err, out = self._run_models(logit_spec())
+        self.assertEqual(status, 0, err)
+        fit = read_csv(os.path.join(out, "fit.csv"))
+        self.assertEqual(list(fit[0].keys()), auto_stats.TABLE_COLUMNS["fit"])
+        row = fit[0]
+        self.assertNotEqual(row["llr_p"], "")
+        self.assertGreater(float(row["llr"]), 0.0)
+        self.assertGreaterEqual(float(row["llr_p"]), 0.0)
+        self.assertLessEqual(float(row["llr_p"]), 1.0)
+        self.assertEqual(int(float(row["llr_df"])), int(float(row["k"])) - 1)
+        coef_all = read_csv(os.path.join(out, "coef_all.csv"))
+        self.assertEqual(len(coef_all), 4)
+        self.assertEqual(coef_all[0]["sample"], "full")
+        summary = self.read_text(os.path.join(out, "model_summary.md"))
+        match = re.search(r"McFadden R²=([0-9.]+)", summary)
+        self.assertIsNotNone(match)
+        self.assertAlmostEqual(float(row["pseudo_r2"]), float(match.group(1)), places=2)
+
+    def test_sample_flow_match_and_mismatch(self):
+        data = self.write_data(make_model_data())
+        spec = logit_spec()
+        spec["models"][0]["flow_stage"] = "M1"
+        spec_path = self.write_json(spec, "spec.json")
+        out = self.p("out")
+        status, err = call_main("--data", data, "--spec", spec_path, "--out", out,
+                                "--only", "models")
+        self.assertEqual(status, 0, err)
+        n_model = int(float(read_csv(os.path.join(out, "coef_M1.csv"))[0]["n"]))
+        flow = self.p("flow.csv")
+
+        write_csv(flow, ["stage", "n", "note"], [["M1", n_model, ""]])
+        status, err = call_main("--data", data, "--spec", spec_path, "--out", out,
+                                "--only", "models", "--sample-flow", flow)
+        self.assertEqual(status, 0, err)
+        summary = self.read_text(os.path.join(out, "model_summary.md"))
+        self.assertIn("flow 校验", summary)
+        self.assertIn("✓", summary)
+        fit = read_csv(os.path.join(out, "fit.csv"))
+        self.assertEqual(fit[0]["flow_match"], "TRUE")
+        self.assertEqual(int(float(fit[0]["flow_n"])), n_model)
+
+        # A mismatch is a warning only: exit code stays 0.
+        write_csv(flow, ["stage", "n", "note"], [["M1", n_model + 1, ""]])
+        status, err = call_main("--data", data, "--spec", spec_path, "--out", out,
+                                "--only", "models", "--sample-flow", flow)
+        self.assertEqual(status, 0, err)
+        self.assertIn("WARN", err)
+        self.assertIn(str(n_model + 1), err)
+        summary = self.read_text(os.path.join(out, "model_summary.md"))
+        self.assertIn("≠", summary)
+        fit = read_csv(os.path.join(out, "fit.csv"))
+        self.assertEqual(fit[0]["flow_match"], "FALSE")
+
+    def test_undeclared_flow_stage_is_not_checked(self):
+        data = self.write_data(make_model_data())
+        spec_path = self.write_json(logit_spec(), "spec.json")
+        out = self.p("out")
+        flow = self.p("flow.csv")
+        write_csv(flow, ["stage", "n", "note"], [["M1", 200, ""]])
+        status, err = call_main("--data", data, "--spec", spec_path, "--out", out,
+                                "--only", "models", "--sample-flow", flow)
+        self.assertEqual(status, 0, err)
+        self.assertNotIn("WARN", err)
+        fit = read_csv(os.path.join(out, "fit.csv"))
+        self.assertEqual(fit[0]["flow_n"], "")
+        self.assertEqual(fit[0]["flow_match"], "")
+        summary = self.read_text(os.path.join(out, "model_summary.md"))
+        self.assertNotIn("flow 校验", summary)
+        self.assertIn("flow 说明", summary)
+
+    def test_declared_missing_stage_exits_2(self):
+        data = self.write_data(make_model_data())
+        spec = logit_spec()
+        spec["models"][0]["flow_stage"] = "不存在的漏斗行"
+        spec_path = self.write_json(spec, "spec.json")
+        flow = self.p("flow.csv")
+        write_csv(flow, ["stage", "n", "note"], [["M1", 200, ""]])
+        status, err = call_main("--data", data, "--spec", spec_path,
+                                "--out", self.p("out"),
+                                "--only", "models", "--sample-flow", flow)
+        self.assertEqual(status, 2)
+        self.assertIn("flow_stage", err)
+        self.assertIn("不存在的漏斗行", err)
+        self.assertIn("M1", err)
+
+    def test_md_formats_llr_p_underflow_as_floor(self):
+        self.assertEqual(auto_stats._fmt_llr_p(1e-320), "<1e-300")
+        self.assertEqual(auto_stats._fmt_llr_p(0.0), "<1e-300")
+        self.assertNotIn("<1e-300", auto_stats._fmt_llr_p(0.03))
+        frame = pd.DataFrame([{"term": "x", "beta": 0.1, "se": 0.1,
+                               "ci_low": 0.9, "ci_high": 1.2, "p": 0.5,
+                               "or": 1.1, "metric": "OR", "ref": "", "note": ""}])
+        info = {"mid": "M1", "mtype": "logit", "outcome": "y", "n": 100,
+                "n_dropped": 3, "n_removed_separation": 0, "subset": None,
+                "n_events": 40, "se_type": "HC1", "llf": -50.0, "llnull": -60.0,
+                "llr": 20.0, "llr_df": 3, "llr_p": 0.0, "aic": 106.0,
+                "predictors": [], "outcome_map": {}, "excluded": [],
+                "rsquared": float("nan"), "rsquared_adj": float("nan"),
+                "f_pvalue": float("nan"), "label": None, "note": None}
+        text = "\n".join(auto_stats._render_model_summary(
+            frame, info, [], [], None))
+        self.assertIn("LLR χ²", text)
+        self.assertIn("p=<1e-300", text)
+
+    def test_sample_flow_requires_spec(self):
+        data = self.write_data(make_model_data())
+        flow = self.p("flow.csv")
+        write_csv(flow, ["stage", "n", "note"], [["M1", 200, ""]])
+        status, err = call_main("--data", data, "--out", self.p("out"),
+                                "--sample-flow", flow)
+        self.assertEqual(status, 2)
+        self.assertIn("--spec", err)
 
 
 if __name__ == "__main__":

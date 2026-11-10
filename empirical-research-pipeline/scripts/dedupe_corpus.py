@@ -27,6 +27,9 @@ import sys
 from collections import Counter, defaultdict
 from datetime import datetime
 
+# Stamped into the run output so an artefact names the code that made it.
+SCRIPT_VERSION = "2.0.0"
+
 PLAN_FIELDS = [
     "group", "action", "role", "file", "rel_path", "relpath", "destination",
     "reason", "bytes", "pages", "chars", "chars_effective", "md5", "md5_ok",
@@ -292,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Exit codes: 0 ok, 2 parameter error / failed or skipped files.",
     )
+    print(f"dedupe_corpus.py {SCRIPT_VERSION}", file=sys.stderr)
     ap.add_argument("--audit", help="corpus_files.csv produced by audit_corpus.py")
     ap.add_argument("--root", help="corpus root used by the audit")
     ap.add_argument("--out-dir", help="output directory (default: the audit folder)")

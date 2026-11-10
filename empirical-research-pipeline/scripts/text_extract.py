@@ -19,6 +19,9 @@ from contextlib import contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
 
+# Stamped into the run output so an artefact names the code that made it.
+SCRIPT_VERSION = "2.0.0"
+
 try:
     import fitz  # PyMuPDF
 except ImportError:  # pragma: no cover
@@ -727,6 +730,7 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="Exit codes: 0 ok, 2 parameter error / no input.",
     )
+    print(f"text_extract.py {SCRIPT_VERSION}", file=sys.stderr)
     ap.add_argument("--root", help="directory to scan recursively")
     ap.add_argument("--file", action="append", default=[], help="one file (repeatable)")
     ap.add_argument("--out", help="output .csv or .jsonl path (default: stdout)")

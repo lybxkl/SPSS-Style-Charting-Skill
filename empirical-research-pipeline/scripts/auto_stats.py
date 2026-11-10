@@ -87,7 +87,13 @@ TABLE_COLUMNS = {
     "separation_report": ["variable", "level", "n", "events", "action"],
     "coef": ["model", "term", "type", "beta", "se", "beta_ci_low", "beta_ci_high",
              "p", "or", "or_low", "or_high", "ci_low", "ci_high", "metric",
-             "estimate", "n", "n_events", "outcome", "ref", "note", "se_type"],
+             "estimate", "n", "n_events", "outcome", "ref", "note", "se_type",
+             "sample"],
+    "coef_all": ["model", "label", "term", "type", "beta", "se", "p", "stars",
+                 "or", "or_low", "or_high", "ci_low", "ci_high", "metric",
+                 "estimate", "n", "n_events", "sample", "outcome", "ref", "se_type"],
+    "fit": ["model", "type", "n", "k", "n_events", "loglik", "llr", "llr_df",
+            "llr_p", "pseudo_r2", "aic", "bic", "se_type", "subset", "n_dropna"],
     "vif": ["model", "term", "vif", "n_predictors", "note"],
     "roc": ["model", "auc", "ci_low", "ci_high", "n", "n_events", "method", "reps",
             "note"],
@@ -869,7 +875,8 @@ def _design_matrix(work: pd.DataFrame, predictors: list[dict], mid: str):
 
 def _model_rows(mid: str, mtype: str, fit, X: pd.DataFrame, refs: dict[str, str],
                 outcome: str, n_model: int, n_events, se_type: str,
-                merges: dict[str, list[str]], excluded: list[str]) -> list[dict]:
+                merges: dict[str, list[str]], excluded: list[str],
+                sample: str = "full") -> list[dict]:
     rows = []
     conf = fit.conf_int()
     for term in X.columns:
@@ -895,7 +902,8 @@ def _model_rows(mid: str, mtype: str, fit, X: pd.DataFrame, refs: dict[str, str]
                "or": np.nan, "or_low": np.nan, "or_high": np.nan,
                "ci_low": lo, "ci_high": hi, "metric": "beta", "estimate": beta,
                "n": n_model, "n_events": n_events, "outcome": outcome,
-               "ref": refs.get(term, ""), "note": note, "se_type": se_type}
+               "ref": refs.get(term, ""), "note": note, "se_type": se_type,
+               "sample": sample}
         if mtype == "logit":
             row.update({"or": math.exp(beta), "or_low": math.exp(lo),
                         "or_high": math.exp(hi), "ci_low": math.exp(lo),
@@ -903,6 +911,138 @@ def _model_rows(mid: str, mtype: str, fit, X: pd.DataFrame, refs: dict[str, str]
                         "estimate": math.exp(beta)})
         rows.append(row)
     return rows
+
+
+def _stars(p) -> str:
+    """Significance stars for a p value: ``***`` < .001, ``**`` < .01, ..."""
+    try:
+        value = float(p)
+    except (TypeError, ValueError):
+        return ""
+    if not np.isfinite(value):
+        return ""
+    if value < 0.001:
+        return "***"
+    if value < 0.01:
+        return "**"
+    if value < 0.05:
+        return "*"
+    if value < 0.1:
+        return "."
+    return ""
+
+
+def _short_label(term: str) -> str:
+    """Human-readable term used by ``coef_all.csv`` (delegates to pubfig)."""
+    try:
+        from pubfig import short_label
+    except Exception:  # pragma: no cover - pubfig lives next to this script
+        return str(term)
+    return str(short_label(term))
+
+
+def _term_order(term: str, predictors: list[str]) -> int:
+    """Sort key: spec predictor order, dummies of one variable kept together."""
+    if term in ("Intercept", "const"):
+        return len(predictors) * 10 + 9          # constant term last
+    var = str(term).split("[T.")[0]
+    if var in predictors:
+        return predictors.index(var) * 10
+    return len(predictors) * 10 + 5              # unexpected term after the spec ones
+
+
+def _coef_label(term: str, labels: dict[str, str]) -> str:
+    """Readable label: spec ``labels`` > dummy form > pubfig.short_label."""
+    term = str(term)
+    if term in ("Intercept", "const"):
+        return "常数项"
+    if term in labels:
+        return labels[term]
+    if "[T." in term:
+        var, level = term.split("[T.", 1)
+        return f"{labels.get(var, var)}：{level.rstrip(']')}"
+    return _short_label(term)
+
+
+def _coef_all_frame(frames: list[pd.DataFrame], spec: dict,
+                    models: list[dict]) -> pd.DataFrame:
+    """Merge per-model coefficient frames into the paper-style comparison table."""
+    labels = {str(k): str(v) for k, v in (spec.get("labels") or {}).items()}
+    by_id = {str(m.get("id")): m for m in models}
+    parts: list[pd.DataFrame] = []
+    for frame in frames:
+        if frame is None or frame.empty:
+            continue
+        mid = str(frame["model"].iloc[0])
+        model = by_id.get(mid, {})
+        local_labels = dict(labels)
+        local_labels.update({str(k): str(v)
+                             for k, v in (model.get("labels") or {}).items()})
+        order: list[str] = []
+        for expr in (model.get("predictors") or []):
+            try:
+                order.append(parse_predictor(expr, {})["name"])
+            except SpecError:            # pragma: no cover - spec already validated
+                order.append(str(expr))
+        part = frame.copy()
+        part["label"] = [_coef_label(t, local_labels) for t in part["term"]]
+        part["stars"] = [_stars(p) for p in part["p"]]
+        part["_order"] = [_term_order(t, order) for t in part["term"]]
+        part = part.sort_values("_order", kind="stable").drop(columns=["_order"])
+        parts.append(part)
+    cols = TABLE_COLUMNS["coef_all"]
+    if not parts:
+        return pd.DataFrame(columns=cols)
+    return pd.concat(parts, ignore_index=True).reindex(columns=cols)
+
+
+def load_sample_flow(path: str) -> dict[str, int]:
+    """Read ``sample_flow.csv`` (``stage,n,note``) into ``{stage: n}``."""
+    frame = read_csv_auto(path)
+    names = {str(c).strip(): c for c in frame.columns}
+    for need in ("stage", "n"):
+        if need not in names:
+            raise SpecError(f"sample_flow 缺少列 {need!r}；需要 stage,n,note: {path}")
+    out: dict[str, int] = {}
+    for _, row in frame.iterrows():
+        stage = str(row[names["stage"]]).strip()
+        try:
+            value = int(float(row[names["n"]]))
+        except (TypeError, ValueError):
+            continue
+        if stage:
+            out[stage] = value
+    if not out:
+        raise SpecError(f"sample_flow 没有可用的 stage/n 行: {path}")
+    return out
+
+
+def _fit_row(info: dict) -> dict:
+    """One machine-readable fitting record for ``fit.csv``."""
+    return {"model": info["mid"], "type": info["mtype"], "n": info["n"],
+            "k": info.get("k", np.nan), "n_events": info.get("n_events", np.nan),
+            "loglik": info.get("loglik", np.nan), "llr": info.get("llr", np.nan),
+            "llr_df": info.get("llr_df", np.nan), "llr_p": info.get("llr_p", np.nan),
+            "pseudo_r2": info.get("pseudo_r2", np.nan),
+            "aic": info.get("aic", np.nan), "bic": info.get("bic", np.nan),
+            "se_type": info.get("se_type", ""), "subset": info.get("subset") or "full",
+            "n_dropna": info.get("n_dropped", np.nan)}
+
+
+LLR_P_FLOOR = 1e-300
+
+
+def _fmt_llr_p(p) -> str:
+    """Format the LLR p-value for Markdown; underflow is shown as ``<1e-300``."""
+    try:
+        value = float(p)
+    except (TypeError, ValueError):
+        return "—"
+    if not np.isfinite(value):
+        return "—"
+    if value < LLR_P_FLOOR:
+        return "<1e-300"
+    return fmt_p(value)
 
 
 def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
@@ -916,16 +1056,42 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
         print(f"ERROR: spec 有 {len(models)} 个模型，超过 --max-models {args.max_models}；"
               "请拆分 spec 或提高上限", file=sys.stderr)
         return 2
+    flow = None
+    flow_path = getattr(args, "sample_flow", None)
+    if flow_path:
+        try:
+            flow = load_sample_flow(flow_path)
+        except SpecError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+    if flow is not None:
+        # C2: a declared flow_stage MUST exist in the funnel; an undeclared one
+        # is simply not checked (never conflated with "declared but mismatched").
+        stages = sorted(flow)
+        for index, model in enumerate(models):
+            mid = str(model.get("id") or f"M{index + 1}").strip()
+            stage = str(model.get("flow_stage") or "").strip()
+            if stage and stage not in flow:
+                print(f"ERROR: 模型 {mid}：flow_stage '{stage}' 不在 "
+                      f"sample_flow.csv（现有：{', '.join(stages)}）", file=sys.stderr)
+                return 2
     summary: list[str] = ["# 多变量模型摘要", "",
                           f"- 数据：`{os.path.abspath(args.data)}`",
                           f"- spec：`{os.path.abspath(args.spec)}`",
                           f"- 筛选：`{filter_desc or '(无)'}`",
                           f"- 过滤后样本：{len(df):,}",
                           f"- 分离策略：`{args.separation}`",
+                          (f"- sample_flow：`{os.path.abspath(flow_path)}`"
+                           if flow_path else "- sample_flow：未提供（`--sample-flow`）"),
+                          *(["- flow 说明：WARN 只说明模型 N 与漏斗某行不等，"
+                             "并非数据错误；模型侧已排除的缺失/分离条数见 "
+                             "separation_report.csv 与 fit.csv 的 n_dropna。"]
+                            if flow is not None else []),
                           "- 说明：logit 的 `ci_low/ci_high` 与 `or` 同为 OR 尺度，"
                           "`beta/se` 为对数尺度；ols 的 `ci_low/ci_high` 为 β 尺度。",
                           "- `coef_<id>.csv` 可直接传给 `auto_chart_pack.py --coef`。", ""]
     all_coef: list[pd.DataFrame] = []
+    infos: list[dict] = []
     separation_rows: list[dict] = []
     vif_all: list[dict] = []
     roc_all: list[dict] = []
@@ -946,6 +1112,18 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
                             f"- 原因：{type(exc).__name__}: {exc}", ""])
             failures += 1
             continue
+        # C2: only a DECLARED flow_stage is checked (presence validated above);
+        # models without one keep blank flow_n/flow_match and no summary line.
+        stage = str(model.get("flow_stage") or "").strip()
+        if flow is not None and stage:
+            info["flow_stage"] = stage
+            flow_n = int(flow[stage])
+            info["flow_n"] = flow_n
+            info["flow_match"] = bool(flow_n == int(info["n"]))
+            if not info["flow_match"]:
+                print(f"WARN: 模型 {mid} 的 N={info['n']} 与 sample_flow 的 "
+                      f"{flow_n} 不一致（stage=\"{stage}\"）", file=sys.stderr)
+        infos.append(info)
         separation_rows.extend(sep_rows)
         if vif_rows_m:
             vif_all.extend(vif_rows_m)
@@ -969,9 +1147,25 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
         combined = combined.reindex(columns=TABLE_COLUMNS["coef"])
     else:
         combined = pd.DataFrame(columns=TABLE_COLUMNS["coef"])
+    # A3-2 / A3-3: the paper-facing comparison table and the machine-readable fit table.
+    coef_all = _coef_all_frame(all_coef, spec, models)
+    write_table(os.path.join(out_dir, "coef_all.csv"), coef_all,
+                TABLE_COLUMNS["coef_all"])
+    fit_cols = list(TABLE_COLUMNS["fit"])
+    fit_rows = [_fit_row(info) for info in infos]
+    if flow is not None:
+        fit_cols += ["flow_n", "flow_match"]
+        for row, info in zip(fit_rows, infos):
+            row["flow_n"] = info.get("flow_n", np.nan)
+            match = info.get("flow_match")
+            row["flow_match"] = "" if match is None else ("TRUE" if match else "FALSE")
+    write_table(os.path.join(out_dir, "fit.csv"), pd.DataFrame(fit_rows), fit_cols)
     summary.extend(["", "## 输出文件", "",
                     f"- `coef_<model_id>.csv`：{len(all_coef)} 个模型、"
-                    f"{len(combined)} 行系数",
+                    f"{len(combined)} 行系数（含 `sample` 列）",
+                    f"- `coef_all.csv`：多模型对比表（{len(coef_all)} 行，含 label/stars）",
+                    f"- `fit.csv`：拟合指标（LLR χ²、McFadden R²、AIC/BIC、n_dropna"
+                    + ("、flow_n/flow_match" if flow is not None else "") + "）",
                     "- `separation_report.csv`：空单元格检查结果（drop/merge/exclude）",
                     "- `vif.csv`" if args.vif else "- `vif.csv`：未运行（加 --vif）",
                     "- `roc.csv`" if args.roc else "- `roc.csv`：未运行（加 --roc）",
@@ -983,6 +1177,13 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
             "separation": args.separation, "max_models": args.max_models,
             "vif": bool(args.vif), "roc": bool(args.roc),
             "models": [str(m.get("id") or f"M{i + 1}") for i, m in enumerate(models)],
+            "subsets": {str(m.get("id") or f"M{i + 1}"): (m.get("subset") or None)
+                        for i, m in enumerate(models)},
+            "sample_flow": os.path.abspath(flow_path) if flow_path else None,
+            "flow_checks": [{"model": info["mid"], "stage": info.get("flow_stage"),
+                             "flow_n": info.get("flow_n"),
+                             "model_n": info["n"], "match": info.get("flow_match")}
+                            for info in infos if info.get("flow_stage") is not None],
             "failures": failures}
     with open(os.path.join(out_dir, "model_meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, ensure_ascii=False, indent=2)
@@ -1001,7 +1202,8 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
 def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     """Fit one spec model; returns (rows, info, separation_rows, vif_rows, roc_row)."""
     allowed = {"id", "type", "outcome", "predictors", "ref", "cluster", "cov",
-               "dropna", "outcome_map", "label", "note"}
+               "dropna", "outcome_map", "label", "note", "subset", "flow_stage",
+               "labels"}
     unknown = [k for k in model if k not in allowed and not str(k).startswith("_")]
     if unknown:
         raise SpecError(f"模型 {mid}：未知字段 {unknown}")
@@ -1031,6 +1233,28 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     dropna = model.get("dropna", True)
     dropna = True if dropna is None else bool(dropna)
 
+    # A3-1: models[].subset narrows the entry-filtered frame BEFORE dropna, so
+    # the order is entry filter -> subset -> complete cases.
+    subset = str(model.get("subset") or "").strip() or None
+    sample = "full"
+    n_entry = len(df)
+    n_subset = n_entry
+    if subset:
+        try:
+            validate_filter_query(subset)
+        except ValueError as exc:
+            raise SpecError(f"模型 {mid}：subset 含被禁止的记号：{exc}") from exc
+        try:
+            sub = df.query(subset)
+        except Exception as exc:
+            raise SpecError(f"模型 {mid}：subset 无法执行（{subset}）："
+                            f"{type(exc).__name__}: {exc}") from exc
+        if sub.empty:
+            raise SpecError(f"模型 {mid}：subset 之后没有样本：{subset}")
+        df = sub
+        sample = subset
+        n_subset = len(df)
+
     y, outcome_map = encode_model_outcome(df[outcome], mtype, model.get("outcome_map"))
     y.name = "__y__"
     work = pd.DataFrame({y.name: y}, index=df.index)
@@ -1055,7 +1279,8 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     merges: dict[str, list[str]] = {}
     excluded: list[str] = []
     if mtype == "logit" and cat_names:
-        cells = detect_empty_cells(work, cat_names, y.name, labels)
+        cells = detect_empty_cells(work, cat_names, y.name,
+                                   {p["name"]: p["name"] for p in predictors})
         if cells:
             policy = args.separation
             if policy == "error":
@@ -1130,7 +1355,7 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     n_model = int(len(frame))
     n_events = int(yv.sum()) if mtype == "logit" else np.nan
     rows = _model_rows(mid, mtype, fit, Xv, refs, outcome, n_model, n_events,
-                       se_type, merges, excluded)
+                       se_type, merges, excluded, sample)
     info = {"mid": mid, "mtype": mtype, "outcome": outcome, "n": n_model,
             "n_before": n_before, "n_dropped": n_dropped,
             "n_removed_separation": int(n_before - n_dropped - n_model),
@@ -1146,6 +1371,24 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             "rsquared_adj": float(getattr(fit, "rsquared_adj", np.nan)),
             "f_pvalue": float(getattr(fit, "f_pvalue", np.nan)),
             "bic": float(getattr(fit, "bic", np.nan))}
+    # A3-3: likelihood-ratio statistics for the machine-readable fit table.
+    k_params = int(len(fit.params))
+    loglik = float(getattr(fit, "llf", np.nan))
+    llr = llr_df = llr_p = np.nan
+    pseudo_r2 = np.nan
+    if mtype == "logit":
+        llnull = float(getattr(fit, "llnull", np.nan))
+        if np.isfinite(loglik) and np.isfinite(llnull):
+            llr = 2.0 * (loglik - llnull)
+            llr_df = max(k_params - 1, 0)
+            if llr_df > 0:
+                llr_p = float(stats.chi2.sf(max(llr, 0.0), llr_df))
+            pseudo_r2 = 1.0 - loglik / llnull if llnull != 0 else np.nan
+    else:
+        pseudo_r2 = float(getattr(fit, "rsquared", np.nan))
+    info.update({"k": k_params, "loglik": loglik, "llr": llr, "llr_df": llr_df,
+                 "llr_p": llr_p, "pseudo_r2": pseudo_r2, "subset": subset,
+                 "sample": sample, "n_entry": n_entry, "n_subset": n_subset})
     if mtype == "logit":
         p = fit.predict(design)
         info["_pred"] = p
@@ -1184,13 +1427,32 @@ def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
     lines.append(f"- 结果：`{info['outcome']}`{event_txt}")
     lines.append(f"- 估计样本：N={info['n']:,}（dropna 排除 {info['n_dropped']} 行；"
                  f"分离规则再排除 {info['n_removed_separation']} 行）")
+    if info.get("subset"):
+        lines.append(f"- 子样本（`subset`）：`{info['subset']}`；入口过滤后 "
+                     f"{info.get('n_entry', 0):,} 行 → 子样本 {info.get('n_subset', 0):,} 行")
+    else:
+        lines.append("- 子样本：全样本（`sample=full`）")
+    if info.get("flow_stage") is not None:
+        stage = info["flow_stage"]
+        if info.get("flow_match") is True:
+            lines.append(f"- **flow 校验：{info['mid']} N={info['n']:,} ✓**"
+                         f"（stage=\"{stage}\"）")
+        elif info.get("flow_match") is False:
+            lines.append(f"- **flow 校验：{info['mid']} N={info['n']:,} ≠ sample_flow "
+                         f"{int(info['flow_n']):,}**（stage=\"{stage}\"）")
+        else:
+            lines.append(f"- flow 校验：sample_flow 里没有 stage=\"{stage}\"，跳过")
     lines.append(f"- 标准误：{info['se_type']}")
     if info["mtype"] == "logit":
         mcf = np.nan
         if np.isfinite(info["llf"]) and np.isfinite(info["llnull"]) and info["llnull"] != 0:
             mcf = 1 - info["llf"] / info["llnull"]
+        llr_txt = ""
+        if np.isfinite(info.get("llr", np.nan)):
+            llr_txt = (f"；LLR χ²={fmt(info['llr'], 1)}"
+                       f"（df={int(info['llr_df'])}, p={_fmt_llr_p(info['llr_p'])}）")
         lines.append(f"- 拟合：对数似然 {fmt(info['llf'], 2)}；"
-                     f"McFadden R²={fmt(mcf, 3)}；AIC={fmt(info['aic'], 1)}")
+                     f"McFadden R²={fmt(mcf, 3)}；AIC={fmt(info['aic'], 1)}{llr_txt}")
     else:
         lines.append(f"- 拟合：R²={fmt(info['rsquared'], 3)}；"
                      f"调整 R²={fmt(info['rsquared_adj'], 3)}；"
@@ -1486,6 +1748,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--roc", action="store_true", help="计算 logit 模型 AUC+95%%CI（需 --spec）")
     parser.add_argument("--robust", default=None, choices=["HC0", "HC1", "HC3"],
                         help="单变量模型的稳健标准误（OLS/Logit 的 cov_type）")
+    parser.add_argument("--sample-flow", default=None,
+                        help="sample_flow.csv（列 stage,n,note）；只核对声明了 "
+                             "models[].flow_stage 的模型：N 不等只 warning 不退出，"
+                             "声明了但漏斗里没有该 stage 则报错退出（exit 2）")
     return parser
 
 
@@ -1493,6 +1759,12 @@ def main() -> int:
     args = build_parser().parse_args()
     if (args.vif or args.roc) and not args.spec:
         print("ERROR: --vif/--roc 需要 --spec（多变量模型）", file=sys.stderr)
+        return 2
+    if args.sample_flow and not args.spec:
+        print("ERROR: --sample-flow 需要 --spec（多变量模型）", file=sys.stderr)
+        return 2
+    if args.sample_flow and not os.path.isfile(args.sample_flow):
+        print(f"ERROR: sample_flow not found: {args.sample_flow}", file=sys.stderr)
         return 2
     try:
         requested = parse_sections(args.only)

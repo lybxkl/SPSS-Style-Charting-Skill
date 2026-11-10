@@ -28,6 +28,10 @@ import re
 import sys
 import tempfile
 
+# Stamped into the export report. An artefact on disk has to say which script
+# produced it: "the picture looked old" is otherwise undebuggable a week later.
+SCRIPT_VERSION = "2.0.0"
+
 try:
     import fitz  # PyMuPDF
 except ImportError:  # pragma: no cover
@@ -275,6 +279,7 @@ def main() -> int:
             "low_dpi": low_dpi,
             "min_width": args.min_width,
             "min_dpi": args.min_dpi,
+            "script_version": SCRIPT_VERSION,
         }
         report_path = os.path.splitext(out_pdf)[0] + "_export_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:

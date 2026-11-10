@@ -47,6 +47,9 @@ from text_extract import (
 )
 
 HIDDEN_ATTR = getattr(stat, "FILE_ATTRIBUTE_HIDDEN", 0x2)
+# Written into every product: a report on a desk is worthless if nobody can tell
+# which version of the script produced it.
+SCRIPT_VERSION = "2.0.0"
 YEAR_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 BRACKET_YEAR_RE = re.compile(r"[（(]((?:19|20)\d{2})[)）]")
 COPY_MARKER_RE = re.compile(r"副本|复件|复印件|copy|_dup|dup\d|\(1\)|（1）", re.I)
@@ -494,9 +497,24 @@ def main(argv: list[str] | None = None) -> int:
         out_note = (f"out-dir 与 root 相同，已按产物文件名跳过 "
                     f"{out_products_skipped} 个自身产出")
 
+    # Corpus fingerprint: a later run over the "same" folder can be proven to be
+    # the same corpus (or not) without keeping the files. Sorted, so a different
+    # walk order does not fake a different corpus.
+    fingerprint = hashlib.sha256()
+    for row in sorted(rows, key=lambda r: r["rel_path"]):
+        fingerprint.update(("%s\t%s\t%s\n" % (
+            row["rel_path"], row.get("bytes") or 0, row.get("md5") or "")).encode("utf-8"))
+
     summary = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generator_version": SCRIPT_VERSION,
         "root": root,
+        "corpus_fingerprint": {
+            "files": len(rows),
+            "bytes": sum(int(row.get("bytes") or 0) for row in rows),
+            "sha256": fingerprint.hexdigest(),
+            "covers": "sorted(rel_path, bytes, md5) — one line per file",
+        },
         "sampling_frame": {
             "root": root,
             "ext": sorted(only_ext),

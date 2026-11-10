@@ -25,7 +25,7 @@ REPO = Path(__file__).resolve().parent.parent
 SKILL_DIR = REPO / "empirical-research-pipeline"
 SKILL_NAME = SKILL_DIR.name
 DIST = REPO / "dist" / f"{SKILL_NAME}.skill"
-INCLUDE = ("SKILL.md", "assets", "references", "scripts")
+INCLUDE = ("SKILL.md", "assets", "profiles", "references", "scripts")
 SKIP_NAMES = {"__pycache__", ".DS_Store", "Thumbs.db"}
 SKIP_SUFFIX = {".pyc", ".pyo"}
 
@@ -102,12 +102,24 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"{label}: {it}")
             return 1
         print(f"OK: {DIST.name} matches the source tree ({len(files)} files)")
+        sidecar = DIST.with_suffix(DIST.suffix + ".sha256")
+        if not sidecar.is_file():
+            print(f"FAIL: {sidecar.name} is missing (run without --check first)")
+            return 1
+        if sidecar.read_text(encoding="utf-8").split("  ")[0].strip() != archive_digest(DIST):
+            print(f"FAIL: {sidecar.name} does not match the archive")
+            return 1
         return 0
 
     digest = build(DIST, files)
     print(f"wrote {DIST}  ({len(files)} files, {DIST.stat().st_size} bytes)")
     print(f"content-sha256: {digest}")
     assert digest == archive_digest(DIST), "archive is not byte-stable"
+    # The digest is the only way a user can tell whether the .skill they
+    # imported is the one CI built: the file name and mtime prove nothing.
+    DIST.with_suffix(DIST.suffix + ".sha256").write_text(
+        f"{digest}  {DIST.name}\n", encoding="utf-8")
+    print(f"wrote {DIST.name}.sha256")
     return 0
 
 

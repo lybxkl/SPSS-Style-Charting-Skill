@@ -636,5 +636,114 @@ class TestSpssSyntax(TempCase):
         self.assertIn("CSV not found", proc.stderr)
 
 
+class TestExtractPipeline(TempCase):
+    """``--extract`` must produce a dataset, not just a worksheet (Sprint A)."""
+
+    HEADER = ("审\n理\n法\n院：某某区人民法院\n案\n号：(2021)测****刑初7 号\n"
+              "裁\n判\n日\n期：2021.03.05\n案\n由：刑事/妨害社会管理秩序罪/滥伐林木罪\n")
+
+    def setUp(self):
+        super().setUp()
+        self.corpus = self.p("corpus")
+        os.makedirs(self.corpus, exist_ok=True)
+        self.out = self.p("out")
+        self.profile = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "empirical-research-pipeline", "profiles", "legal-judgment.json")
+
+    def _doc(self, rel, text):
+        path = os.path.join(self.corpus, *rel.split("/"))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # newline="" keeps the fixture byte-identical to the offsets asserted
+        # below; text mode would rewrite "\n" as "\r\n" on Windows.
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(text)
+        return path
+
+    def _run(self, *args):
+        return run("make_coding_sheet.py", "--root", self.corpus,
+                   "--out", self.out, "--allow-empty", *args, cwd=self.tmp)
+
+    def test_dataset_evidence_and_run_are_written(self):
+        self._doc("a.txt", self.HEADER + "判决如下：一、被告人犯滥伐林木罪，"
+                                         "判处有期徒刑一年六个月，并处罚金5000元。\n" + BODY)
+        proc = self._run("--min-chars", "1", "--extract", self.profile)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        for name in ("dataset.csv", "evidence.jsonl", "run.json"):
+            self.assertTrue(os.path.isfile(os.path.join(self.out, name)), name)
+        rows = read_csv(os.path.join(self.out, "dataset.csv"))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["case_no"], "(2021)测****刑初7 号")
+        self.assertEqual(row["sentence_months"], "18")
+        self.assertEqual(row["fine_yuan"], "5000")
+        self.assertEqual(row["case_no_src"], "kv_block")
+        # A source column exists for every field: a value without provenance
+        # cannot be audited.
+        for key in ("case_no", "year", "charge", "fine_yuan", "restore_amount"):
+            self.assertIn(f"{key}_src", row)
+
+    def test_evidence_offsets_verify_against_the_source(self):
+        body = self.HEADER + "判决如下：一、被告人犯滥伐林木罪，判处罚金5000元。\n" + BODY
+        self._doc("a.txt", body)
+        proc = self._run("--min-chars", "1", "--extract", self.profile)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        with open(os.path.join(self.out, "evidence.jsonl"), encoding="utf-8") as fh:
+            rec = json.loads(fh.readline())
+        self.assertEqual(rec["_row_id"], "00001")
+        self.assertTrue(rec["evidence"])
+        for line in rec["evidence"]:
+            self.assertIn("@", line)
+            self.assertNotIn("\n", line)
+            name, rest = line.split("=", 1)
+            snippet, _, rng = rest.rpartition("@")
+            start, end = (int(x) for x in rng.split("-"))
+            self.assertIn(" ".join(body[start:end].split()), " ".join(snippet.split()))
+
+    def test_run_json_records_hits_and_profile_hash(self):
+        self._doc("a.txt", self.HEADER + "判决如下：一、判处罚金5000元。\n" + BODY)
+        self._doc("b.txt", "无关材料，只有正文，没有可抽取字段。" * 8)
+        proc = self._run("--min-chars", "1", "--extract", self.profile)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        with open(os.path.join(self.out, "run.json"), encoding="utf-8") as fh:
+            runinfo = json.load(fh)
+        self.assertEqual(runinfo["documents"], 2)
+        self.assertEqual(len(runinfo["profile_sha256"]), 64)
+        self.assertEqual(runinfo["fields"]["case_no"]["hit"], 1)
+        self.assertEqual(runinfo["fields"]["case_no"]["na"], 1)
+
+    def test_flow_gets_an_extraction_stage(self):
+        self._doc("a.txt", self.HEADER + BODY)
+        proc = self._run("--min-chars", "1", "--extract", self.profile)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        stages = [row["stage"] for row in read_csv(
+            os.path.join(self.out, "sample_flow.csv"))]
+        self.assertIn("抽取字段完成", stages)
+
+    def test_missing_profile_exits_2(self):
+        self._doc("a.txt", BODY)
+        proc = self._run("--min-chars", "1", "--extract", self.p("nope.json"))
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("profile not found", proc.stderr)
+
+    def test_invalid_profile_exits_2_with_the_reason(self):
+        self._doc("a.txt", BODY)
+        bad = self.p("bad.json")
+        with open(bad, "w", encoding="utf-8") as fh:
+            json.dump({"profile": "t", "fields": [
+                {"name": "x", "func": "pattern", "type": "text", "pattern": "a"}]}, fh)
+        proc = self._run("--min-chars", "1", "--extract", bad)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("'na' phrase is required", proc.stderr)
+
+    def test_generic_doc_type_is_not_a_file_extension(self):
+        self._doc("a.txt", BODY)
+        proc = self._run("--min-chars", "1")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        row = read_csv(os.path.join(self.out, "coding_sheet.csv"))[0]
+        self.assertEqual(row["doc_type"], "document")
+        self.assertEqual(row["doc_type_src"], "default")
+
+
 if __name__ == "__main__":
     unittest.main()

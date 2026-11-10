@@ -1,0 +1,84 @@
+{
+  "profile": "eldercare-interview",
+  "version": "1.0",
+  "description": "社区养老服务满意度访谈记录。表单式键值头 + 问答体。示例包，不预置任何研究结论。",
+  "sections": {
+    "header": {"start": "访谈记录", "end": "访谈内容"},
+    "qa": {"start": ["访谈内容", "访谈正文"],
+         "end": ["三、访问员观察", "访问员观察", "记录人"]}
+  },
+  "fields": [
+    {
+      "name": "respondent_id",
+      "label": "访谈编号",
+      "func": "kv_block",
+      "type": "text",
+      "scope": "header",
+      "na": ["未记录", "未提及"],
+      "labels": ["访谈编号", "编号", "记录编号"]
+    },
+    {
+      "name": "respondent_age",
+      "func": "quantity",
+      "type": "numeric",
+      "scope": "header",
+      "unit": "岁",
+      "na": ["未记录"],
+      "labels": ["年龄", "受访者年龄"]
+    },
+    {
+      "name": "interview_date",
+      "func": "date",
+      "type": "date",
+      "scope": "header",
+      "na": ["未记录"],
+      "start": "访谈日期"
+    },
+    {
+      "name": "community",
+      "label": "访谈地点",
+      "func": "kv_block",
+      "type": "text",
+      "scope": "header",
+      "na": ["未记录"],
+      "labels": ["访谈地点", "社区"]
+    },
+    {
+      "name": "wait_minutes",
+      "func": "quantity",
+      "type": "numeric",
+      "scope": "full",
+      "unit": "分钟",
+      "na": ["未提及", "不适用"],
+      "hint": "等多久|等餐|等候|排队|等待"
+    },
+    {
+      "name": "satisfaction",
+      "func": "canon",
+      "type": "text",
+      "scope": "qa",
+      "na": ["未表态", "拒答"],
+      "vocab": "vocab-satisfaction.json",
+      "exclude": "^(问|Q)[：:]",
+      "negate": true,
+      "fallback": ["pattern"]
+    },
+    {
+      "name": "services_mentioned",
+      "func": "count_unique",
+      "type": "count",
+      "scope": "qa",
+      "na": ["未提及"],
+      "pattern": "助餐|上门护理|助浴|陪同就医|家政|代购"
+    },
+    {
+      "name": "complaint_any",
+      "func": "contains",
+      "type": "bool",
+      "scope": "qa",
+      "na": ["未提及"],
+      "pattern": "投诉|反映|不满意|意见|没人管",
+      "exclude": "^(问|Q)[：:]"
+    }
+  ]
+}

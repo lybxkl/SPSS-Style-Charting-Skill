@@ -1,0 +1,111 @@
+{
+  "profile": "legal-judgment",
+  "version": "1.0",
+  "description": "中国裁判文书的通用抽取包。示例包：只做字段抽取，不做罪名归类、不做编码决策。",
+  "sections": {
+    "header": {"lines": 40},
+    "dispositive": {
+      "start": ["判决如下", "裁定如下"],
+      "end": ["如不服本判决", "如不服本裁定", "审判人员", "扫一扫", "书记员"],
+      "last": true
+    }
+  },
+  "fields": [
+    {
+      "name": "case_no",
+      "label": "案号",
+      "func": "kv_block",
+      "type": "text",
+      "scope": "header",
+      "na": "未记载",
+      "labels": ["案号"]
+    },
+    {
+      "name": "court",
+      "func": "kv_block",
+      "type": "text",
+      "scope": "header",
+      "na": "未记载",
+      "redacted_is_na": false,
+      "labels": ["审理法院"]
+    },
+    {
+      "name": "year",
+      "func": "pattern",
+      "type": "numeric",
+      "scope": "header",
+      "pattern": "[（(]\\s*(\\d{4})\\s*[）)]",
+      "group": 1,
+      "na": "未记载"
+    },
+    {
+      "name": "judgment_date",
+      "func": "date",
+      "type": "date",
+      "scope": "header",
+      "hint": "裁判日期",
+      "na": "未记载"
+    },
+    {
+      "name": "cause",
+      "func": "kv_block",
+      "type": "text",
+      "scope": "header",
+      "na": "未记载",
+      "labels": ["案由"]
+    },
+    {
+      "name": "charge",
+      "func": "pattern",
+      "type": "text",
+      "scope": "dispositive",
+      "pattern": "犯\\s*([\\u4e00-\\u9fa5、]{2,25}?罪)",
+      "group": 1,
+      "na": "未认定罪名",
+      "fallback": [{"func": "pattern", "scope": "header",
+                    "pattern": "([\\u4e00-\\u9fa5]{2,25}?罪)\\s*$", "group": 1}]
+    },
+    {
+      "name": "sentence_months",
+      "func": "duration",
+      "type": "numeric",
+      "unit": "月",
+      "scope": "dispositive",
+      "hint": "有期徒刑|拘役",
+      "na": "未判处自由刑"
+    },
+    {
+      "name": "probation",
+      "func": "contains",
+      "type": "bool",
+      "scope": "dispositive",
+      "needle": "缓刑",
+      "na": "未提及"
+    },
+    {
+      "name": "fine_yuan",
+      "func": "quantity",
+      "type": "numeric",
+      "unit": "元",
+      "scope": "dispositive",
+      "hint": "罚金",
+      "na": "未判处罚金"
+    },
+    {
+      "name": "restore_amount",
+      "func": "quantity",
+      "type": "numeric",
+      "unit": "元",
+      "scope": "dispositive",
+      "hint": "修复|放流|补植|补种|赔偿",
+      "na": "未涉及修复费用"
+    },
+    {
+      "name": "claim_items",
+      "func": "items",
+      "type": "count",
+      "scope": "dispositive",
+      "na": "无分项"
+    }
+  ]
+}

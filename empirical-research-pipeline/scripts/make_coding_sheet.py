@@ -40,6 +40,9 @@ from text_extract import (
     STRUCTURED_EXTS, SUPPORTED_EXTS, extract_text, ext_of, kind_of,
 )
 
+# Stamped into run.json so an output directory names the code that built it.
+SCRIPT_VERSION = "2.0.0"
+
 # Docket number: (year) + optional court/region code + case type + number.
 # Covers 刑初/刑终/刑再/刑更/刑他/刑申/民初/民终/民再/民特/民辖/行初/行终/知行/
 # 执/执异/破申/诉前调, the optional 字第 form, and the 之一 suffix.
@@ -532,6 +535,9 @@ def main() -> int:
                         help="do not store the document body in the JSONL output")
     parser.add_argument("--allow-empty", action="store_true",
                         help="exit 0 even when no document is extracted")
+    parser.add_argument("--extract", default=None, metavar="PROFILE_JSON",
+                        help="run a field-extraction profile and write dataset.csv, "
+                             "evidence.jsonl and run.json (see docs/EXTRACT-CONTRACT.md)")
     args = parser.parse_args()
 
     root = os.path.abspath(args.root)
@@ -577,12 +583,40 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
+    extract_profile = None
+    if args.extract:
+        if not os.path.isfile(args.extract):
+            print(f"ERROR: --extract profile not found: {args.extract}", file=sys.stderr)
+            return 2
+        try:
+            from extract_lib import (ProfileError, apply_profile, evidence_line,
+                                     load_profile, profile_sha256)
+        except Exception as exc:                       # pragma: no cover
+            print(f"ERROR: cannot import extract_lib: {exc}", file=sys.stderr)
+            return 2
+        try:
+            extract_profile = load_profile(args.extract)
+        except ProfileError as exc:
+            print(f"ERROR: invalid profile: {exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"ERROR: cannot read profile: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            return 2
+        profile_dir = os.path.dirname(os.path.abspath(args.extract))
+
     jsonl_path = os.path.join(out_dir, "coding_sheet.jsonl")
     csv_path = os.path.join(out_dir, "coding_sheet.csv")
     skipped_path = os.path.join(out_dir, "skipped_documents.csv")
     flow_path = os.path.join(out_dir, "sample_flow.csv")
     rows: list[dict] = []
     skipped: list[dict] = []
+    ds_rows: list[dict] = []
+    ds_evidence: list[dict] = []
+    ds_field_names: list[str] = []
+    ds_na_counts: dict = {}
+    ds_hit_counts: dict = {}
+    ds_errors = 0
     extracted = 0
     excluded = 0
     seen = 0
@@ -672,6 +706,11 @@ def main() -> int:
                     skip(rel, name, "unreadable", 0, f"unreadable: {exc}",
                          detail=str(exc), skip_stage="read")
                     continue
+                # Normalise line endings once, before any offset is computed:
+                # a CRLF file would otherwise shift every evidence span by the
+                # number of preceding lines, and the offsets would not match
+                # what a reviewer sees in an editor.
+                text = text.replace("\r\n", "\n").replace("\r", "\n")
                 chars = len(text.strip())
                 han = len(re.findall(r"[\u4e00-\u9fa5]", text))
                 if chars < args.min_chars:
@@ -701,8 +740,11 @@ def main() -> int:
                         ("case_no", case_no), ("filename", name), ("body", text[:800])
                     )
                 else:
-                    doc_type = kind or ext
-                    doc_type_src = "extension"
+                    # `doc_type` is a document kind, not a file format: writing
+                    # "pdf" here made every downstream group-by useless and was
+                    # indistinguishable from a real classification.
+                    doc_type = "document"
+                    doc_type_src = "default"
                     court = court_src = province = province_src = ""
                     case_no = case_no_src = ""
                     year, year_src = find_year(("filename", name), ("body", text[:800]))
@@ -767,6 +809,40 @@ def main() -> int:
                     "province_src": province_src,
                 })
                 extracted += 1
+                if extract_profile is not None:
+                    row_id = f"{extracted:05d}"
+                    try:
+                        res = apply_profile(extract_profile, text,
+                                            base_dir=profile_dir)
+                    except Exception as exc:           # one bad document only
+                        ds_errors += 1
+                        print(f"ERROR: extract {rel}: {type(exc).__name__}: {exc}",
+                              file=sys.stderr)
+                        res = {"fields": {}, "evidence": []}
+                    if not ds_field_names:
+                        ds_field_names = [f["name"] for f in extract_profile["fields"]]
+                    ds_row = {"rel_path": rel, "file": name, "doc_type": doc_type}
+                    ev_fields = {}
+                    for fname in ds_field_names:
+                        got = res["fields"].get(fname) or {}
+                        value = got.get("value")
+                        ds_row[fname] = "" if value is None else value
+                        ds_row[f"{fname}_src"] = got.get("source", "none")
+                        ev_fields[fname] = {
+                            "value": value, "raw": got.get("raw"),
+                            "span": got.get("span"), "source": got.get("source"),
+                            "na": got.get("na"), "negated": bool(got.get("negated")),
+                            "fallback_used": got.get("fallback_used", 0),
+                            "truncated": bool(got.get("truncated")),
+                        }
+                        if value is None:
+                            ds_na_counts[fname] = ds_na_counts.get(fname, 0) + 1
+                        else:
+                            ds_hit_counts[fname] = ds_hit_counts.get(fname, 0) + 1
+                    ds_rows.append(ds_row)
+                    ds_evidence.append({"_row_id": row_id, "rel_path": rel,
+                                        "fields": ev_fields,
+                                        "evidence": res["evidence"]})
                 if extracted % 200 == 0:
                     print(f"  extracted {extracted} ...", flush=True)
 
@@ -801,6 +877,11 @@ def main() -> int:
         {"stage": "编码完成", "n": len(rows),
          "note": "records written to coding_sheet.jsonl"},
     ]
+    if extract_profile is not None:
+        flow_rows.append({
+            "stage": "抽取字段完成", "n": len(ds_rows),
+            "note": f"records written to dataset.csv (profile "
+                    f"{extract_profile['profile']})"})
     with open(flow_path, "w", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=["stage", "n", "note"],
                                 extrasaction="ignore")
@@ -813,6 +894,40 @@ def main() -> int:
     print(f"signals: included {signal_included}, skipped {signal_skipped} (per-term limit)")
     print(f"summary: {csv_path}")
     print(f"sample_flow: {flow_path}")
+
+    if extract_profile is not None:
+        ds_path = os.path.join(out_dir, "dataset.csv")
+        ev_path = os.path.join(out_dir, "evidence.jsonl")
+        run_path = os.path.join(out_dir, "run.json")
+        cols = ["rel_path", "file", "doc_type"]
+        for fname in ds_field_names:
+            cols += [fname, f"{fname}_src"]
+        with open(ds_path, "w", newline="", encoding="utf-8-sig") as fh:
+            writer = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(ds_rows)
+        with open(ev_path, "w", encoding="utf-8") as fh:
+            for rec in ds_evidence:
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        run = {
+            "profile": extract_profile["profile"],
+            "profile_path": os.path.abspath(args.extract),
+            "profile_sha256": profile_sha256(args.extract),
+            "documents": len(ds_rows),
+            "errors": ds_errors,
+            "fields": {name: {"hit": ds_hit_counts.get(name, 0),
+                              "na": ds_na_counts.get(name, 0),
+                              "type": next(f["type"] for f in extract_profile["fields"]
+                                           if f["name"] == name)}
+                       for name in ds_field_names},
+            "generated_by": "make_coding_sheet.py --extract",
+            "script_version": SCRIPT_VERSION,
+        }
+        with open(run_path, "w", encoding="utf-8") as fh:
+            json.dump(run, fh, ensure_ascii=False, indent=1)
+        print(f"dataset: {ds_path} ({len(ds_rows)} rows, {len(ds_field_names)} fields)")
+        print(f"evidence: {ev_path} ({len(ds_evidence)} rows)")
+        print(f"run: {run_path}")
 
     if not rows:
         if args.allow_empty:

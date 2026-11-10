@@ -101,3 +101,16 @@
 - `0` 成功；`2` 参数错误或校验失败。
 - `qa_outputs.py` 发现 error 时**默认返回 2**；`--exit-zero` 可显式降级（CI 里不要用）。
 - 任何脚本「产出 0 行」都不得视为成功：必须有非零退出或显式 `--allow-empty`。
+
+## 9. 成稿（manuscript）
+
+- 成稿由 ssemble_manuscript.py 生成，**不手打表格**。规格文件 manuscript.json 的 locks 引用 CSV 与 PNG；{key} 占位符只从 --numbers 取，取不到即 xit 2（禁止印出不完整数字）。
+- 组装器必须同时产出三件：<name>.docx、<name>_numbers.csv（列 key,value,source，键名 	able<N>_n / ig<N>_n）、igure_map.json（列 [{tag,title,image}]，image 为绝对路径）。erify_numbers.py --numbers 直接吃 _numbers.csv，xport_pdf_hires.py --figure-map 吃 igure_map.json。
+- 表：三线（顶 1.5 pt、表头下 0.75 pt、底 1.5 pt），无竖线；每行 cantSplit；首行 	blHeader；数字右对齐、首列左对齐。
+- 图：按**正文栏宽**放置（默认 min(15, 页宽-左右边距)），显式宽度超过栏宽是 xit 2 而不是静默压缩；图题与图同页（keepNext）；Word 不能嵌 PDF，给 PDF 是 xit 2。
+- 字体：每个 run 同时写 w:rFonts/@w:ascii|@w:hAnsi|@w:eastAsia，只写 ascii 会让中文回落主题字体；首行缩进用 w:ind/@w:firstLineChars（按字符），不要只写厘米。
+
+
+---
+
+本文件随 skill 一起打包（`references/10-contracts.md`）。此前它在仓库根 `docs/CONTRACTS.md`，安装包里看不到，等于没有契约。

@@ -89,7 +89,7 @@ python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --
 | `corpus_duplicates.csv` | 重复组、保留/移除建议、`keeper_reason` |
 | `corpus_report.md` | 可直接贴进项目日志的中文报告，顶部先写「抽样框」 |
 
-主键列同时写 `rel_path` 与旧名 `relpath`（见 `docs/CONTRACTS.md`）；下游脚本按别名顺序解析，找不到键列直接报错。
+主键列同时写 `rel_path` 与旧名 `relpath`（见 `references/10-contracts.md`）；下游脚本按别名顺序解析，找不到键列直接报错。
 
 **字符数有两个口径**：`chars` 是抽取到的全部字符，`chars_effective` 去掉纯页码行、目录行与空白。`--min-chars` 判的是后者——扫描件每页印 `i/n` 能轻易凑出上百个字符，用 `chars` 判会把整本扫描件当"有文本"。`textless` / `image_only` 的判定也改用 `chars_effective`。
 
@@ -206,6 +206,11 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 要点（完整规范见 `references/09-field-extraction.md`，实现与本文件冲突时以它为准）：
 
+**缺失要分来源**：`missing_by_source.csv` 把每个字段的 NA 按 `not_found`（材料里没有）、
+`negated`（落在否定域）、`redacted`（被脱敏）、`na_phrase`（原文就写"未提及"）、
+`unparsed`（找到文字但解析不出）分开计数。写论文时说"未提及占 30%"之前先看这张表——
+把"解析失败"算进"未提及"，等于把工具的无能写成了研究对象的行为。
+
 - **领域写在 JSON 里，不写在代码里**。`profiles/` 里的两份是**示例夹具**（裁判文书 / 访谈），不是目标用户；写一份新 profile 就能换领域，不用改 Python。
 - **`na` 必填**：缺失要落短语（`未提及` / `不适用` / `未判罚金`），不能落空串——空串分不清"没提到"与"不适用"。
 - **NA ≠ 0 ≠ False**：`contains` 字段在段存在但未命中时是 `False`（不是 NA），`count_unique` 的 `0` 是值。把"没投诉"写成缺失，等于扔掉一次测量。
@@ -234,7 +239,7 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 - `data/analysis.csv`：分析用宽表，一行一个分析单位。
 - `data/analysis.sav`：SPSS 直接打开，带变量标签/值标签。
 
-主键与标记列（`docs/CONTRACTS.md` §1、§5）：
+主键与标记列（`references/10-contracts.md` §1、§5）：
 
 | 列 | 含义 | 谁产生 |
 |---|---|---|
@@ -329,7 +334,7 @@ python scripts/auto_chart_pack.py \
 
 连续/多分类结果不需要改脚本：结果变量会自动切换为“结果分布 + 分组均值/构成”图；文本结果同样可用 `outcome_map` 指定编码。`--coef` 支持 `metric`（OR/HR/RR/beta）与 `n` 列，森林图会按模型样本量写 N；`--pred` 支持 0/1 或“是/否”标签，常数预测/单一类别会跳过 ROC/PR/校准并写明原因。`term_labels` 可把 `lv3` 这类模型项名映射为中文。双比例哑铃图需在 config 里用 `dumbbell` 指定两个 0/1 列。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可加 `--survival-group`）生成 Kaplan–Meier 曲线。
 
-- 默认覆盖 7 组，常规约 40–55 张：二分类约 44 张，带模型输入约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动；实际数量以 `chart_manifest.csv` 为准。
+- 默认覆盖 7 组；实测张数随列角色与跳过项浮动（本仓库回归：小样本语料 15–21 张，2878 行真实语料 44 张并跳过 3 张）。`--max-charts` 默认上限 60，0 = 不限；实际数量以 `chart_manifest.csv` 为准。
 - 产出上限默认 `--max-charts 60`（试跑时调小，`0` 或负数 = 不限制）；只想跑某几张/某几段用 `--only`（图号、slug 或片段，可重复）与 `--sections A,B`（字母或中文段名，可重复）。`--list-charts` 先列清单再决定。
 
 - **A 数据质量**：缺失率、样本类别/年份/地区、二元变量发生率。
@@ -385,13 +390,32 @@ python scripts/paper_figures.py --paper assets/paper_figures.example.json --out 
 
 ## 阶段 6：文稿组装
 
-Word 排版要求：
+**先跑组装脚本，再改 Word。** 手打表格是数字漂移的主要来源：表里的 N 和正文的 N 一旦各打一次，就再也对不上。
 
-- 图、图题、图注设置为“与下段同页”，避免图题分页。
-- 表格行禁止跨页断开，跨页重复表头。
-- 表注在图/表下方；先给 N，再给显著性规则。
-- 正文首次引用图/表时，编号与文件一致（图 1、表 1、附图 1）。
-- 摘要、正文、表、图、附录的 N 和百分比全部同源；`chart_manifest.csv` 的 N 会回写图注。
+```bash
+python scripts/assemble_manuscript.py --spec manuscript.json --out output/manuscript.docx \
+  --numbers output/manuscript_numbers.csv   # 你写：key,value 两列（{key} 的来源）
+```
+
+`manuscript.json` 的 `blocks` 逐段声明 `title`/`authors`/`heading`/`para`/`note`/`table`/`figure`/`pagebreak`。表格与图都**引用文件而不是复制数值**：
+
+```json
+{"type": "table", "csv": "output/tables/table1.csv", "caption": "罪名与修复责任",
+ "n": "{n_analysis}", "columns": [
+   {"col": "charge", "label": "罪名类别"},
+   {"col": "n", "label": "文书数", "fmt": "{:,.0f}"},
+   {"col": "pct", "label": "占比（%）", "fmt": "{:.1f}"}],
+ "note": "注：占比因四舍五入不等于 100%。"}
+{"type": "figure", "png": "output/figures/Figure1.png", "caption": "罪名结构",
+ "n": "{n_analysis}", "note": "注：横轴为罪名类别。"}
+```
+
+- `{key}` 从 `--numbers` 取；**取不到就报错停下**，不会印出半个 `N=`。
+- 脚本同时写 `<out>_numbers.csv`（本文档实际印出的每个 N，键为 `table1_n`/`fig1_n`）——这是**输出**，与输入的 `--numbers` 不是同一个文件；`verify_numbers.py --numbers` 吃的就是这个输出。
+- `figure_map.json` 供下一步回填 600 dpi 原图；图默认按**正文栏宽**放置（A4 + 3.17 cm 边距 = 14.66 cm，不是 15 cm），显式给 `width_cm` 超过栏宽会报错而不是悄悄压扁。
+- Word 排版细节（图题与下段同页、表格行不跨页、表头重复）由脚本写进 docx，不要手工再设一遍，否则会与脚本的设置打架。
+
+**闸门**：`assemble_manuscript.py` 退出码 0；docx 里表格是三条线且无竖线；每张图有图题、图题与图同页；`manuscript_numbers.csv` 与正文/表/图注逐个对得上。
 
 Word 导 PDF 时，Word 会把 600 dpi 图压到约 200 dpi。用 `scripts/export_pdf_hires.py` 导出后回填原图：
 
@@ -413,14 +437,14 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --min-dpi 600
 ```
 
-退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数就只查分辨率，字号闸门是关着的（位图图也因此不会报 `no_text_layer`）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）查分类色灰度可分性，`--colorblind` 另查红绿/蓝黄色觉模拟。
+退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）查分类色灰度可分性，`--colorblind` 另查红绿/蓝黄色觉模拟。
 
 **数字溯源另跑一条** `scripts/verify_numbers.py`：
 
 ```bash
 python scripts/verify_numbers.py --out output/verify \
   --tables output/tables --figures-manifest output/figures/paper_figures_manifest.csv \
-  --docx manuscript.docx --sample-flow output/tables/sample_flow.csv
+  --docx manuscript.docx --sample-flow output/coding/sample_flow.csv
 ```
 
 它查六件事：表内合计、表与图注同值、正文里每个 `N=/OR=/p</β=` 能否在表里找到、图号连续且被正文引用、样本 N 跨表一致、漏斗单调不增。产物是 `number_issues.csv`（`severity,check,where,expected,actual,detail`）与 `number_trace.csv`（每个数字追到哪张表哪一格）。有 error 就 exit 2。叙述性数字用 `--numbers numbers.csv`（`value` 列，承接正文里确实没有对应表格的数，如扫描文件总数）或 `--ignore REGEX` 显式豁免，被豁免的数字会在 `number_issues.csv` 里以 `severity=info` 留痕，不会静默消失。
@@ -448,12 +472,13 @@ python scripts/verify_numbers.py --out output/verify \
 | `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段；`--extract profile.json` 走字段抽取层，产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` + 17 列 manifest |
+| `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |
 | `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗单调 |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
-| `scripts/auto_chart_pack.py` | 按列角色自动生成约 40–55 张数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest |
+| `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest（实测 15–44 张，上限 60） |
 | `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型；`compose_figure()` 组装多面板并回读 PNG 校验 dpi |
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
 | `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |

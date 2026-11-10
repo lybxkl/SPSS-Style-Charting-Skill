@@ -203,7 +203,7 @@ SPSS 原生没有“森林图/小提琴图/相关热图”的标准入口时，�
 
 ## 6. 图表清单 manifest
 
-`chart_manifest.csv` 是 manifest v2，契约原文见 `docs/CONTRACTS.md` §3：
+`chart_manifest.csv` 是 manifest v2，契约原文见 `references/10-contracts.md` §3：
 
 ```csv
 id,question,chart_type,variables,n,n_scope,png,pdf,caption,dpi,px_width,model_id,data_hash,tiff,note,section,status,palette

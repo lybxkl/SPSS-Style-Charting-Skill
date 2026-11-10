@@ -2,6 +2,71 @@
 
 本仓库此前没有版本记录，从本轮起按日期记。缺陷编号对应 `docs/ISSUES-FIXED.md`（审计索引），审计明细在 `docs/skill-audit/` 之外未随仓库发布——本文只保留可验证的行为变化。
 
+## 2026-11-10 第四轮：全局审计后的修复
+
+第四轮换了方法：不再逐文件找 bug，而是先建"脚本—产物—消费者—文档承诺"的全局图，
+再让不参与实现的 agent 从**跨切面**审计（接缝、整链、文档契约、测试强度、遗留物）。
+五份报告合计 100+ 条，下面只列改了什么行为；编号对不上的地方以本节命令为准。
+
+### 会静默算错的
+
+- **`in_analysis` 闸门不再被 `filter` 顶掉**（`analysis_utils.apply_filter`）。此前 config 里一给 `filter`，
+  闸门整条失效：2878 → 2710，而真值是 2710 里有 2581 份属于分析样本——**129 份程序性裁定被静默放回（+5%）**。
+  现在顺序固定为"先闸门、后条件"，stderr 与返回描述都写 `in_analysis==1 (2878→2713) then … (2713→2581 rows)`；
+  要故意越界必须显式 `keep_out_of_scope`，描述里会留 `in_analysis NOT applied`。
+  **副作用必须说清**：本轮之前用旧口径跑出的模型 N（含我自己的 2690/2578）都偏大约 4%，需按新口径重跑。
+- **`outcome` 自动推断不再撞 `has_outcome`**：正则 `outcome|target|结果` 曾把辅助标志列选成因变量，
+  默认命令直接失败。现在要求列名不像 `has_/is_/n_/num_/count_` 前缀**且确实是 0/1**。
+- **缺列报错要能读懂**：`filter_query` 用了不存在的列时给 `did you mean: outcome_binary`；
+  `auto_chart_pack` 在过滤**之前**一次性列全 config 声明但数据里没有的列，并附数据表头前 25 列。
+- **`--audit` 指错根目录不再伪装成"全都不合格"**：`read_valid_paths` 现在返回 audit 里出现过的全部路径，
+  路径完全对不上直接 `ERROR: --audit lists a different directory than --root` + 退出码 2；
+  单行理由也从 "status is not valid" 改为 `not listed in the --audit CSV (wrong --root…)`。
+- **缺失分来源**：`make_coding_sheet --extract` 新增 `missing_by_source.csv`
+  （`not_found` / `negated` / `redacted` / `na_phrase` / `unparsed` 分开计数）。此前三类 NA 在 `dataset.csv` 里
+  全压成空串，唯一记理由的 `evidence.jsonl` 没有任何消费者。
+- **`n_scope=subgroup` 不再被当成 sample**：`verify_numbers` 的 `SCOPE_ALIASES` 补了 subgroup/亚组/子组，
+  这类图按变量分别报 N，不参与跨表一致性比较（此前每张图都报一条假错，而图-表比对被静默跳过）。
+- **V-05 优先 `n_dropna`**，且**只把 `coef_*.csv` / `fit.csv` 当模型表**——把图表清单当模型表会造出 10 条假错。
+- **中文字体没有粗体也要说**：`pubfig.check_cjk_font` 增加 bold 面探测，缺了打一行 warning
+  （matplotlib 会把 weight 700 静默降到 400，屏幕上完全看不出，印出来就是"加粗的标题其实没加粗"）。
+- **拟合告警不再被吞**：`auto_stats` 用 `catch_warnings(record=True)` 收集 statsmodels 的收敛/奇异矩阵告警，
+  写进 stderr、`model_meta.json` 与 `model_summary.md` 的「拟合告警」段。
+
+### 会假装通过的
+
+- **`--figures` 指向空目录 / 指到父目录**：`images_checked=0` 由 warning 改 **error**（退出码 2），
+  文案直接说"多半是把 `--figures` 指到了 `chart_pack` 而不是 `chart_pack/figures`"。
+- **位图判据按对象分档**：`--figures` 里的 PDF 每页单独判（整页文字 span < 3 才算"图被拍平"），
+  技能自己出的热图 PDF 不再被自己判死；成稿 PDF 里的位图仍是 warning（Word→PDF 的正常形态），但分辨率不达标仍 error。
+- **`--colorblind` 真的会触发**：原判据要求 `ΔE76<8` 且 `ΔL*≥10`，而 ΔE≥ΔL*，数学上永不成立；
+  现在只判色度距离。
+- **`--min-fontsize` 语义与文档一致**：不带也测量并报告，带上才判错；`--min-width` 真正停用（传了只打一行退休提示）。
+- **`dedupe_corpus` 无重复不再是失败**：干净语料上 rc=0 并写空计划（此前文档第 2 步在任何无重复语料上都红）。
+- **跨 profile 抽取全空会退出码 2**：`ERROR: profile 'x' matched 0 of N fields in M document(s)`；
+  部分字段全缺给 warning 并列出字段名。`--profile legal` 用内置示例词典时也明说类别是占位符。
+- **`paper_figures` 的 N 只认声明**：`"n": "auto"` 必须配 `--data`，否则报错而不是拿面板行数当样本量；
+  示例规格 `assets/paper_figures.example.json` 换成合成数据（此前内联的是一份真实研究的数字，跑出来是假图）。
+- **测试补到能挡住变异**：新增"量级递增断链"（`5万1亿`）、`negate` 窗口上限、零惰性对应分析三道反例，
+  逐条验证过——把守卫改掉，对应用例立刻红。
+
+### 补上的半成品
+
+- **阶段 6 有了组装脚本**：新增 `scripts/assemble_manuscript.py`（`manuscript.json` → `.docx` +
+  `<out>_numbers.csv` + `figure_map.json`）。三线表边框/`cantSplit`/`tblHeader`、`w:eastAsia` 四属性、
+  `firstLineChars` 双写、图默认按正文栏宽 14.66 cm（超宽报错并给修法，PDF 图直接拒绝）、`{key}` 缺值退出码 2。
+  实测链路 `assemble → export_pdf_hires → qa`：`min_fontsize 9.0`、`dpi_min 613.9`、`error_count 0`。
+- **契约随包走**：`docs/CONTRACTS.md` → `references/10-contracts.md`（安装包里原本没有契约文件，等于没有契约）；
+  `tools/build_skill.py` 的 INCLUDE 补 `profiles`。
+- **`sample_flow.csv` 由 audit 真正写出**（契约承诺过、`--sample-flow`/V-06 消费，此前是幽灵文件）。
+
+### 文档改成与代码一致
+
+`--sample-flow` 的真实路径（`output/coding/sample_flow.csv`，不是 `output/tables/`）、
+`--min-fontsize` 的真语义、图数改成实测区间（小语料 15–21、2878 行语料 44 张跳过 3 张）、
+`--figures`/`--manifest`/`--tables` 各指哪一份产物、`3→5` 该不该带 `--audit`、`.sps` 用 SPSS 打开（本 skill 不调 SPSS）、
+`CATEGORICAL` 八色是"各色 L*"而不是"相邻差"（两两最小差 10.62，余量只有 0.62）、测试数 360。
+
 ## 2026-11-10 Sprint A/B/C：把"能从材料做到正文"的三段补上
 
 第二轮审计（5 个角度、81 条）的结论不是"哪里还有 bug"，而是**四段能力要么没有、要么只是个说法**：字段抽取层不存在、多面板正文图不存在、数字溯源不存在、装的是旧代码。本轮按 A/B/C 三个 sprint 补齐，每个 sprint 完成后由不参与实现的独立 agent 审计一次（报告不入库，只把结论并入本文件与 `docs/ISSUES-FIXED.md`）。
@@ -25,7 +90,7 @@
 - **生产者与检查者共用一个 N 解析器**：`paper_figures` 不再自带 `\d[\d,]*`（那会把 `3 111→2 713` 读成 `3`，然后把图注改写成 `N=3`，而检查器验的是被污染的值——两边自洽、exit 0）。
 - **N 只认声明，不推断**：缺 `n` 写 `n=NA` + `status="skipped: n unknown"`，绝不拿面板数据行数当样本量。
 - **图注只替换第一处 `N=`**，第二个不同数值原样保留并记 `n_conflict`。
-- `CATEGORICAL` 6→8 色且两两 **ΔL*≥10**（10.5/21.5/32.1/43.1/53.9/64.7/75.5/86.3），超出的序列 `warnings.warn`；manifest 必写实际用到的 `palette`（此前缺这一列，"灰度可分性"从未真正执行，7 类罪名在黑白下只能数出 3 类）。
+- `CATEGORICAL` 6→8 色且**两两 ΔL* ≥ 10**——8 个颜色的 L* 依次为 32.1/64.7/43.2/21.5/53.9/10.5/75.5/86.3，**两两之差的最小值是 10.62**（第 1 与第 4 色），余量只有 0.62；列举的是各色 L*，不是相邻差。超出的序列 `warnings.warn`；manifest 必写实际用到的 `palette`（此前缺这一列，"灰度可分性"从未真正执行，7 类罪名在黑白下只能数出 3 类）。
 - `qa_outputs.py` 补 **`--min-fontsize`**（按 PDF span 实测并按安置宽折算）、**灰度可分性**、**色盲模拟**（判据改为 `ΔE76<8` **且** `(Δa*,Δb*)` 模 <6——只看 ΔE 时因 ΔE≥ΔL 永远不触发）。
 - **`no_text_layer` 按对象分档**：成稿 PDF 里的位图（Word→PDF 的正常形态）记 warning 并写明"字号须在源图 PDF 上核"，但位图分辨率不达标仍是 error；`--figures` 目录里被拍平的矢量图仍是 error。此前一律 error，导致**每一篇正常论文都必然红**——闸门永远响等于闸门不存在。
 - **缺中文字体不再静默画豆腐块**：`set_style()` 先验字体，可替换则向 stderr 报一行替换提示，一个中文字体都没有才 `RuntimeError` 并列出本机候选；`paper_figures` 删掉了吞 `findfont` 的那行 `filterwarnings`。

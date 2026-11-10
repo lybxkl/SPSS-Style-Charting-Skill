@@ -2,6 +2,59 @@
 
 本仓库此前没有版本记录，从本轮起按日期记。缺陷编号对应 `docs/ISSUES-FIXED.md`（审计索引），审计明细在 `docs/skill-audit/` 之外未随仓库发布——本文只保留可验证的行为变化。
 
+## 2026-11-10 Sprint A/B/C：把"能从材料做到正文"的三段补上
+
+第二轮审计（5 个角度、81 条）的结论不是"哪里还有 bug"，而是**四段能力要么没有、要么只是个说法**：字段抽取层不存在、多面板正文图不存在、数字溯源不存在、装的是旧代码。本轮按 A/B/C 三个 sprint 补齐，每个 sprint 完成后由不参与实现的独立 agent 审计一次（报告不入库，只把结论并入本文件与 `docs/ISSUES-FIXED.md`）。
+
+### A. 字段抽取层（新增 `scripts/extract_lib.py`、`profiles/`、`references/09-field-extraction.md`）
+
+- **新增 12 个纯函数原语**：`num`、`quantity`、`date`、`duration`、`kv_block`、`section`、`items`、`window`、`negate`、`canon`、`count_unique`、`pattern`/`contains`。**`extract_lib.py` 里没有任何学科词**（有测试 `LibraryIsDomainNeutralTest` 钉住），领域写在 profile JSON 里：换一份 profile 就换领域，不是 `if` 分支。
+- `make_coding_sheet.py --extract profiles/<x>.json` 产出三件套：`dataset.csv`（一行一个观测，每个字段带 `<字段>_src` 来源列）、`evidence.jsonl`（每个值带 `name=snippet@start-end`，偏移可在原文逐字回验）、`run.json`（profile 路径 + sha256 + 每字段命中/缺失数 + 脚本版本）。
+- **两个示例 profile 跑同一条命令**：`profiles/legal-judgment.json`（11 字段，表格式头部逐字换行）、`profiles/eldercare-interview.json`（8 字段，Q/A 访谈）。它们只是夹具，**不代表推荐任何研究设计**。
+- **一个数只读一遍**：`num` 与 `quantity` 共用同一条"从左到右、量级递减"的链式读取器。此前 `quantity` 走另一套倒序规则，同一个 `1亿零5万` 在前者得 1e8、在后者得 50000——两个解析器各自自洽、一起与文书不符。`零` 是连接词（`1亿零五万`=1.0005e8），空格也是（PDF 抽取常见 `1亿 5万`）。
+- **别名自带的量级不再乘第二次**：`1200万元`=1.2e7，`十五万元`=150000。此前 `十五万元` 得 1.5e9。
+- **`contains` 认 `|` 分隔的多别名，并按整行 `exclude` 过滤**：`"投诉|反映|不满意|意见"` 此前被当成一个字符串，`complaint_any` 恒为 False，而真值也恒为 False——**验收是空转的**。同时提问行（`^(问|Q)[：:]`）不再计入受访者表态。
+- **`kv_block` 取冒号后整行余量，绝不跨行**；空值不再吞下一行字段（`案号：\n案由：盗窃` 曾把 `案由：盗窃` 当成案号）。
+- **`date` 支持被脱敏的年**：`裁判日期：2021********` 返回 `2021`，不再回落到正文里另一个事件完整日期（此前 51/2964 份的年份会错，最坏差 30 多年）。`anchor` 让"离锚点最近"胜过"更完整"。
+- **`validate_profile` 拒绝该 func 不读的键**（`kv_block` 带 `pattern` 直接报错）。写错键名的字段原本静默忽略那段配置。
+- 实测：真实判决书 120 份，条件召回 `fine_yuan` 100%、`sentence_months` 100%、`restore_amount` 100%、`probation` 100%，`bad_span=0`；合成访谈 20 份对真值 73/73。
+
+### B. 多面板正文图 + 投稿级图检（新增 `scripts/paper_figures.py`，补 `assets/paper_figures.example.json`）
+
+- `--paper paper.json` 按图组装多面板（GridSpec），产出 `FigureN.png|pdf|tiff` + `paper_figures_manifest.csv`（与图表包 manifest 同构，含 `palette`、`dpi`、`px_width`、`min_fontsize`）。`SKILL.md` 一直指向 `assets/paper_figures.example.json`，而该文件此前不存在——现在存在，且 `--paper` 跑它得 3 图 0 error。
+- **生产者与检查者共用一个 N 解析器**：`paper_figures` 不再自带 `\d[\d,]*`（那会把 `3 111→2 713` 读成 `3`，然后把图注改写成 `N=3`，而检查器验的是被污染的值——两边自洽、exit 0）。
+- **N 只认声明，不推断**：缺 `n` 写 `n=NA` + `status="skipped: n unknown"`，绝不拿面板数据行数当样本量。
+- **图注只替换第一处 `N=`**，第二个不同数值原样保留并记 `n_conflict`。
+- `CATEGORICAL` 6→8 色且两两 **ΔL*≥10**（10.5/21.5/32.1/43.1/53.9/64.7/75.5/86.3），超出的序列 `warnings.warn`；manifest 必写实际用到的 `palette`（此前缺这一列，"灰度可分性"从未真正执行，7 类罪名在黑白下只能数出 3 类）。
+- `qa_outputs.py` 补 **`--min-fontsize`**（按 PDF span 实测并按安置宽折算）、**灰度可分性**、**色盲模拟**（判据改为 `ΔE76<8` **且** `(Δa*,Δb*)` 模 <6——只看 ΔE 时因 ΔE≥ΔL 永远不触发）。
+- **`no_text_layer` 按对象分档**：成稿 PDF 里的位图（Word→PDF 的正常形态）记 warning 并写明"字号须在源图 PDF 上核"，但位图分辨率不达标仍是 error；`--figures` 目录里被拍平的矢量图仍是 error。此前一律 error，导致**每一篇正常论文都必然红**——闸门永远响等于闸门不存在。
+- **缺中文字体不再静默画豆腐块**：`set_style()` 先验字体，可替换则向 stderr 报一行替换提示，一个中文字体都没有才 `RuntimeError` 并列出本机候选；`paper_figures` 删掉了吞 `findfont` 的那行 `filterwarnings`。
+
+### C. 数字溯源（新增 `scripts/verify_numbers.py`）
+
+- 六项检查：V-01 表内合计、V-02 表与图注同值、V-03 正文数字找回表、V-04 图号连续且被正文引用、V-05 样本 N 跨表一致、V-06 漏斗单调不增。产物 `number_issues.csv`（`severity,check,where,expected,actual,detail`）+ `number_trace.csv`（每个数字追到哪个文件哪一格）+ `run.json`。
+- **溯源要"同语义"，不是"任意单元格出现过"**：此前表里 `p=0.0494` 可以"证明"正文 `4.94%`、`est=1358` 可以"证明" `N=1,358`，实测 exit 0。现在列名决定语义（count/p/estimate/pct），只有同语义单元格能作证据，否则报 error 并写明"其他语义的列不能作为证据"。
+- **`p<.001` 与表里 `p<0.001` 互认**（保留比较符），`p=X` 对表里 `p<X` 报 error（表只给了上界）。论文最常用写法此前被误杀。
+- **缺输入不再静默空跑**：`--check all` 缺 `--tables`/`--docx`/`--sample-flow` 时逐项写 `missing input <flag>` 并 exit 2。
+- **`--numbers` 承接叙述性数字**（`value` 列）、**`--figure-data` 承接图内数字**（`figure,label,value`，只认 count/pct，语义不符的数字照样报 error）。优先级 `figure-data → numbers → 表`。
+- **图表包 manifest 的 `id` 不是 `图N` 时按行序映射**，不再 44 条假报错（`A01/F01` 是图包编号，不是书内图号）。
+- `sample_flow.csv` 支持 `kind ∈ stage|excluded|model`（`model` 行须 `note=stage=<名>`，只校验 ≤ stage）；缺 `kind` 的行会在 detail 里说明怎么补。
+- 真实项目回归：193 个正文数字，加 `--numbers` 后 **193/193 traced、0 error**。
+
+### 横切
+
+- 每个脚本写 `SCRIPT_VERSION` 到产物（`run.json`/导出报告/`.sps` 注释/`stderr` banner）；`dist/*.skill` 旁写 `.sha256`。
+- `audit_corpus.py` 写 `corpus_fingerprint`（文件数、字节数、`rel_path\tbytes\tmd5` 的 sha256），语料换了能看出来。
+- `tools/build_skill.py` 的打包清单加入 `profiles/`（否则 `--extract` 在安装包里必然找不到 profile）。
+- 测试：159 → **329** 例（新增 `test_extract_lib` 53 / `test_figures_paper` 31 / `test_verify_numbers` 59，其余为反例补充）。
+
+### 已知未修（有意留在边界内）
+
+- `--jobs`/断点续跑（S1）未做：3111 份实测 audit 2.2 s / 抽取 3.0 s，本规模不需要。
+- 方法承诺仍未实现（KMO/Bartlett、平行分析、轮廓系数、中介、多重插补、交互与简单斜率、训练/验证拆分），`references/03`、`08` 已标明"需外部脚本"。
+- Cohen's κ 仍无脚本（属人工协议）。
+
+---
 ---
 
 ## 2026-11-10 缺陷修复轮次

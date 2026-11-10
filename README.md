@@ -11,14 +11,17 @@
 - **多格式资料审计**：逐文件建立状态机，区分 `valid / metadata / hidden / unsupported / quarantined / zero_byte / corrupt / encrypted / textless / image_only / media / unreadable`，并对账“原始文件 → 可读 → 唯一样本 → 分析样本”；单个文件读不出不会让整次扫描崩溃，会记 `unreadable` 并在末行汇总。
 - **内容去重**：MD5 分组，`--content-dedupe` 另按正文归一化指纹分组（同一判决的不同导出版本）；先生成计划，`--apply` 移动到 `_duplicates/` 并写 `move_log.csv`，`--undo` 可回滚，不删除原件。
 - **通用编码工作表**：从 PDF、DOCX、ODT、PPTX、HTML、TXT/MD/RTF 等抽取全文、标题、年份和关键词证据句；默认 `generic`，`--profile legal` 才抽取法院/案号/省份/案由。被审计/去重排除的文件逐条落 `skipped_documents.csv`，样本漏斗写 `sample_flow.csv`。
+- **字段抽取（一行一个观测）**：`--extract profiles/<x>.json` 把材料取成结构化字段，产出 `dataset.csv`（每字段带 `<字段>_src` 来源列）、`evidence.jsonl`（带可回验的字符偏移）、`run.json`（profile 哈希 + 每字段命中/缺失数）。**领域写在 JSON 里**：换一份 profile 就换领域，`scripts/extract_lib.py` 里没有任何学科词。缺失一律落 `na` 短语，`False`/`0` 与"没提到"分开。规范见 `references/09-field-extraction.md`。
 - **表格数据质量**：行/列、主键、缺失、分类编码、异常值、日期范围；CSV/Excel 直接进入统计流程，不混入文本编码。
 - **SPSS 数据**：输出 CSV/JSONL；生成 `.sps` 读入语法、变量标签、值标签、`MISSING VALUES` 与 `VARIABLE LEVEL`（NA 不再与 0 混同），并自动把“是/否、有/无、支持/不支持”等二值文本 `RECODE` 为 `*_num`。
 - **自动统计筛查**：描述统计、组间检验、相关、单变量 OLS/Logit；多分类自变量自动哑变量化，完全分离/不可估计模型写入跳过清单。`--spec` 提供**多变量模型入口**（logit/ols、聚类稳健、HC0/HC1/HC3、显式参照组、空单元分离检测），输出可直接喂图表的 `coef_<id>.csv`。
 - **全景图表包**：默认覆盖 A 数据质量、B 单变量、C 双变量、D 多变量、E 时间、F 模型诊断、G 附录，常规 40–55 张（`--max-charts` 默认上限 60，0 = 不限；`--only`/`--sections` 只跑需要的）；含 PCA、Ward 聚类、MDS、对应分析、控制图、ROC/PR/校准/混淆矩阵/Lift、Kaplan–Meier 等。
 - **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF、LZW 无损 TIFF（默认三格式；`--no-tiff` 可关）。log 轴次刻度标注已关闭，不再出现 `4×10⁻¹` 混排。
+- **多面板正文图**：`scripts/paper_figures.py --paper paper.json` 按 GridSpec 组装 (a)(b)(c)，支持 `bar/bar_with_ci/stacked_bar/line/scatter/hist/pie/forest`，返回每格实际厘米与**实测最小字号**，产出 `FigureN.*` + 与图包同构的 manifest；森林图直接吃 `coef_all.csv`。
 - **Word → PDF 高清回填**：定位 Word 导出 PDF 中被压缩的图，替换回 600 dpi 原图，回填后清理页面内容树（`clean_contents` + `garbage=4`）以免旧的低分辨率副本残留在成品里，并按版面尺寸校验有效 dpi。
-- **终检**：核对样本流程、N、图注、图表清单、PDF/图片的**有效 dpi**（不是像素宽）；`chart_manifest.csv` 支持图号唯一性、N 合理性（允许 `3111→2713` 这类区间与 `n_scope`）和相对路径检查；有 error 退出码 2。
-- **可测试**：`tests/` 下 159 个 `unittest` 用例，全部使用运行时生成的最小 fixture，不依赖网络、真实资料或 SPSS/Word。
+- **终检**：核对样本流程、N、图注、图表清单、PDF/图片的**有效 dpi**（不是像素宽）、**最小字号**（按实际安置宽度折算）、**分类色灰度/色盲可分性**；`chart_manifest.csv` 支持图号唯一性、N 合理性（允许 `3111→2713` 这类区间与 `n_scope`）和相对路径检查；有 error 退出码 2。
+- **数字溯源**：`scripts/verify_numbers.py` 查表内合计、表图同值、正文每个 `N=/OR=/p<` 能否找回表、图号连续且被引用、样本 N 跨表一致、漏斗单调不增；产物 `number_issues.csv` + `number_trace.csv`。
+- **可测试**：`tests/` 下 268 个 `unittest` 用例，全部使用运行时生成的最小 fixture，不依赖网络、真实资料或 SPSS/Word。
 
 ## 支持的资料
 
@@ -47,17 +50,22 @@ SPSS-Style-Charting-Skill/
 │   └── empirical-research-pipeline.skill   # 可直接导入的打包版
 ├── docs/
 │   ├── CONTRACTS.md                        # 跨脚本契约：主键、样本漏斗、N、缺失值、来源、证据、图规格、退出码
+│   ├── 09-field-extraction.md              # 字段抽取层：原语、profile schema、产物、验收、NA 纪律
 │   └── ISSUES-FIXED.md                     # 审计发现的缺陷索引与修复状态
-├── tests/                                  # 159 个 unittest 用例，fixture 运行时生成
+├── tests/                                  # 268 个 unittest 用例，fixture 运行时生成
 │   ├── _helpers.py
 │   ├── test_audit_layer.py
 │   ├── test_coding_layer.py
+│   ├── test_extract_lib.py
 │   ├── test_stats_charts.py
 │   ├── test_chart_pack.py
+│   ├── test_figures_paper.py
+│   ├── test_verify_numbers.py
 │   └── test_output_layer.py
 └── empirical-research-pipeline/
     ├── SKILL.md
     ├── assets/                             # 配置、codebook、图注、交付清单模板
+    ├── profiles/                           # 字段抽取 profile 示例（裁判文书 / 访谈）与词表
     ├── references/                         # 审计、编码、SPSS、制图、排稿、QA 细则
     ├── scripts/                            # 可执行流水线
     └── evals/                              # 行为测试提示词
@@ -138,6 +146,11 @@ python scripts/make_coding_sheet.py --root "资料目录" --out output/coding --
 #    --profile legal --doc-type judgment
 #    被 --audit/--dedupe-plan 排除的文件会逐条写进 output/coding/skipped_documents.csv
 
+# 3b. 字段抽取：换一份 profile 就换领域（示例：裁判文书 / 访谈）
+python scripts/make_coding_sheet.py --root "资料目录" --out output/coding \
+  --profile legal --doc-type all --extract profiles/legal-judgment.json
+#    产出 dataset.csv（一行一个观测，每字段带 _src）、evidence.jsonl（可回验偏移）、run.json
+
 # 4. 人工/LLM 按 codebook 编码，形成 data/analysis.csv 和 data/coded.jsonl
 #    编码规则、证据句、信度检验见 references/02-coding-protocol.md
 #    注意：信度检验（Cohen's κ）是人工协议，本 skill 没有脚本代做
@@ -156,12 +169,21 @@ python scripts/auto_stats.py --data data/analysis.csv --spec model_spec.json \
 python scripts/auto_chart_pack.py --data data/analysis.csv --config assets/chart_config.example.json --out output/chart_pack
 #    只跑部分图：--only F01,F02 或 --sections A,B；先看清单：--list-charts
 
+# 7b. 排正文主图：多面板 + 面板字母 + 图注 N 自动替换
+python scripts/paper_figures.py --paper paper.json --out output/figures
+
 # 8. 终检（docx/pdf 为成稿；尚未排稿时可先只用 --data/--figures/--manifest）
 #    有 error 退出码 2；--min-dpi 600 按版面折算有效 dpi（15 cm 宽 = 3543 px）
+#    --min-fontsize 7.2 按实际安置宽度查字号；灰度/色盲检查默认开
 python scripts/qa_outputs.py --docx output/manuscript.docx --pdf output/manuscript.pdf \
   --figures output/chart_pack/figures --data data/analysis.csv \
   --audit output/audit/corpus_files.csv \
-  --manifest output/chart_pack/chart_manifest.csv --min-dpi 600
+  --manifest output/chart_pack/chart_manifest.csv --min-dpi 600 --min-fontsize 7.2
+
+# 9. 数字溯源：正文每个 N/OR/p 能不能找回表
+python scripts/verify_numbers.py --out output/verify --tables output/tables \
+  --figures-manifest output/figures/paper_figures_manifest.csv \
+  --docx output/manuscript.docx --sample-flow output/tables/sample_flow.csv
 ```
 
 ## 配置

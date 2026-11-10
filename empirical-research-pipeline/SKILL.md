@@ -186,14 +186,41 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。**这一步是人工协议：本 skill 没有任何脚本计算 κ**，需要自己算（或让 SPSS/R/Python 跑 `sklearn.metrics.cohen_kappa_score`），流程见 `references/02-coding-protocol.md` 的「信度检验」节。
 5. codebook 冻结后再全量编码；后续改动要记录版本与影响范围。
 
-### 2.2 问卷/量表/结构化抽取
+### 2.2 字段抽取（`--extract`，一行一个观测）
+
+如果研究要的是**结构化字段**（每份材料的 X 等于几），不要停在"候选证据句"上——再加一步 `--extract`，把字段取出来：
+
+```bash
+python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
+    --profile legal --doc-type all \
+    --extract profiles/legal-judgment.json
+```
+
+产出三件套（与 `coding_sheet.*` 并列，不替代）：
+
+| 文件 | 内容 |
+|---|---|
+| `dataset.csv` | 一行一个观测；列由 profile 决定，每个字段后面跟一列 `<字段>_src` |
+| `evidence.jsonl` | 每行一份材料的字段取值 + 证据 `<字段>=<片段>@<start>-<end>` + `na`/`negated`/`fallback_used` |
+| `run.json` | profile 名与 `profile_sha256`、每字段 `hit`/`na`、`documents`/`errors` |
+
+要点（完整规范见 `references/09-field-extraction.md`，实现与本文件冲突时以它为准）：
+
+- **领域写在 JSON 里，不写在代码里**。`profiles/` 里的两份是**示例夹具**（裁判文书 / 访谈），不是目标用户；写一份新 profile 就能换领域，不用改 Python。
+- **`na` 必填**：缺失要落短语（`未提及` / `不适用` / `未判罚金`），不能落空串——空串分不清"没提到"与"不适用"。
+- **NA ≠ 0 ≠ False**：`contains` 字段在段存在但未命中时是 `False`（不是 NA），`count_unique` 的 `0` 是值。把"没投诉"写成缺失，等于扔掉一次测量。
+- **证据可回验**：每条证据的偏移必须能在原文 `text[s:e]` 命中，用 `extract_lib.verify_evidence()` 校验（不要自己另写一份解析）。
+- **换行先归一**：偏移一律指向 `\r\n`→`\n` 归一后的文本。CRLF 文件不归一，每条偏移会按行数整体漂移。
+- `--profile legal` 的字段（案号/法院/案由）与 profile 字段**不要混用**：前者是"候选"，后者是"取值"。
+
+### 2.3 问卷/量表/结构化抽取
 
 - 先做项目级变量字典：题号、题干、取值、反向题、缺失码。
 - 多选/排序题拆成 0/1 或多列；量表总分先检查信度（α/ω）和维度。
 - 开放式题项可先主题编码，再转成计数/类别变量；不要直接把词频当主题。
 - 表格数据的主键、单位、时间字段必须能回溯到原始文件。
 
-**闸门**：随机抽 10 条，能从 `编码值 → 证据句/原始字段 → 原文/原始行` 完整回溯；否则回到编码表修规则。
+**闸门**：随机抽 10 条，能从 `编码值 → 证据句/原始字段 → 原文/原始行` 完整回溯；否则回到编码表修规则。若用了 `--extract`，追加一条：`dataset.csv` 里任取 10 行，其 `evidence.jsonl` 的每条偏移都能在原文里逐字命中，且 `source=none` 的行确实是因为原文没写（而不是抽取器没找到）。
 
 详见 `references/02-coding-protocol.md`。
 
@@ -339,7 +366,18 @@ set_style()  # 15 cm 版心，宋体/Times New Roman，600 dpi
 - 误差线注明 95% CI；森林图实心点=显著、空心点=不显著。
 - 偏态连续变量用 log10 或 P99 截断，并在轴标签/图注注明。
 
-**闸门**：`chart_manifest.csv` 中每张图都有问题、N、图注、文件；正文主图与附录图不重复；PDF 内嵌图按版面尺寸折算的**有效 dpi ≥ 600**（15 cm 宽 = 3543 px；3000 px 只有 508 dpi）；图注、图、正文引用三者齐全。
+**多面板主图用 `scripts/paper_figures.py`**（图包负责"看全貌"，它负责"排进版面"）：
+
+```bash
+python scripts/paper_figures.py --paper assets/paper_figures.example.json --out output/figures
+```
+
+- 一个 `Figure` = 一个 `panels` 数组，用 GridSpec 组装成 (a)(b)(c)；`compose_figure()` 返回 `panel_sizes_cm`（每格实际厘米）与 `min_fontsize_pt`（实测最小字号），**不需要你猜字号会不会被缩放压小**。
+- 支持 `bar` / `bar_with_ci` / `stacked_bar` / `line` / `scatter` / `hist` / `pie` / `forest`；`forest` 直接吃 `auto_stats` 的 `coef_<id>.csv` 或 `coef_all.csv`。
+- 产出 `FigureN.png|pdf|tiff` + `paper_figures_manifest.csv`（与 `chart_manifest.csv` 同构，`n_scope`/`dpi`/`px_width`/`palette` 齐全），可直接喂 `qa_outputs.py`。
+- 图注里的 `N=` 会被全局替换成该图真实 N（多图共用一段图注模板也不会串号）。
+
+**闸门**：`chart_manifest.csv` 中每张图都有问题、N、图注、文件；正文主图与附录图不重复；PDF 内嵌图按版面尺寸折算的**有效 dpi ≥ 600**（15 cm 宽 = 3543 px；3000 px 只有 508 dpi）；**最小字号 ≥ 7.2 pt（按实际安置宽度折算，不是按原始 15 cm）**；**分类色两两灰度 ΔL\* ≥ 10**（黑白打印还能数得清系列）；图注、图、正文引用三者齐全。`qa_outputs.py --min-dpi 600 --min-fontsize 7.2` 一条命令查前三条。
 
 详见 `references/04-figures-publication.md` 和 `references/07-chart-atlas.md`。
 
@@ -375,7 +413,17 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --min-dpi 600
 ```
 
-退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。
+退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数就只查分辨率，字号闸门是关着的（位图图也因此不会报 `no_text_layer`）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）查分类色灰度可分性，`--colorblind` 另查红绿/蓝黄色觉模拟。
+
+**数字溯源另跑一条** `scripts/verify_numbers.py`：
+
+```bash
+python scripts/verify_numbers.py --out output/verify \
+  --tables output/tables --figures-manifest output/figures/paper_figures_manifest.csv \
+  --docx manuscript.docx --sample-flow output/tables/sample_flow.csv
+```
+
+它查六件事：表内合计、表与图注同值、正文里每个 `N=/OR=/p</β=` 能否在表里找到、图号连续且被正文引用、样本 N 跨表一致、漏斗单调不增。产物是 `number_issues.csv`（`severity,check,where,expected,actual,detail`）与 `number_trace.csv`（每个数字追到哪张表哪一格）。有 error 就 exit 2。叙述性数字用 `--numbers numbers.csv`（`value` 列，承接正文里确实没有对应表格的数，如扫描文件总数）或 `--ignore REGEX` 显式豁免，被豁免的数字会在 `number_issues.csv` 里以 `severity=info` 留痕，不会静默消失。
 
 再按 `references/06-qa-checklist.md` 人工过一遍。重点不是格式，而是：
 
@@ -397,15 +445,18 @@ python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --f
 |---|---|
 | `scripts/audit_corpus.py` | 扫描任意资料目录：文件状态、文本/页数、有效字符、MD5、重复、内容级重复（`--content-dedupe`）、抽样框、格式分布、年份提示 |
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
-| `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段 |
+| `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段；`--extract profile.json` 走字段抽取层，产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
+| `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
+| `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` + 17 列 manifest |
+| `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗单调 |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
 | `scripts/auto_chart_pack.py` | 按列角色自动生成约 40–55 张数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest |
-| `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型 |
+| `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型；`compose_figure()` 组装多面板并回读 PNG 校验 dpi |
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
-| `scripts/qa_outputs.py` | 检查 PDF 图分辨率、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径 |
+| `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |
 
 ## 参考文档
 
@@ -419,6 +470,7 @@ python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --f
 | `references/06-qa-checklist.md` | 投稿/交付前逐项检查时 |
 | `references/07-chart-atlas.md` | 选图型、对应 SPSS 高级图形、确定图表数量时 |
 | `references/08-analysis-expansion.md` | 主模型之外还要跑哪些分析、如何记录做/不做时 |
+| `references/09-field-extraction.md` | 要把材料取成一行一个观测的结构化数据（写 profile、查证据、判 NA）时 |
 
 ## 模板
 

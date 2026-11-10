@@ -19,9 +19,18 @@
 
 ## 2. 样本漏斗（sample flow）
 
-- 文件名固定 `sample_flow.csv`，列固定 `stage,n,note`。
-- `stage` 是**人写的短语**，`n` 是整数，`note` 可空。**不做机读枚举**——但必须满足
+- 文件名固定 `sample_flow.csv`，列 `stage,n,note`，可选第 4 列 `kind`。
+- `kind` 值域（缺省 `stage`，非法值报 error 并列出三种合法值）：
+  - `stage`：**累计**口径，必须单调不增；
+  - `excluded`：本步剔除数，只要求 `0 ≤ n ≤ 上一条 stage 的 n`（不与累计序列比大小）；
+  - `model`：某个模型的估计样本，`note` 必须写 `stage=<阶段名>`，只要求 `0 ≤ n ≤ 该 stage 的 n`，**不参与单调性**。
+  有了 `kind`，"累计阶段 / 剔除数 / 模型样本"三类行不再混在一个单调序列里——混在一起会让漏斗看起来永远自相矛盾，于是没人再看它。
+- `stage` 是**人写的短语**，`n` 是整数，`note` 可空。**不做机读枚举**——但 `kind=stage` 的行必须满足
   `n` 单调不增，且相邻两行差值可由 `note` 解释。
+- 每张表与每张图都要能声明自己的分母：表用 `--table-scope 表名=sample|corpus`，
+  图用 `--figure-scope 图号=sample|corpus`（优先于 manifest 的 `n_scope` 列）。
+  同一份稿子里 corpus 图（如"全语料结构"）与 sample 表（如"分析样本描述"）并存是正常的，
+  **跨 scope 的 N 不等只记 warning**——把它记成 error 会让真错误淹掉。
 - 生成方：
   - `audit_corpus.py` 写 `output/audit/sample_flow.csv`（文件总数 / 元数据 / 0 字节 / 可读 / 有效 / 唯一）；
   - `make_coding_sheet.py` 写 `output/coding/sample_flow.csv`（有效 / 排除 / 编码 / 跳过），
@@ -78,6 +87,14 @@
   并以 `garbage=4` 保存；否则旧低分辨率副本留在 `/Resources` 里。
 - `qa_outputs.py` 的分辨率判据是**有效 dpi**（像素宽 ÷ 版面宽英寸），不是像素宽；
   默认 `--min-dpi 600`，`--min-width` 仅作兼容保留。
+- **字号也按版面折算**：`--min-fontsize 7.2` 与 `--target-width-cm`（默认 15）一起用。
+  15 cm 的图排进 8.5 cm 双栏后，8.5 pt 只剩 4.8 pt——按原始宽度报"合格"等于没检查。
+  PDF 里没有文字层的图（回填成位图之后）**不能因为"没有 span"就判通过**，必须显式报 `no_text_layer`。
+- **分类色两两灰度 ΔL\* ≥ 10**（CIE Lab，D65）。`CATEGORICAL` 是唯一色环，多系列图都从它取色；
+  色板写进 manifest 的 `palette` 列（`#RRGGBB|#RRGGBB|…`），`qa_outputs --graycheck` 才能真的检查，
+  否则它会静默跳过并报 `palette_unchecked`。
+- **多面板**用 `pubfig.compose_figure()` → 返回 `panel_sizes_cm`（每格实际厘米）与 `min_fontsize_pt`（实测），
+  不要在自写脚本里手算 figsize；面板字母字号 = `max(8.5, base_size)`。
 
 ## 8. 退出码
 

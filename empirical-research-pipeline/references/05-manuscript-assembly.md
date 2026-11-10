@@ -1,6 +1,17 @@
 # Word / PDF 成稿组装
 
-## 先定版式，再灌内容
+## 先跑脚本，再改 Word
+
+`scripts/assemble_manuscript.py` 已经实现了下面这张表的全部排版项（三线表、行不跨页、表头重复、图题不可分页、中西文字体、按字符的首行缩进、页脚页码）。**能用脚本就用脚本**：手打一次表，表里的 N 和正文的 N 从此各有一份，`verify_numbers.py` 之后能查出来的只是"两个数字不一致"，查不出哪个对。
+
+```bash
+python scripts/assemble_manuscript.py --spec manuscript.json --out output/manuscript.docx \
+  --numbers output/manuscript_numbers.csv   # 你写的 key,value 表（{key} 从这取）
+```
+
+它同时产出 `<out>_numbers.csv`（本文档实际印出的每个 N，喂给 `verify_numbers.py --numbers`）与 `figure_map.json`（给 `export_pdf_hires.py` 回填原图用）。注意区分：`--numbers` 是**输入**（你提供的 key,value 表），`<out>_numbers.csv` 是**输出**（脚本记录了实际印出的值）。下面的排版参数是**脚本的默认值**，改 `style` 段即可覆盖。
+
+## 版式参数
 
 | 项目 | 建议 |
 |---|---|
@@ -79,7 +90,7 @@ def no_split(row):
 
 做法：
 
-1. 所有数字从同一张 `numbers.csv` 取，不手打——注意**技能目前没有生成 `numbers.csv` 的脚本**，这是约定不是现成功能；项目里应自己写一个「派生数字表」脚本，正文与表图都从它取。
+1. 所有数字从同一张 `numbers.csv` 取，不手打。**现在有生成者了**：`assemble_manuscript.py` 会把文档里实际印出的每个 N 写成 `manuscript_numbers.csv`（键 `table1_n`/`fig1_n`），正文用 `{table1_n}` 这样的占位符引用它，取不到键就直接报错——`numbers.csv` 不再是"约定，自己想办法"。
 2. 摘要、正文、表、图注、附录交叉核对。
 3. 每个 N 后面注明口径：描述样本 / 模型样本 / 有效样本。
 4. 百分比保留一位小数；合计偏差在表注说明"因四舍五入不等于 100%"。

@@ -467,6 +467,41 @@ class HelperTest(TempCase):
         self.assertLessEqual(len(out), 12)
         self.assertIn("森林资源", out)
 
+    def test_missing_cjk_glyphs_raise_instead_of_drawing_boxes(self):
+        """字体里没有汉字时 matplotlib 只发一条 UserWarning，图照样写出来——
+        读者看到的是满屏方框。save_fig 必须停下来说清楚怎么修。"""
+        with plt.rc_context({"font.family": ["DejaVu Sans"]}):
+            fig, ax = plt.subplots(figsize=(3, 2))
+            ax.set_title("维度")
+            with self.assertRaises(RuntimeError) as ctx:
+                pubfig.save_fig(fig, self.tmp, "tofu", formats=("png",))
+            plt.close(fig)
+        self.assertIn("渲染不出来", str(ctx.exception))
+        self.assertIn("set_style", str(ctx.exception))
+
+    def test_corr_heatmap_does_not_recompute_a_correlation_matrix(self):
+        """传进来的已经是相关矩阵时，图上的数字必须就是它。
+
+        对相关矩阵再算一次相关，得到的是"相关系数的相关系数"——符号都能翻转，
+        而图看起来完全正常，这是最难被发现的一类错。
+        """
+        mat = pd.DataFrame([[1.0, 0.60, -0.06],
+                            [0.60, 1.0, 0.02],
+                            [-0.06, 0.02, 1.0]],
+                           index=list("abc"), columns=list("abc"))
+        fig, ax = plt.subplots(figsize=(4, 3))
+        try:
+            pubfig.corr_heatmap(ax, mat)
+            fig.canvas.draw()
+            texts = {t.get_text() for t in ax.texts}
+            self.assertIn("0.60", texts)   # 原值
+            self.assertNotIn("1.00", {
+                t for t in texts if t != "1.00"} - {"1.00"})  # 对角线之外不再出现
+            self.assertNotIn("0.99", texts)
+            self.assertNotIn("-0.99", texts)
+        finally:
+            plt.close(fig)
+
     def test_wilson_ci_bounds_are_monotone(self):
         prev = (-1.0, -1.0)
         for k in range(0, 21):

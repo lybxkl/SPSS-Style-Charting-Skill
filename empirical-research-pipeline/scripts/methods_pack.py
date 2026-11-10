@@ -86,10 +86,12 @@ CATALOG = [
      "family": "compare", "slots": ["group", "continuous"], "fallback": "m17 非参数检验",
      "when": "三组及以上均值比较；显著后再做事后比较（Bonferroni/Tukey）"},
     {"id": "m05", "nr": 5, "cn": "卡方检验", "en": "Chi-square test",
-     "family": "assoc", "slots": ["group"], "fallback": "Fisher 精确检验（脚本自动）",
+     "family": "assoc", "slots": ["row", "column"],
+     "fallback": "Fisher 精确检验（脚本自动）",
      "when": "两个分类变量的列联表；期望频数<5 时要看精确检验"},
     {"id": "m03", "nr": 3, "cn": "相关性分析", "en": "Correlation",
-     "family": "assoc", "slots": [], "fallback": "Spearman（脚本按正态性自动切换）",
+     "family": "assoc", "slots": ["correlate", "predictors"],
+     "fallback": "Spearman（脚本按正态性自动切换）",
      "when": "两变量关联强度；|r|≥0.7 才算强，且相关不等于因果"},
     {"id": "m11", "nr": 11, "cn": "回归分析", "en": "Linear regression",
      "family": "model", "slots": ["continuous", "predictors"], "fallback": "",
@@ -122,10 +124,10 @@ CATALOG = [
      "family": "classify", "slots": ["time"], "fallback": "",
      "when": "按时间顺序记录的数据；ARIMA 后用 Ljung-Box 查残差"},
     {"id": "m13", "nr": 13, "cn": "中介效应", "en": "Mediation",
-     "family": "model", "slots": ["path"], "fallback": "",
+     "family": "model", "slots": ["path"], "fallback": "分步回归 + Sobel，或安装 semopy",
      "when": "X 通过 M 影响 Y；报告 bootstrap CI，且不要用横断面数据讲因果"},
     {"id": "m17", "nr": 17, "cn": "非参数检验", "en": "Non-parametric tests",
-     "family": "compare", "slots": ["group"], "fallback": "",
+     "family": "compare", "slots": ["group", "continuous"], "fallback": "",
      "when": "T/ANOVA 的替代：Mann-Whitney、Wilcoxon、Kruskal-Wallis"},
     {"id": "m18", "nr": 18, "cn": "二元 Logistic 回归", "en": "Binary logistic",
      "family": "model", "slots": ["outcome", "predictors"], "fallback": "",
@@ -205,6 +207,9 @@ class FigureBook:
 
 
 def _fig(w_cm: float = WIDTH_CM, h_in: float = 3.4, nrows: int = 1, ncols: int = 1):
+    # 程序化调用（测试、用户脚本）不经过 main，这里兜一次样式，
+    # 否则中文标签落到 DejaVu Sans 渲染成方框。
+    PF.ensure_style(width_cm=w_cm)
     fig, axes = plt.subplots(nrows, ncols, figsize=(w_cm / 2.54, h_in), squeeze=False)
     return fig, axes
 
@@ -312,7 +317,7 @@ def run_m11(ctx: dict) -> ML.Result:
 def run_m10_clustering(ctx: dict) -> ML.Result:
     df, cfg = ctx["df"], ctx["cfg"]
     cols = cfg.get("cluster_vars")
-    _need(bool(cols) and len(cols) >= 2, "聚类需要 config.cluster_vars 中的至少两个数值变量", "m02")
+    _need(bool(cols) and len(cols) >= 2, "聚类需要 config.cluster_vars 中的至少两个数值变量", "m07")
     _need_cols(df, *cols)
     k = int(cfg.get("cluster_k", 3))
     res = ML.kmeans_analysis(df, cols, k=k, seed=ctx["seed"])
@@ -325,12 +330,29 @@ def run_m18_logistic(ctx: dict) -> ML.Result:
     y = _col(cfg, "outcome")
     xs = cfg.get("predictors") or []
     _need(bool(y) and bool(xs), "config.outcome（0/1）与 config.predictors 都需要", "")
-    info = cfg.get("outcome") or {}
-    if isinstance(info, dict) and info.get("positive") not in (None, 1):
+    info = cfg.get("outcome") if isinstance(cfg.get("outcome"), dict) else {}
+    raw = pd.to_numeric(df[y], errors="coerce")
+    levels = sorted({str(v) for v in raw.dropna().unique()})
+    collapse = info.get("collapse")
+    if len(levels) > 2:
+        # 3 类并成 2 类会改变系数：合并方式不同，OR 就不同，脚本不替用户选。
+        if not isinstance(collapse, dict) or len(collapse) < 2:
+            raise ML.MethodError(
+                f"{y} 有 {len(levels)} 个类别 {levels}，二元 Logistic 只能在两类之间做；"
+                f"系数会随合并方式变化，所以脚本不替你合并。请写成 "
+                f'"collapse": {{"阳性": [1, 2], "阴性": [0]}} 明确指定，'
+                f"或改用多分类 Logistic（本脚本未提供）。")
         df = df.copy()
+        mapped = pd.Series(float("nan"), index=df.index)
+        for label, values in collapse.items():
+            positive = str(label).startswith("阳") or \
+                str(label).lower() in {"1", "positive", "yes", "true"}
+            mapped[raw.isin(list(values))] = 1.0 if positive else 0.0
+        df[y] = mapped
+    elif info.get("positive") not in (None, 1):
         pos = info["positive"]
-        df[y] = pd.to_numeric(df[y], errors="coerce").map(
-            {pos: 1, **{k: 0 for k in df[y].dropna().unique() if k != pos}})
+        df = df.copy()
+        df[y] = raw.map({pos: 1, **{k: 0 for k in raw.dropna().unique() if k != pos}})
     res = ML.logistic(df, y, xs, alpha=ctx["alpha"])
     try:
         coef = res.tables[0][1]
@@ -345,6 +367,7 @@ def run_m02(ctx: dict) -> ML.Result:
     df, cfg = ctx["df"], ctx["cfg"]
     cols = cfg.get("cluster_vars") or cfg.get("items")
     _need(bool(cols) and len(cols) >= 3, "主成分分析需要至少三个数值变量（config.cluster_vars）", "m09")
+    _need_cols(df, *cols)
     k = int(cfg.get("components", 2))
     return ML.pca(df, cols, n_components=k)
 
@@ -480,11 +503,20 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
             run.figure = book.save(fig, "m04_anova", "各组均值与 95%CI")
         elif mid == "m05":
             tab = res.tables[2][1]
+            # row_percent 现在带行标签列（第一列是"甲/乙"，不是百分比），
+            # 直接 tab.values 会把标签当数值画进热图。
+            row_labels = [str(v) for v in tab.iloc[:, 0]]
+            num = tab.drop(columns=[tab.columns[0]])
             fig, axes = _fig(h_in=3.0)
             ax = axes[0][0]
-            PF.heatmap(ax, tab.values, [str(i) for i in tab.index],
-                       [str(c) for c in tab.columns], annotate=True, fmt=".1f")
-            ax.set_xlabel("列变量"); ax.set_ylabel("行变量")
+            PF.heatmap(ax, num.astype(float).values, row_labels,
+                       [str(c) for c in num.columns], annotate=True, fmt=".1f")
+            _rowname = str(ctx["cfg"].get("row") or ctx["cfg"].get("group") or "行变量")
+            _colname = str(ctx["cfg"].get("column") or "列变量")
+            ax.set_xlabel(f"{_colname}（列）")
+            ax.set_ylabel(f"{_rowname}（行）")
+            if len(fig.axes) > 1:
+                fig.axes[1].set_ylabel("行百分比（%）")
             fig.subplots_adjust(left=0.28, bottom=0.3)
             run.figure = book.save(fig, "m05_chisq", "行百分比")
         elif mid == "m03":
@@ -502,7 +534,9 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m11" and ctx.get("beta_frame") is not None:
             sub = ctx["beta_frame"]
             fig, axes = _fig(h_in=max(2.4, 0.32 * len(sub) + 1.2))
-            PF.forest_plot(axes[0][0], [PF.short_label(t) for t in sub["term"]],
+            _lab = [f"{PF.short_label(t)}（{b:.2f}）"
+                    for t, b in zip(sub["term"], sub["beta"])]
+            PF.forest_plot(axes[0][0], _lab,
                            sub["beta"].tolist(), sub["low"].tolist(),
                            sub["high"].tolist(),
                            ref=0.0, log_scale=False, xlabel="β（95%CI）")
@@ -519,7 +553,9 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m18" and ctx.get("or_frame") is not None:
             sub = ctx["or_frame"]
             fig, axes = _fig(h_in=max(2.4, 0.32 * len(sub) + 1.2))
-            PF.forest_plot(axes[0][0], [PF.short_label(t) for t in sub["term"]],
+            _lab = [f"{PF.short_label(t)}（{o:.2f}）"
+                    for t, o in zip(sub["term"], sub["OR"])]
+            PF.forest_plot(axes[0][0], _lab,
                            sub["OR"].tolist(), sub["OR_ci_low"].tolist(),
                            sub["OR_ci_high"].tolist(), ref=1.0, log_scale=True)
             fig.subplots_adjust(left=0.42, bottom=0.16)
@@ -551,6 +587,18 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
             # it stays in the table and out of the colour bar.
             keep = [c for c in mat.columns if str(c).lower() not in ("communality", "共同度")]
             mat = mat[keep]
+            # 因子正负号是任意的（特征向量可整体取反）。若某列载荷之和为负，
+            # 整列翻正，否则同一篇论文里会出现"F2 上全是负相关"的魔术解释。
+            for c in mat.columns:
+                if float(mat[c].sum()) < 0:
+                    mat[c] = -mat[c]
+                    ctx.setdefault("flipped", []).append(str(c))
+            flipped = ctx.get("flipped") or []
+            if flipped:
+                # 取反会让报告里的载荷符号与 raw 输出不同，必须写明，
+                # 否则读者对不上上一版结果。
+                run.reason = (run.reason + "；" if run.reason else "") + \
+                    f"因子方向已统一：{'、'.join(flipped)} 的载荷整体取反（特征向量符号任意）"
             fig, axes = _fig(h_in=3.2)
             PF.heatmap(axes[0][0], mat.values, [str(i) for i in mat.index],
                        [str(c) for c in mat.columns], annotate=True, fmt=".2f",
@@ -562,12 +610,31 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
             tab = res.tables[0][1]
             fig, axes = _fig(h_in=3.0)
             ax = axes[0][0]
-            ax.axhline(0, color="gray", lw=0.8)
-            ax.axvline(0.5, color="gray", lw=0.8, ls=":")
+            # Kano 的 better 在 0..1、worse 在 -1..0，象限分界都在 0.5。
+            # 轴必须固定：不固定时数据全挤在 0.3–0.5 附近，两条线只剩边框。
+            ax.set_xlim(0, 1)
+            ax.set_ylim(-1, 0.02)
+            ax.axhline(-0.5, color=PF.GRAY, lw=0.8, ls="--")
+            ax.axvline(0.5, color=PF.GRAY, lw=0.8, ls="--")
+            # 右上=魅力型（提升大、不满足也不掉）、右下=期望型（两头都强）、
+            # 左下=必备型（不满足很痛但满足无感）、左上=无差异。
+            ax.text(0.97, -0.04, "魅力型 A", ha="right", va="top", fontsize=7.6,
+                    color=PF.GRAY)
+            ax.text(0.97, -0.97, "期望型 O", ha="right", va="bottom", fontsize=7.6,
+                    color=PF.GRAY)
+            ax.text(0.03, -0.97, "必备型 M", ha="left", va="bottom", fontsize=7.6,
+                    color=PF.GRAY)
+            ax.text(0.03, -0.04, "无差异 I", ha="left", va="top", fontsize=7.6,
+                    color=PF.GRAY)
+            # 不能叫 _col：那是模块级的取值函数，同名局部变量会让
+            # m04/m12 的 `_col(ctx["cfg"], ...)` 变成 UnboundLocalError。
+            _kcol = {"A": PF.BLUE, "O": PF.ORANGE, "M": PF.GREEN,
+                     "I": PF.GRAY, "R": PF.RED, "Q": PF.RED}
             for r in tab.itertuples():
-                ax.scatter(r.better, r.worse, s=22, color=PF.BLUE)
-                ax.annotate(r.feature, (r.better, r.worse), fontsize=7,
-                            xytext=(4, 3), textcoords="offset points")
+                ax.scatter(r.better, r.worse, s=26,
+                           color=_kcol.get(str(r.category), PF.BLUE), zorder=3)
+                ax.annotate(str(r.feature), (r.better, r.worse), fontsize=7.6,
+                            xytext=(5, 4), textcoords="offset points")
             ax.set_xlabel("better（满足时的满意度提升）")
             ax.set_ylabel("worse（不满足时的不满意）")
             PF.style_axis(ax, grid_axis="both")
@@ -582,6 +649,12 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
                     color=[PF.BLUE if v >= 0 else PF.ORANGE for v in coef["standardised"]],
                     height=0.62)
             ax.axvline(0, color="black", lw=0.8)
+            span = max(abs(coef["standardised"].max()), abs(coef["standardised"].min()), 1e-9)
+            for yy, vv in zip(range(len(coef)), coef["standardised"]):
+                ax.text(vv + (span * 0.02 if vv >= 0 else -span * 0.02), yy,
+                        f"{vv:.2f}", va="center",
+                        ha="left" if vv >= 0 else "right", fontsize=7.5)
+            ax.set_xlim(-span * 1.25, span * 1.25)
             ax.set_xlabel("标准化判别系数（LD1）")
             PF.style_axis(ax, grid_axis="x")
             fig.subplots_adjust(left=0.3, bottom=0.2)
@@ -634,6 +707,33 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _model_n(run, df) -> int:
+    """模型实际用的 n（dropna 之后），不是数据行数。
+
+    原来一律写 len(df)：60 行里含缺失、实际在 50 例上拟合的模型会宣称 n=60，
+    读者拿它核对样本量必然对不上。
+    """
+    stats_ = (run.result.stats if run.result else {}) or {}
+    for key in ("n", "n_obs", "n_used"):
+        value = stats_.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+    if run.result:
+        for _, table in run.result.tables:
+            if table is None or not hasattr(table, "columns") or "n" not in table.columns:
+                continue
+            if pd.api.types.is_numeric_dtype(table["n"]):
+                vals = pd.to_numeric(table["n"], errors="coerce").dropna()
+                if vals.empty:
+                    continue
+                # 有分组列（group/cluster/level）时每行是一个子样本，相加才是总 n；
+                # 否则每行是同一样本上的一个统计量（如成对比较），相加会得到 25625。
+                grouped = any(c in table.columns
+                              for c in ("group", "cluster", "level", "组"))
+                return int(vals.sum()) if grouped else int(vals.max())
+    return len(df)
+
+
 def write_report(path: str, runs: list, ctx: dict) -> None:
     lines = ["# 十六种分析方法运行报告（另含非参数检验族）", "",
              f"- 数据：`{ctx['data_path']}`（n={len(ctx['df'])} 行，{ctx['df'].shape[1]} 列）",
@@ -643,30 +743,40 @@ def write_report(path: str, runs: list, ctx: dict) -> None:
              "本报告只陈述能由这份数据支持的结论。被跳过的办法不是失败，"
              "而是**这份数据不支持它**，原因逐条写在下面。", ""]
     ok = [r for r in runs if r.status == "ok"]
-    skipped = [r for r in runs if r.status != "ok"]
-    lines += [f"## 总览（{len(ok)} 个完成 / {len(skipped)} 个跳过）", "",
+    skipped = [r for r in runs if r.status == "skipped"]
+    errored = [r for r in runs if r.status == "error"]
+    head = f"## 总览（{len(ok)} 个完成 / {len(skipped)} 个跳过"
+    head += f" / {len(errored)} 个出错）" if errored else "）"
+    lines += [head, "",
               "| 编号 | 方法 | 状态 | 关键结果 | 图 |", "|---|---|---|---|---|"]
     for r in runs:
         key = ""
         if r.result:
             s = r.result.stats
-            bits = []
-            for k in ("p", "r2", "adj_r2", "alpha", "kmo", "chi2", "F", "H", "t",
-                      "silhouette", "mcfadden_r2", "wilks", "indirect", "aic",
-                      "pc1_pct", "n_factors", "k", "features", "accuracy", "n"):
-                if k in s and isinstance(s[k], (int, float)) and not isinstance(s[k], bool):
-                    bits.append(f"{k}={s[k]:.4g}")
-            key = "，".join(bits[:3])
+            if r.spec["id"] == "m08":
+                # ARIMA 的 p 是阶数，不是 p 值；混进总览会被读成 p<0.001。
+                key = (f"ARIMA({s.get('p')},{s.get('d')},0)，"
+                       f"aic={s.get('aic', float('nan')):.4g}")
+            else:
+                bits = []
+                for k in ("p", "r2", "adj_r2", "alpha", "kmo", "chi2", "F", "H", "t",
+                          "silhouette", "mcfadden_r2", "wilks", "indirect", "aic",
+                          "pc1_pct", "n_factors", "k", "features", "accuracy", "n"):
+                    if k in s and isinstance(s[k], (int, float)) \
+                            and not isinstance(s[k], bool):
+                        bits.append(f"{k}={s[k]:.4g}")
+                key = "，".join(bits[:3])
+        status_cn = {"ok": "完成", "skipped": "跳过", "error": "出错"}[r.status]
         lines.append(f"| {BY_ID[r.spec['id']]['nr']} | {BY_ID[r.spec['id']]['cn']} | "
-                     f"{'完成' if r.status == 'ok' else '跳过'} | {key} | "
-                     f"{'有' if r.figure else '—'} |")
+                     f"{status_cn} | {key} | {'有' if r.figure else '—'} |")
     lines.append("")
     for r in runs:
         spec = BY_ID[r.spec["id"]]
         lines += [f"## {spec['nr']}. {spec['cn']}（{spec['en']}）", "",
                   f"**适用**：{spec['when']}", ""]
         if r.status != "ok":
-            lines += [f"**本次跳过**：{r.reason}", ""]
+            label = "本次跳过" if r.status == "skipped" else "本次出错"
+            lines += [f"**{label}**：{r.reason}", ""]
             if spec["fallback"]:
                 lines += [f"**可改用**：{spec['fallback']}", ""]
             continue
@@ -682,7 +792,7 @@ def write_report(path: str, runs: list, ctx: dict) -> None:
         if mlr.notes:
             lines += ["**注意**", ""] + [f"- {n}" for n in mlr.notes] + [""]
         if r.figure:
-            lines += [f"![{spec['cn']}]({os.path.basename(r.figure)})", ""]
+            lines += [f"![{spec['cn']}](figures/{os.path.basename(r.figure)})", ""]
     lines += ["## 报告句式（可直接改写进正文）", "",
               "| 方法 | 句式 |", "|---|---|",
               "| 描述性 | “连续变量以 M±SD 或 M（P25，P75）描述，分类变量以 n（%）描述。” |",
@@ -700,14 +810,33 @@ def write_report(path: str, runs: list, ctx: dict) -> None:
         fh.write("\n".join(lines))
 
 
+def _is_p_column(name: str) -> bool:
+    """p 值列：p / p_raw / p_adj / llr_p / levene_p …（也认 p_value）。"""
+    low = str(name).lower()
+    return low == "p" or low.startswith("p_") or low.endswith("_p") \
+        or low in {"pvalue", "p_value", "sig"}
+
+
+def _fmt_p_cell(p: float) -> str:
+    """论文里不能出现 p=0.000；小于 0.001 一律写成 <.001。"""
+    if p != p:  # NaN
+        return "—"
+    if p < 0.001:
+        return "<.001"
+    return f"{p:.3f}"
+
+
 def _md_table(df: pd.DataFrame) -> str:
     cols = [str(c) for c in df.columns]
+    is_p = [_is_p_column(c) for c in cols]
     out = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
     for row in df.itertuples(index=False):
         cells = []
-        for v in row:
+        for flag, v in zip(is_p, row):
             if v is None or (isinstance(v, float) and math.isnan(v)):
                 cells.append("—")
+            elif flag and isinstance(v, (int, float)):
+                cells.append(_fmt_p_cell(float(v)))
             elif isinstance(v, float):
                 cells.append(f"{v:.4g}")
             else:
@@ -735,6 +864,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-figures", action="store_true")
     ap.add_argument("--formats", default="png,pdf")
     ap.add_argument("--feedback-png-only", action="store_true", help="只出 png（调试）")
+    ap.add_argument("--debug", action="store_true", help="出错时打印完整 traceback")
     args = ap.parse_args(argv)
 
     if args.list:
@@ -759,8 +889,14 @@ def main(argv=None) -> int:
         if not os.path.isfile(args.config):
             print(f"ERROR: config not found: {args.config}", file=sys.stderr)
             return 2
-        with open(args.config, encoding="utf-8-sig") as fh:
-            cfg = json.load(fh) or {}
+        try:
+            with open(args.config, encoding="utf-8-sig") as fh:
+                cfg = json.load(fh) or {}
+        except json.JSONDecodeError as exc:
+            print(f"ERROR: config 不是合法 JSON：{exc.msg}（第 {exc.lineno} 行第 "
+                  f"{exc.colno} 列）；修正后重跑，或用 --list 看各方法要哪些槽位。",
+                  file=sys.stderr)
+            return 2
     os.makedirs(args.out, exist_ok=True)
 
     wanted = (args.only or args.methods or "all").strip()
@@ -778,6 +914,10 @@ def main(argv=None) -> int:
     formats = tuple(f.strip() for f in args.formats.split(",") if f.strip())
     if args.feedback_png_only:
         formats = ("png",)
+    if not formats and not args.no_figures:
+        print("ERROR: --formats 为空。给出具体格式（png,pdf），"
+              "或显式用 --no-figures 表示这次不出图。", file=sys.stderr)
+        return 2
     # Without this every CJK glyph falls back to DejaVu Sans and the figure is
     # full of empty boxes while the script still reports success.
     PF.set_style(width_cm=WIDTH_CM, dpi=600)
@@ -806,9 +946,13 @@ def main(argv=None) -> int:
             run.reason = str(exc)
         except Exception as exc:
             run.status = "error"
-            run.reason = f"{type(exc).__name__}: {exc}"
-            print(f"warning: {mid} 出错：{exc}", file=sys.stderr)
-            traceback.print_exc(file=sys.stderr)
+            run.reason = (f"{type(exc).__name__}: {exc}"
+                          f"（多为 config 槽位类型不对：该给列名却给了字典/列表；"
+                          f"--list 可看每个方法要什么）")
+            print(f"ERROR: {mid} {spec['cn']}: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            if args.debug:
+                traceback.print_exc(file=sys.stderr)
         # tables always land on disk; the report only shows the head
         if run.result:
             for name, table in run.result.tables:
@@ -836,7 +980,8 @@ def main(argv=None) -> int:
             keys = ",".join(f"{k}={s[k]:.4g}" for k in sorted(s)
                             if isinstance(s[k], (int, float)) and not isinstance(s[k], bool))
             w.writerow([r.spec["id"], r.spec["nr"], r.spec["cn"], r.spec["family"],
-                        r.status, len(ctx["df"]), keys, os.path.basename(r.figure or ""),
+                        r.status, _model_n(r, ctx["df"]), keys,
+                        os.path.basename(r.figure or ""),
                         ";".join(os.path.basename(p) for p in (r.table_files or [])),
                         r.reason])
     n_ok = sum(1 for r in runs if r.status == "ok")

@@ -20,6 +20,7 @@ import math
 import os
 import sys
 import re
+import warnings
 from typing import Iterable, Sequence
 
 import numpy as np
@@ -199,6 +200,20 @@ def resolve_cjk_font(name: str) -> tuple[str, str | None]:
                         f"如需固定请 set_style(font_cjk=...)")
 
 
+_STYLE_APPLIED = False
+
+
+def ensure_style(width_cm: float = 15.0) -> None:
+    """Apply the publication defaults once, if the caller did not.
+
+    Library use (``ChartPack(...)``, ``methods_pack.draw``) does not go through
+    a CLI ``main``, so without this the Chinese labels silently fall back to
+    DejaVu Sans and render as boxes.
+    """
+    if not _STYLE_APPLIED:
+        set_style(width_cm=width_cm)
+
+
 def set_style(width_cm: float = 15.0,
               font_cjk: str = "SimSun",
               font_latin: str = "Times New Roman",
@@ -211,6 +226,8 @@ def set_style(width_cm: float = 15.0,
     the 15 cm single-column canvas instead of matplotlib's 6.4 in default.
     An explicit ``figsize=`` at the call site still wins.
     """
+    global _STYLE_APPLIED
+    _STYLE_APPLIED = True
     width_in = width_cm * CM
     font_cjk, font_warning = resolve_cjk_font(font_cjk)
     if font_warning:
@@ -461,13 +478,27 @@ def _write_formats(fig, out_dir: str, name: str,
     paths = []
     for ext in formats:
         path = os.path.join(out_dir, f"{name}.{ext}")
-        if ext == "tiff":
-            fig.savefig(path, dpi=dpi, facecolor="white",
-                        pil_kwargs={"compression": "tiff_lzw"})
-        elif ext == "png":
-            fig.savefig(path, dpi=dpi, facecolor="white")
-        else:
-            fig.savefig(path, facecolor="white")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            if ext == "tiff":
+                fig.savefig(path, dpi=dpi, facecolor="white",
+                            pil_kwargs={"compression": "tiff_lzw"})
+            elif ext == "png":
+                fig.savefig(path, dpi=dpi, facecolor="white")
+            else:
+                fig.savefig(path, facecolor="white")
+        missing = [str(w.message) for w in caught
+                   if "missing from font" in str(w.message)]
+        if missing:
+            # 字体缺字形时 matplotlib 只警告一次每个码位，图照样写出来。
+            # 图里出现方框是"看起来对、其实不可用"，必须让调用方停下来。
+            raise RuntimeError(
+                f"{name}: 有 {len(missing)} 个字符当前字体渲染不出来"
+                f"（多数是中文，例如 '{missing[0]}'）。\n"
+                "  调用 pubfig.set_style(font_cjk='SimSun') 或在你的脚本里设置 "
+                "font.family，确保选中的字体含中文；\n"
+                "  若这些字符是误入的（占位符、乱码），先清理文本。"
+                f"已经写出的 {path} 请删除——它里面是方框。")
         paths.append(path)
     return paths
 
@@ -1138,6 +1169,8 @@ def bar_counts(ax, labels: Sequence[str], values: Iterable[float],
                 ax.text(xx, v + span * 0.012, fmt.format(v), va="bottom",
                         ha="center", fontsize=7.8)
         ax.set_ylabel(ylabel)
+        if xlabel:
+            ax.set_xlabel(xlabel)
         style_axis(ax, "y")
 
 
@@ -1355,8 +1388,18 @@ def heatmap(ax, matrix, row_labels: Sequence[str], col_labels: Sequence[str],
 
 def corr_heatmap(ax, df, method: str = "pearson", cmap: str = "RdBu_r",
                  annotate: bool = True) -> None:
-    """Correlation heatmap from a pandas DataFrame (lower triangle shown)."""
-    corr = df.corr(method=method, numeric_only=True)
+    """Correlation heatmap (lower triangle shown).
+
+    Pass either raw data (correlations are computed) or an **already computed**
+    square symmetric matrix. Recomputing on a correlation matrix gives the
+    correlations *between* variables' correlations — numbers that match nothing.
+    """
+    arr = np.asarray(df, dtype=float)
+    square = arr.ndim == 2 and arr.shape[0] == arr.shape[1]
+    if square and np.allclose(arr, arr.T, equal_nan=True):
+        corr = pd.DataFrame(arr, index=list(df.index), columns=list(df.columns))
+    else:
+        corr = df.corr(method=method, numeric_only=True)
     if corr.empty or len(corr.columns) < 2:
         ax.text(0.5, 0.5, "有效数值变量不足", transform=ax.transAxes,
                 ha="center", va="center", fontsize=8)
@@ -1550,17 +1593,30 @@ def scree_plot(ax, explained_variance: Iterable[float],
     if ev.sum() > 1.5:
         ev = ev / ev.sum() * 100
     x = np.arange(1, len(ev) + 1)
-    ax.plot(x, ev, color=color, marker="o", markersize=3.2, linewidth=0.9,
-            label="单个成分")
-    ax.set_xlabel("成分")
+    ax.plot(x, ev, color=color, marker="o", markersize=3.6, linewidth=0.9,
+            label="单个成分/因子")
+    # 因子序号是离散类别：不钉刻度时 2 个点会被布成 1.0/1.2/1.4 这样的连续轴，
+    # 读者会以为中间还有因子。
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(int(i)) for i in x])
+    ax.set_xlim(0.6, len(ev) + 0.4)
+    if len(ev) >= 2:
+        # 特征值>1 等价于"解释方差 > 100/p"，画成参考线才读得出 Kaiser 判据
+        ax.axhline(100.0 / len(ev), color=LGRAY, lw=0.8, ls="--",
+                   label=f"Kaiser 线（{100.0 / len(ev):.1f}%）")
+    ax.set_xlabel("成分/因子序号")
     ax.set_ylabel("解释方差（%）")
     ax2 = ax.twinx()
-    ax2.plot(x, np.cumsum(ev), color=ORANGE, marker="s", markersize=2.8,
+    ax2.plot(x, np.cumsum(ev), color=ORANGE, marker="s", markersize=3.0,
              linewidth=0.9, label="累计")
     ax2.set_ylim(0, 105)
     ax2.set_ylabel("累计（%）")
     ax2.spines["top"].set_visible(False)
     style_axis(ax, "y")
+    handles1, labels1 = ax.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(handles1 + handles2, labels1 + labels2, frameon=False,
+              fontsize=7.6, loc="center right")
 
 
 def biplot(ax, scores, loadings, labels: Sequence[str] | None = None,

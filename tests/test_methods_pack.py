@@ -128,6 +128,23 @@ class MethodsRunTest(TempCase):
             self.assertTrue(any(f.startswith(mid) for f in os.listdir(fig_dir)),
                             f"{mid} 应有配图")
 
+    def test_model_n_does_not_sum_scalar_rows(self):
+        """成对比较表每行一个样本量，相加会得到 25625（数据只有 2878 行）。"""
+        import types
+
+        import pandas as pd
+
+        import methods_pack as MP
+
+        scalar = pd.DataFrame({"pair": ["a-b", "a-c"], "n": [28, 27]})
+        grouped = pd.DataFrame({"group": ["甲", "乙", "丙"], "n": [10, 12, 8]})
+        run = types.SimpleNamespace(
+            result=types.SimpleNamespace(stats={}, tables=[("t", scalar)]))
+        self.assertEqual(MP._model_n(run, pd.DataFrame({"x": range(100)})), 28)
+        run2 = types.SimpleNamespace(
+            result=types.SimpleNamespace(stats={}, tables=[("t", grouped)]))
+        self.assertEqual(MP._model_n(run2, pd.DataFrame({"x": range(100)})), 30)
+
     def test_t_test_refuses_three_groups(self):
         proc = run("methods_pack.py", "--data", self.data, "--config", self.cfg,
                    "--out", self.out, "--methods", "m12", "--no-figures")

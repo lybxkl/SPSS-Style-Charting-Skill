@@ -36,7 +36,7 @@ from scipy import stats
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pubfig import (  # noqa: E402
-    set_style, save_fig, wilson_ci, style_axis,
+    set_style, ensure_style, save_fig, wilson_ci, style_axis,
     bar_counts, plot_distribution, plot_violin, stacked_bar, line_ci,
     heatmap, corr_heatmap, scatter_fit, roc_curve, calibration_plot,
     pareto, scree_plot, forest_plot, dumbbell,
@@ -552,6 +552,7 @@ class ChartPack:
         ``n``-vs-row-count violation becomes a manifest row whose ``status`` says
         why, instead of vanishing without a trace.
         """
+        ensure_style()   # 程序化用法（测试、用户脚本）不经过 main
         self._seq += 1
         cid = f"F{self._seq:02d}"
         if not self._keep(cid, slug, section):

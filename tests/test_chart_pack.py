@@ -79,6 +79,32 @@ class PackCLICase(TempCase):
         self.assertTrue(os.path.isfile(path), f"missing manifest: {path}")
         return read_csv(path)
 
+    def test_config_naming_missing_columns_lists_what_exists(self):
+        """A borrowed config must fail with the column names, not with a NameError."""
+        cfg = self.p("cfg.json")
+        with open(cfg, "w", encoding="utf-8") as handle:
+            json.dump({"outcome": "no_such_outcome", "group": "no_such_group",
+                       "filter_query": "no_such_flag == 1"}, handle, ensure_ascii=False)
+        proc = run(SCRIPT, "--data", self.data, "--config", cfg,
+                   "--out", self.out("cfg"), "--max-charts", 1)
+        self.assertEqual(proc.returncode, 2, proc.stdout[-800:])
+        self.assertIn("no_such_outcome", proc.stderr)
+        self.assertIn("no_such_group", proc.stderr)
+        self.assertIn("available (first 25)", proc.stderr)
+        # the filter error must never surface as a bare pandas NameError
+        self.assertNotIn("Traceback", proc.stderr)
+
+    def test_filter_query_with_unknown_column_suggests_a_name(self):
+        cfg = self.p("cfg2.json")
+        with open(cfg, "w", encoding="utf-8") as handle:
+            json.dump({"filter_query": "outcome_binaryy == 1"}, handle,
+                      ensure_ascii=False)
+        proc = run(SCRIPT, "--data", self.data, "--config", cfg,
+                   "--out", self.out("cfg2"), "--max-charts", 1)
+        self.assertEqual(proc.returncode, 2, proc.stdout[-800:])
+        self.assertIn("outcome_binaryy", proc.stderr)
+        self.assertIn("did you mean", proc.stderr)
+
     def test_manifest_v2_fields(self):
         """A normal run writes manifest v2 with real dpi/px_width/data_hash."""
         out = self.out()
@@ -407,6 +433,29 @@ class DegenerateCorrespondenceCase(TempCase):
         self.assertEqual(len(pack.skipped), 1)
         self.assertIn("退化", pack.skipped[0]["reason"])
         self.assertEqual(pack.errors, 0)                        # a skip, not an error
+
+    def test_zero_inertia_is_skipped_before_the_dimension_check(self):
+        """Independence means nothing to plot -- and the first guard must catch it.
+
+        A table whose rows are proportional to each other has total inertia 0, so
+        every singular value is 0 and even ``sv[1]`` is "not small".  Without the
+        zero-inertia guard the code falls through to the dimension check and, on a
+        later refactor, would divide by zero instead of skipping.
+        """
+        import pandas as pd
+        import auto_chart_pack as acp
+        cells = {("g1", "s1"): 10, ("g1", "s2"): 20,
+                 ("g2", "s1"): 20, ("g2", "s2"): 40}     # exactly proportional
+        rows = []
+        for (g, s), n in cells.items():
+            rows += [{"cat": g, "stage": s}] * n
+        pack = acp.ChartPack(pd.DataFrame(rows), self.p("out_zero"), {}, ["png"],
+                             top_n=6, min_n=3)
+        pack.correspondence("cat", "stage")
+        self.assertEqual(pack.manifest, [])
+        self.assertEqual(len(pack.skipped), 1, pack.skipped)
+        self.assertIn("惰性", pack.skipped[0]["reason"])
+        self.assertEqual(pack.errors, 0)
 
     def test_healthy_table_still_plots(self):
         """The guard must not swallow a table that really has two dimensions."""

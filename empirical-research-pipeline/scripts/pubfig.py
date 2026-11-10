@@ -122,17 +122,6 @@ def cjk_font_candidates(limit: int = 10) -> list[str]:
     return sorted(names)[:limit]
 
 
-def check_cjk_font(name: str) -> None:
-    """Strict variant: raise unless ``name`` itself is installed."""
-    from matplotlib import font_manager
-    try:
-        font_manager.findfont(name, fallback_to_default=False)
-        return
-    except Exception:
-        pass
-    _raise_no_font(name)
-
-
 def _raise_no_font(name: str) -> None:
     candidates = cjk_font_candidates()
     hint = "、".join(candidates) if candidates else "（本机未发现中文字体）"
@@ -141,6 +130,48 @@ def _raise_no_font(name: str) -> None:
         f"本机可用的中文字体：{hint}。"
         f"请用 set_style(font_cjk=...) 指定其中一个，或安装 SimSun / Noto Sans CJK。"
     )
+
+
+def has_bold_face(name: str) -> bool:
+    """True when the installed family actually ships a bold (>=600) face."""
+    from matplotlib import font_manager
+    for entry in font_manager.fontManager.ttflist:
+        if str(getattr(entry, "name", "")) != name:
+            continue
+        weight = getattr(entry, "weight", 400)
+        if isinstance(weight, str):
+            if weight.strip().lower() in ("bold", "heavy", "black", "semibold",
+                                          "demibold", "extrabold", "ultrabold"):
+                return True
+            continue
+        try:
+            if int(weight) >= 600:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def check_cjk_font(name: str) -> None:
+    """Strict variant: raise unless ``name`` itself is installed.
+
+    Also reports a missing bold face: most CJK families ship regular only, and
+    matplotlib then resolves weight 700 to weight 400 *without failing*, so the
+    panel labels and headers come out regular and nobody notices until print.
+    """
+    from matplotlib import font_manager
+    try:
+        font_manager.findfont(name, fallback_to_default=False)
+    except Exception:
+        _raise_no_font(name)
+        return
+    if not has_bold_face(name):
+        candidates = [c for c in cjk_font_candidates(limit=40)
+                      if has_bold_face(c)]
+        hint = "、".join(candidates[:4]) or "（本机未见带粗体的中文字族）"
+        print(f"warning: 中文字体 {name!r} 没有 bold 字重；加粗的面板字母与标题会按常规字重"
+              f"绘制（不报错、屏幕上也看不出）。可用带粗体的字族：{hint}",
+              file=sys.stderr)
 
 
 def resolve_cjk_font(name: str) -> tuple[str, str | None]:

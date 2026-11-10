@@ -1764,11 +1764,17 @@ class ChartPack:
                             log_scale = scale == "log"
                             ref = 1.0 if log_scale else 0.0
                             n_model = len(self.df)
+                            n_source = "data rows (coef CSV has no n)"
                             if sub["n"].notna().any():
                                 try:
                                     n_model = int(float(sub["n"].dropna().iloc[0]))
+                                    n_source = "coef CSV"
                                 except (TypeError, ValueError):
-                                    pass
+                                    n_source = "data rows (coef n unparsable)"
+                                    print(f"warning: forest {m}: coef n="
+                                          f"{sub['n'].dropna().iloc[0]!r} unparsable; "
+                                          f"caption falls back to {n_model} data rows",
+                                          file=sys.stderr)
                             # n comes from the coef CSV (model rows), not from the data
                             # rows: when it exceeds them the scope is not row-level.
                             n_scope = "sample" if n_model <= len(self.df) else "corpus"
@@ -1789,6 +1795,9 @@ class ChartPack:
                             family = log_family if log_scale else lin_family
                             caption = (f"注：N={n_model:,}；模型 {m}；点为 {metric}，线为 95%CI；"
                                        f"参考线 {metric}={ref:g}；数据来源：分析数据集。")
+                            if n_source != "coef CSV":
+                                caption = (caption[:-1] +
+                                           f"（N 取自数据行数：{n_source}）")
                             if rows_dropped:
                                 caption = (caption[:-1] +
                                            f"（{rows_dropped} 行缺 estimate/CI，未绘）。")
@@ -2077,6 +2086,19 @@ def main() -> int:
         cfg["survival_event"] = args.survival_event
     if args.survival_group:
         cfg["survival_group"] = args.survival_group
+    # A config copied from another project names columns this file does not have.
+    # Say which ones exist, or the only reasonable next step is guessing.
+    declared = [key for key in ("id", "time", "group", "treatment", "outcome",
+                                "region", "trial", "survival_time", "survival_event",
+                                "survival_group")
+                if cfg.get(key)]
+    missing_declared = [str(cfg[key]) for key in declared if cfg[key] not in df.columns]
+    if missing_declared:
+        available = ", ".join(map(str, df.columns[:25]))
+        print(f"ERROR: config declares column(s) missing from the data: {missing_declared}; "
+              f"available (first 25): {available}", file=sys.stderr)
+        return 2
+
     try:
         df, filter_desc = apply_filter(df, cfg)
     except ValueError as exc:

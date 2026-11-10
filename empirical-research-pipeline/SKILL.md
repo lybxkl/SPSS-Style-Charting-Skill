@@ -84,10 +84,14 @@ python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --
 
 | 文件 | 用途 |
 |---|---|
-| `corpus_audit.csv` | 每份文件的扩展名、类型、字节数、页数/表数、字符数、图片数、MD5、状态、错误 |
-| `corpus_summary.json` | 机器可读的汇总 |
-| `corpus_duplicates.csv` | 重复组、保留/移除建议 |
-| `corpus_report.md` | 可直接贴进项目日志的中文报告 |
+| `corpus_files.csv` | 每份文件的扩展名、类型、字节数、页数/表数、字符数、**有效字符数**、图片数、MD5、状态、错误 |
+| `corpus_summary.json` | 机器可读的汇总，含 `sampling_frame`（root/扩展名/跳过目录/min-chars/是否内容去重） |
+| `corpus_duplicates.csv` | 重复组、保留/移除建议、`keeper_reason` |
+| `corpus_report.md` | 可直接贴进项目日志的中文报告，顶部先写「抽样框」 |
+
+主键列同时写 `rel_path` 与旧名 `relpath`（见 `docs/CONTRACTS.md`）；下游脚本按别名顺序解析，找不到键列直接报错。
+
+**字符数有两个口径**：`chars` 是抽取到的全部字符，`chars_effective` 去掉纯页码行、目录行与空白。`--min-chars` 判的是后者——扫描件每页印 `i/n` 能轻易凑出上百个字符，用 `chars` 判会把整本扫描件当"有文本"。`textless` / `image_only` 的判定也改用 `chars_effective`。
 
 状态机（每份文件必须落入一类）：
 
@@ -115,13 +119,22 @@ python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --
 - 顶层/年份分布只统计唯一样本（`valid` 且非副本）；不要把元数据、损坏文件或重复副本算进样本结构。
 - 重复副本：按 MD5 分组；保留“文件名含标识/年份、路径更短、文本完整”的那一份，其余移动到 `_duplicates/`，不要直接删除。
 - 文件名截断、尾随点、超长路径：Windows 下常见；用 Python 读取并在报告中记录，不要靠资源管理器手工数。
-- 同名不同文、正文相同但元数据/导出设置不同（MD5 不同）：必须按标题/关键字段/正文抽样人工复核，不能只靠 MD5 自动去重。
+- 同名不同文、正文相同但元数据/导出设置不同（MD5 不同）：必须按标题/关键字段/正文抽样人工复核，不能只靠 MD5 自动去重。需要自动查这一层时加 `--content-dedupe`：它把 valid 文件抽出的正文归一化后取 sha1，另写 `dup_content_group` / `dup_role_content`。默认关闭是因为要真正打开每个文件（大语料上很慢），而字节级分组已经够用；报告里会同时给出字节组与内容组的数字和口径关系。
+- 单个文件打不开时不会中断整次扫描：该文件记 `status="unreadable"` 并在 `error` 列写异常，末行打印 `unreadable: N`；需要严判时加 `--fail-on-issues` 返回 2。
+- `--out-dir` 不要放在 `--root` 里面；放进去也能跑，但脚本会按产物文件名跳过自身输出，报告里注明跳过了多少。放在语料目录外最省事（语料目录里的产出会被当成"资料"）。
 
 然后运行 `scripts/dedupe_corpus.py` 生成去重计划：
 
 ```bash
-python scripts/dedupe_corpus.py --audit "output/audit/corpus_audit.csv" --root "资料目录" --out-dir "output/audit" --apply
+# 先生成计划并查看（不移动任何文件）
+python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit"
+# 确认后执行
+python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit" --apply
+# 反悔：把 move 的移回、把 copy 的删掉（仅当副本 MD5 仍与原件一致）
+python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit" --undo
 ```
+
+`--apply` 前会逐组校验 keeper 真的在盘（keeper 被删或改名就整组跳过并在 `move_log.csv` 记 `skipped`，不会把唯一副本搬走）。`move_log.csv` 记 `group/src/dest/action/status/reason`，`--undo` 靠它反演。**移动失败、跳过、或日志里有 conflict 时返回 2**，不能当成功处理；`--undo` 发现没有任何可复原条目时也返回 2（日志全是 copied 时会明确报 `nothing to undo`）。
 
 **闸门**：`sample_flow.md` 能对账：
 
@@ -168,8 +181,8 @@ python scripts/dedupe_corpus.py --audit "output/audit/corpus_audit.csv" --root "
    - 默认 `--profile generic`：适用于访谈、新闻、政策、报告、网页、会议记录等任意文本资料。
    - `--profile legal`：额外抽取法院、案号、省份、案由候选；只在处理中国裁判文书时使用。
    - CSV/TSV/JSON/XLSX 等表格会跳过并提示走统计流程；图片/音视频会提示先 OCR/转写。
-3. 人工/LLM 编码时，每条记录至少保存 `*_ev` 证据句；没有证据句的编码视为未完成。
-4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。
+3. 人工/LLM 编码时，每条记录至少保存 `*_ev` 证据句；没有证据句的编码视为未完成。证据句的格式是 `<字段>=<原文片段>@<char_start>-<char_end>`（片段超 200 字会加「…」，但偏移量始终指向整句），同一句先判否定再判肯定，命中项带 `negated`/`polarity`——**两个编码员的结果可以逐条按字段+偏移对齐，不必人工翻原文**。
+4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。**这一步是人工协议：本 skill 没有任何脚本计算 κ**，需要自己算（或让 SPSS/R/Python 跑 `sklearn.metrics.cohen_kappa_score`），流程见 `references/02-coding-protocol.md` 的「信度检验」节。
 5. codebook 冻结后再全量编码；后续改动要记录版本与影响范围。
 
 ### 2.2 问卷/量表/结构化抽取
@@ -193,15 +206,19 @@ python scripts/dedupe_corpus.py --audit "output/audit/corpus_audit.csv" --root "
 - `data/analysis.csv`：分析用宽表，一行一个分析单位。
 - `data/analysis.sav`：SPSS 直接打开，带变量标签/值标签。
 
-必须包含的标记列：
+主键与标记列（`docs/CONTRACTS.md` §1、§5）：
 
-| 列 | 含义 |
-|---|---|
-| `in_scope` | 是否属于研究范围（时间、类型、地区、语言） |
-| `in_analysis` | 是否进入描述统计（排除无法编码/关键缺失） |
-| `model1_sample` 等 | 每个模型单独的样本标记；不要用 `in_analysis` 代替 |
-| `dup_group` | 重复组 ID；保留份为 0，副本为 1 |
-| `exclusion_reason` | 排除原因，便于写样本流程 |
+| 列 | 含义 | 谁产生 |
+|---|---|---|
+| `rel_path` | 相对资料根目录的路径，全链路主键 | `audit_corpus.py`、`make_coding_sheet.py` 都写；`audit_corpus.py` 同时写旧名 `relpath` 以兼容老脚本 |
+| `in_scope` | 是否属于研究范围（时间、类型、地区、语言） | **你在编码时加**，脚本不生成 |
+| `in_analysis` | 是否进入描述统计（排除无法编码/关键缺失） | **你在编码时加**；`auto_stats.py`/`auto_chart_pack.py` 的默认筛选读它，传了 `filter_query` 就不再叠加它 |
+| `model1_sample` 等 | 每个模型单独的样本标记；不要用 `in_analysis` 代替 | **你在建模时加**；`auto_stats.py --spec` 会按模型写各自的 N |
+| `dup_group` / `dup_role` | 重复组 ID 与 keeper/duplicate 角色 | `audit_corpus.py`（字节级）；`--content-dedupe` 另写 `dup_content_group`/`dup_role_content` |
+| `exclusion_reason` | 排除原因，便于写样本流程 | **你在编码时加**；`make_coding_sheet.py` 把被 `--audit`/`--dedupe-plan` 排除的文件逐条写进 `skipped_documents.csv`（含 reason），不靠这一列 |
+| `<字段>_src` | 非直接抽取字段的来源（`year_src`/`charge_src`/`court_level_src` 等） | **编码时加**；`make_coding_sheet.py --profile legal` 会为抽取字段写 5 个 `*_src` |
+
+`in_scope`/`in_analysis`/`model*_sample`/`exclusion_reason` 目前没有任何脚本自动生成或校验——它们是**约定**，写不写由你决定，但样本流程对不上时第一件事就是查这几列。`sample_flow.csv`（列 `stage,n,note`）应由 `make_coding_sheet.py` 生成并逐档对账，不要手写正文里的漏斗数字。
 
 用 `scripts/csv_to_spss_syntax.py` 生成 `.sps`，避免手写 `GET DATA` 时列类型错位。CSV 里若是“是/否、有/无、支持/不支持”等二值文本，脚本会自动追加 `RECODE ... ('是'=1) ('否'=0) INTO *_num`，Logistic 直接用数值列；不需要时加 `--no-recode`。
 
@@ -219,7 +236,27 @@ python scripts/dedupe_corpus.py --audit "output/audit/corpus_audit.csv" --root "
 python scripts/auto_stats.py --data data/analysis.csv --config assets/chart_config.example.json --out output/analysis_pack
 ```
 
-它输出 `descriptives.csv`、`group_tests.csv`、`binary_rates.csv`、`correlations.csv`、`univariate_models.csv`、`univariate_skipped.csv` 和 `analysis_pack.md`，用于发现值得进一步建模的变量；**最终模型仍按预设定规格在 SPSS/R/Stata 中估计**，不要用自动筛查的 p 值筛变量。
+它输出 `descriptives.csv`、`group_tests.csv`、`binary_rates.csv`、`correlations.csv`、`univariate_models.csv`、`univariate_skipped.csv` 和 `analysis_pack.md`，用于发现值得进一步建模的变量；**不要用自动筛查的 p 值筛变量**。
+
+多变量主模型有两条路，选一条并全程一致：
+
+```bash
+# A. 用 spec 显式声明后由本脚本估计（写清参照组、聚类、稳健标准误）
+python scripts/auto_stats.py --data data/analysis.csv --spec model_spec.json \
+  --out output/models --separation drop --vif --roc
+```
+
+`model_spec.json` 形如：
+
+```json
+{"models": [{"id": "m1", "type": "logit", "outcome": "y",
+             "predictors": ["x1", "x2", "C(region, Treatment('华东'))"],
+             "ref": {"region": "华东"}, "cluster": "province", "cov": "HC1"}]}
+```
+
+输出 `coef_<id>.csv`（可直接喂 `auto_chart_pack.py --coef` 画森林图）、`model_summary.md`、`model_meta.json`、`separation_report.csv`。**参照组必须显式声明**（`C(名, Treatment('水平'))` 或 `ref` 字典），未声明直接退出码 2 并列出可选水平——脚本不猜参照组。空单元格按 `--separation drop|merge|error` 处理（默认 drop，会写进 `separation_report.csv`）；`|β|>12` 或 `se>8` 的估计视为不可信，熔断且不写进系数表。
+
+B. 或在 SPSS/R/Stata 中按同一份预设规格估计，把系数导出成同样列名的 CSV 再喂图表脚本。
 
 脚本会自动识别结果变量类型：
 
@@ -264,7 +301,8 @@ python scripts/auto_chart_pack.py \
 
 连续/多分类结果不需要改脚本：结果变量会自动切换为“结果分布 + 分组均值/构成”图；文本结果同样可用 `outcome_map` 指定编码。`--coef` 支持 `metric`（OR/HR/RR/beta）与 `n` 列，森林图会按模型样本量写 N；`--pred` 支持 0/1 或“是/否”标签，常数预测/单一类别会跳过 ROC/PR/校准并写明原因。`term_labels` 可把 `lv3` 这类模型项名映射为中文。双比例哑铃图需在 config 里用 `dumbbell` 指定两个 0/1 列。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可加 `--survival-group`）生成 Kaplan–Meier 曲线。
 
-默认覆盖 7 组，常规约 40–55 张：二分类约 44 张，带模型输入约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动；实际数量以 `chart_manifest.csv` 为准。
+- 默认覆盖 7 组，常规约 40–55 张：二分类约 44 张，带模型输入约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动；实际数量以 `chart_manifest.csv` 为准。
+- 产出上限默认 `--max-charts 60`（试跑时调小，`0` 或负数 = 不限制）；只想跑某几张/某几段用 `--only`（图号、slug 或片段，可重复）与 `--sections A,B`（字母或中文段名，可重复）。`--list-charts` 先列清单再决定。
 
 - **A 数据质量**：缺失率、样本类别/年份/地区、二元变量发生率。
 - **B 单变量**：结果分布（二分类/连续/多分类分别处理，连续结果加 Q-Q）、处理构成（条形+环形）、数值分布、类别构成。
@@ -277,7 +315,7 @@ python scripts/auto_chart_pack.py \
 出图策略：
 
 - **每个主发现至少 2 张图**：主结果图 + 稳健性/诊断/异质性图。
-- **正文 7–10 张，附录 20–50 张**；图数不设上限。
+- **正文 7–10 张，附录 20–50 张**；自动包默认上限 60 张（`--max-charts 0` 解除），正文要多少张由你挑，不由上限决定。
 - 每张图先写“回答什么问题”；没有问题就不画。
 - 用 `references/07-chart-atlas.md` 选型，覆盖 SPSS 常用高级图形：簇状/堆叠/100% 堆叠条形、线/面积、直方图、箱线/提琴、误差条、散点/气泡、散点矩阵、Pareto、ROC、校准、Kaplan-Meier（有生存数据时）、碎石图、因子载荷、聚类树状图、对应分析、MDS、控制图等。
 - 每张图写入 `chart_manifest.csv`：图号、问题、类型、变量、N、图注、文件路径。
@@ -300,7 +338,7 @@ set_style()  # 15 cm 版心，宋体/Times New Roman，600 dpi
 - 误差线注明 95% CI；森林图实心点=显著、空心点=不显著。
 - 偏态连续变量用 log10 或 P99 截断，并在轴标签/图注注明。
 
-**闸门**：`chart_manifest.csv` 中每张图都有问题、N、图注、文件；正文主图与附录图不重复；PDF 内嵌图宽度 ≥ 3000 px（15 cm 宽时约 600 dpi）；图注、图、正文引用三者齐全。
+**闸门**：`chart_manifest.csv` 中每张图都有问题、N、图注、文件；正文主图与附录图不重复；PDF 内嵌图按版面尺寸折算的**有效 dpi ≥ 600**（15 cm 宽 = 3543 px；3000 px 只有 508 dpi）；图注、图、正文引用三者齐全。
 
 详见 `references/04-figures-publication.md` 和 `references/07-chart-atlas.md`。
 
@@ -322,7 +360,7 @@ Word 导 PDF 时，Word 会把 600 dpi 图压到约 200 dpi。用 `scripts/expor
 python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscript.pdf" --figure-map "figure_map.json"
 ```
 
-**闸门**：PDF 页数、图数、图题数一致；每张图的内嵌宽度 ≥ 3000 px；表格没有断行/断表头。
+**闸门**：PDF 页数、图数、图题数一致；每张图按版面折算的有效 dpi ≥ 600（`qa_outputs.py --min-dpi 600` 会算）；表格没有断行/断表头。
 
 详见 `references/05-manuscript-assembly.md`。
 
@@ -333,8 +371,10 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 运行：
 
 ```bash
-python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_audit.csv" --manifest "output/chart_pack/chart_manifest.csv" --strict
+python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --min-dpi 600
 ```
+
+退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。
 
 再按 `references/06-qa-checklist.md` 人工过一遍。重点不是格式，而是：
 
@@ -354,10 +394,10 @@ python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --f
 
 | 脚本 | 作用 |
 |---|---|
-| `scripts/audit_corpus.py` | 扫描任意资料目录：文件状态、文本/页数、MD5、重复、格式分布、年份提示 |
-| `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动到 `_duplicates/` |
+| `scripts/audit_corpus.py` | 扫描任意资料目录：文件状态、文本/页数、有效字符、MD5、重复、内容级重复（`--content-dedupe`）、抽样框、格式分布、年份提示 |
+| `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
 | `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段 |
-| `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频） |
+| `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
@@ -402,3 +442,4 @@ python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --f
 8. **结果是“是/否”文本却直接当连续变量。** 用 `outcome_map` 明确正类，或在 CSV 里编码为 0/1；脚本不会猜正负方向。
 9. **审计只数某一种格式，静默漏掉其他文件。** 所有文件都要有状态；`total_files` 要能和资源管理器对账。
 10. **把表格数据塞进文本编码。** CSV/Excel 直接走 `auto_stats`/SPSS 流程；文本编码适合文档、访谈、网页等非结构化资料。
+

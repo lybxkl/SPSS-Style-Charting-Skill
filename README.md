@@ -8,16 +8,17 @@
 
 ## 功能
 
-- **多格式资料审计**：逐文件建立状态机，区分 `valid / metadata / hidden / unsupported / quarantined / zero_byte / corrupt / encrypted / textless / image_only / media`，并对账“原始文件 → 可读 → 唯一样本 → 分析样本”。
-- **内容去重**：MD5 分组 + 稳定标识/标题辅助复核；先生成计划，`--apply` 移动到 `_duplicates/`，不删除原件。
-- **通用编码工作表**：从 PDF、DOCX、ODT、PPTX、HTML、TXT/MD/RTF 等抽取全文、标题、年份和关键词证据句；默认 `generic`，`--profile legal` 才抽取法院/案号/省份/案由。
+- **多格式资料审计**：逐文件建立状态机，区分 `valid / metadata / hidden / unsupported / quarantined / zero_byte / corrupt / encrypted / textless / image_only / media / unreadable`，并对账“原始文件 → 可读 → 唯一样本 → 分析样本”；单个文件读不出不会让整次扫描崩溃，会记 `unreadable` 并在末行汇总。
+- **内容去重**：MD5 分组，`--content-dedupe` 另按正文归一化指纹分组（同一判决的不同导出版本）；先生成计划，`--apply` 移动到 `_duplicates/` 并写 `move_log.csv`，`--undo` 可回滚，不删除原件。
+- **通用编码工作表**：从 PDF、DOCX、ODT、PPTX、HTML、TXT/MD/RTF 等抽取全文、标题、年份和关键词证据句；默认 `generic`，`--profile legal` 才抽取法院/案号/省份/案由。被审计/去重排除的文件逐条落 `skipped_documents.csv`，样本漏斗写 `sample_flow.csv`。
 - **表格数据质量**：行/列、主键、缺失、分类编码、异常值、日期范围；CSV/Excel 直接进入统计流程，不混入文本编码。
-- **SPSS 数据**：输出 CSV/JSONL；生成 `.sps` 读入语法、变量标签、值标签，并自动把“是/否、有/无、支持/不支持”等二值文本 `RECODE` 为 `*_num`。
-- **自动统计筛查**：描述统计、组间检验、相关、单变量 OLS/Logit；多分类自变量自动哑变量化，完全分离/不可估计模型写入跳过清单。
-- **全景图表包**：默认覆盖 A 数据质量、B 单变量、C 双变量、D 多变量、E 时间、F 模型诊断、G 附录，约 40–55 张；含 PCA、Ward 聚类、MDS、对应分析、控制图、ROC/PR/校准/混淆矩阵/Lift、Kaplan–Meier 等。
-- **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF；需要 TIFF 时加 `--tiff` 输出 LZW 无损 TIFF。
-- **Word → PDF 高清回填**：定位 Word 导出 PDF 中被压缩的图，替换回 600 dpi 原图，并检查内嵌图宽度。
-- **终检**：核对样本流程、N、图注、图表清单、PDF 图分辨率；`chart_manifest.csv` 支持图号唯一性、N 合理性和文件路径检查。
+- **SPSS 数据**：输出 CSV/JSONL；生成 `.sps` 读入语法、变量标签、值标签、`MISSING VALUES` 与 `VARIABLE LEVEL`（NA 不再与 0 混同），并自动把“是/否、有/无、支持/不支持”等二值文本 `RECODE` 为 `*_num`。
+- **自动统计筛查**：描述统计、组间检验、相关、单变量 OLS/Logit；多分类自变量自动哑变量化，完全分离/不可估计模型写入跳过清单。`--spec` 提供**多变量模型入口**（logit/ols、聚类稳健、HC0/HC1/HC3、显式参照组、空单元分离检测），输出可直接喂图表的 `coef_<id>.csv`。
+- **全景图表包**：默认覆盖 A 数据质量、B 单变量、C 双变量、D 多变量、E 时间、F 模型诊断、G 附录，常规 40–55 张（`--max-charts` 默认上限 60，0 = 不限；`--only`/`--sections` 只跑需要的）；含 PCA、Ward 聚类、MDS、对应分析、控制图、ROC/PR/校准/混淆矩阵/Lift、Kaplan–Meier 等。
+- **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF、LZW 无损 TIFF（默认三格式；`--no-tiff` 可关）。log 轴次刻度标注已关闭，不再出现 `4×10⁻¹` 混排。
+- **Word → PDF 高清回填**：定位 Word 导出 PDF 中被压缩的图，替换回 600 dpi 原图，回填后清理页面内容树（`clean_contents` + `garbage=4`）以免旧的低分辨率副本残留在成品里，并按版面尺寸校验有效 dpi。
+- **终检**：核对样本流程、N、图注、图表清单、PDF/图片的**有效 dpi**（不是像素宽）；`chart_manifest.csv` 支持图号唯一性、N 合理性（允许 `3111→2713` 这类区间与 `n_scope`）和相对路径检查；有 error 退出码 2。
+- **可测试**：`tests/` 下 159 个 `unittest` 用例，全部使用运行时生成的最小 fixture，不依赖网络、真实资料或 SPSS/Word。
 
 ## 支持的资料
 
@@ -39,10 +40,21 @@
 ```text
 SPSS-Style-Charting-Skill/
 ├── README.md
+├── CHANGELOG.md                            # 版本变更记录
 ├── requirements.txt
 ├── .gitignore
 ├── dist/
 │   └── empirical-research-pipeline.skill   # 可直接导入的打包版
+├── docs/
+│   ├── CONTRACTS.md                        # 跨脚本契约：主键、样本漏斗、N、缺失值、来源、证据、图规格、退出码
+│   └── ISSUES-FIXED.md                     # 审计发现的缺陷索引与修复状态
+├── tests/                                  # 159 个 unittest 用例，fixture 运行时生成
+│   ├── _helpers.py
+│   ├── test_audit_layer.py
+│   ├── test_coding_layer.py
+│   ├── test_stats_charts.py
+│   ├── test_chart_pack.py
+│   └── test_output_layer.py
 └── empirical-research-pipeline/
     ├── SKILL.md
     ├── assets/                             # 配置、codebook、图注、交付清单模板
@@ -50,6 +62,18 @@ SPSS-Style-Charting-Skill/
     ├── scripts/                            # 可执行流水线
     └── evals/                              # 行为测试提示词
 ```
+
+## 测试
+
+```bash
+# 全部
+python -m unittest discover -s tests -p "test_*.py" -v
+
+# 只跑某一层
+python -m unittest discover -s tests -p "test_output_layer*.py" -v
+```
+
+用例不需要网络、真实资料、SPSS 或 Word；`export_pdf_hires.py` 的用例在检测不到 Word COM 时自动 skip。
 
 ## 环境要求
 
@@ -100,19 +124,23 @@ Copy-Item -Recurse .\empirical-research-pipeline "$HOME\.agents\skills\"
 
 ```bash
 # 1. 多格式资料审计（先审计，再编码/建模）
-python scripts/audit_corpus.py --root "资料目录" --out-dir output/audit --min-chars 100
+#    --content-dedupe 额外按正文指纹找“同一文书的不同导出版本”
+python scripts/audit_corpus.py --root "资料目录" --out-dir output/audit --min-chars 100 --content-dedupe
 
-# 2. 去重计划；确认后加 --apply 移动到 _duplicates/
-python scripts/dedupe_corpus.py --audit output/audit/corpus_audit.csv --root "资料目录" --out-dir output/audit
+# 2. 去重计划；确认后加 --apply 移动到 _duplicates/（写 move_log.csv，可用 --undo 回滚）
+python scripts/dedupe_corpus.py --audit output/audit/corpus_files.csv --root "资料目录" --out-dir output/audit
+python scripts/dedupe_corpus.py --audit output/audit/corpus_files.csv --root "资料目录" --out-dir output/audit --apply
 
 # 3. 生成通用编码工作表（访谈/报告/网页/文档）
 python scripts/make_coding_sheet.py --root "资料目录" --out output/coding --keywords assets/coding-keywords.json
 
 #    如资料是中国裁判文书，可加：
 #    --profile legal --doc-type judgment
+#    被 --audit/--dedupe-plan 排除的文件会逐条写进 output/coding/skipped_documents.csv
 
 # 4. 人工/LLM 按 codebook 编码，形成 data/analysis.csv 和 data/coded.jsonl
 #    编码规则、证据句、信度检验见 references/02-coding-protocol.md
+#    注意：信度检验（Cohen's κ）是人工协议，本 skill 没有脚本代做
 
 # 5. 表格数据：生成 SPSS 读入语法与 SAV
 python scripts/csv_to_spss_syntax.py --csv data/analysis.csv --out-sps syntax/import.sps --sav-out data/analysis.sav
@@ -120,21 +148,27 @@ python scripts/csv_to_spss_syntax.py --csv data/analysis.csv --out-sps syntax/im
 # 6. 自动统计筛查
 python scripts/auto_stats.py --data data/analysis.csv --config assets/chart_config.example.json --out output/analysis_pack
 
-# 7. 生成全景图表包（PNG + PDF；加 --tiff 同时输出 TIFF）
-python scripts/auto_chart_pack.py --data data/analysis.csv --config assets/chart_config.example.json --out output/chart_pack --tiff
+#    多变量主模型：先在 spec 里显式写清因变量、预测变量与参照组，再估计
+python scripts/auto_stats.py --data data/analysis.csv --spec model_spec.json \
+  --out output/models --separation drop --vif --roc
+
+# 7. 生成全景图表包（PNG + PDF + TIFF 三格式；试跑可加 --no-tiff 提速约 30%）
+python scripts/auto_chart_pack.py --data data/analysis.csv --config assets/chart_config.example.json --out output/chart_pack
+#    只跑部分图：--only F01,F02 或 --sections A,B；先看清单：--list-charts
 
 # 8. 终检（docx/pdf 为成稿；尚未排稿时可先只用 --data/--figures/--manifest）
+#    有 error 退出码 2；--min-dpi 600 按版面折算有效 dpi（15 cm 宽 = 3543 px）
 python scripts/qa_outputs.py --docx output/manuscript.docx --pdf output/manuscript.pdf \
   --figures output/chart_pack/figures --data data/analysis.csv \
-  --audit output/audit/corpus_audit.csv \
-  --manifest output/chart_pack/chart_manifest.csv --strict
+  --audit output/audit/corpus_files.csv \
+  --manifest output/chart_pack/chart_manifest.csv --min-dpi 600
 ```
 
 ## 配置
 
 `assets/chart_config.example.json` 是列角色模板：`treatment`、`outcome`、`group`、`time`、`region`、`trial`、`filter_query`、`variable_labels`、`value_labels`、`term_labels`，以及双比例哑铃图所需的 `dumbbell`（两个 0/1 列）。示例列名和值标签均为虚构占位，使用时按自己的 codebook 替换。
 
-文本结果是“是/否”时，用 `outcome_map` 明确正类；不要依赖脚本猜方向。多分类自变量会以 `变量_水平` 进入单变量模型，参照组为省略的水平。
+文本结果是“是/否”时，用 `outcome_map` 明确正类；不要依赖脚本猜方向。多分类自变量会以 `变量_水平` 进入单变量模型，参照组为省略的水平；**用 `--spec` 跑多变量模型时参照组必须显式声明**（写成 `C(变量, Treatment('水平'))` 或在 spec 的 `ref` 里给出），未声明会直接退出码 2 并列出可选水平——脚本不替你猜参照组。
 
 ## 图表覆盖
 
@@ -161,6 +195,9 @@ python scripts/qa_outputs.py --docx output/manuscript.docx --pdf output/manuscri
 - `references/06-qa-checklist.md`：交付前 A–G 清单
 - `references/07-chart-atlas.md`：SPSS 高级图形对照与选图策略
 - `references/08-analysis-expansion.md`：主模型之外的扩展分析与记录方式
+- `docs/CONTRACTS.md`：跨脚本契约（主键 `rel_path`、`sample_flow.csv`、manifest 的 N 与 `n_scope`、缺失值语义、`<字段>_src`、证据句偏移、图与 PDF 规格、退出码）
+- `docs/ISSUES-FIXED.md`：逐条审计缺陷索引与修复/未修复状态
+- `CHANGELOG.md`：变更记录
 
 ## 说明
 
@@ -168,3 +205,8 @@ python scripts/qa_outputs.py --docx output/manuscript.docx --pdf output/manuscri
 - 样本 N、模型 N、图注 N 必须同源；去重、改 codebook、换筛选条件后要重跑模型和图表。
 - 资料中“提到某种情况”不等于“实际发生了某种结果”，结论使用“关联/对应/更可能”，不写因果。
 - 公开资料存在选择偏差、未记载不等于未发生、编码单位差异等限制，需在论文中说明。
+- 语料通常是**按关键词检索来的目的性抽样**，不是全样本；若某个关键词近乎全覆盖（例如按“生态修复”检索到的案件里 99% 提到“修复”），必须在方法部分写清抽样框，不能把占比当成总体发生率。
+- 脚本之间对列名、N、缺失值的约定以 `docs/CONTRACTS.md` 为准；出现不一致时先查契约，不要在单个脚本里就地打补丁。
+
+
+

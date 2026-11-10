@@ -101,11 +101,34 @@ def describe(df: pd.DataFrame, columns: list | None = None,
     says exactly this, and it is the single most common reporting error).
     """
     cols = columns or [c for c in df.columns if c != "rel_path"]
-    rows, notes, skewed = [], [], []
+    rows, notes, skewed, unverified = [], [], [], []
     for col in cols:
         s = df[col]
         numeric = pd.to_numeric(s, errors="coerce")
         n_obs = int(s.notna().sum())
+        # 整列缺失是最该被看见的数据质量问题；原来 `continue` 把它丢掉，
+        # 读者只会看到"变量没出现在表里"，不知道它其实一个值都没有。
+        if n_obs == 0:
+            rows.append({"variable": col, "type": "缺失", "n": 0,
+                         "missing": int(len(s)), "levels": 0, "mode": "",
+                         "mode_pct": None, "report": "无有效值（整列缺失）"})
+            notes.append(f"{col} 整列缺失：没有任何有效值，不能进入任何分析。")
+            continue
+        # 常数列按分类统计会把 sd 变成 NaN、把 1 个取值当成 1 个"水平"，
+        # 于是有人把它放进回归才发现没有变异。
+        if int(numeric.notna().sum()) == n_obs and numeric.nunique() == 1:
+            const = float(numeric.iloc[0])
+            rows.append({"variable": col, "type": "常数", "n": n_obs,
+                         "missing": int(s.isna().sum()), "levels": 1,
+                         "mode": f"{const:g}", "mode_pct": 100.0,
+                         "mean": round(const, 4), "sd": 0.0,
+                         "median": round(const, 4), "p25": round(const, 4),
+                         "p75": round(const, 4), "min": round(const, 4),
+                         "max": round(const, 4),
+                         "report": f"全样本恒为 {const:g}（无变异，不能进回归/相关）"})
+            notes.append(f"{col} 是常数（恒为 {const:g}）：标准差为 0，"
+                         f"不能参与相关或回归。")
+            continue
         if numeric.notna().sum() >= max(3, int(0.8 * n_obs)) \
                 and numeric.nunique() > 10:
             x = numeric.dropna()
@@ -125,9 +148,16 @@ def describe(df: pd.DataFrame, columns: list | None = None,
                     if 3 <= x.size <= 5000 else None
             except Exception:
                 row["normality_p"] = None
-            normal = row["normality_p"] is None or row["normality_p"] >= alpha
-            row["report"] = ("均值±标准差" if normal else "中位数（P25，P75）")
-            if not normal:
+            # normality_p 为 None 只说明"没做检验"（n>5000 超出 Shapiro 范围），
+            # 不能当成正态通过——原来那样写会把 skew=1.9 的变量推荐成均值±SD。
+            p_norm = row.get("normality_p")
+            if p_norm is None:
+                row["report"] = "中位数（P25，P75）——未做正态检验，按偏度判断"
+                unverified.append(col)
+            elif p_norm >= alpha:
+                row["report"] = "均值±标准差"
+            else:
+                row["report"] = "中位数（P25，P75）"
                 skewed.append(col)
             rows.append(row)
         else:
@@ -142,6 +172,10 @@ def describe(df: pd.DataFrame, columns: list | None = None,
                    "report": "频数（构成比%）"}
             rows.append(row)
     table = pd.DataFrame(rows)
+    if unverified:
+        head = "、".join(unverified[:6]) + ("…" if len(unverified) > 6 else "")
+        notes.append(f"{len(unverified)} 个连续变量样本量超过 5000，未做 Shapiro 检验：{head}；"
+                     "这些变量按中位数报告，若论文要报均值请先看 normality() 的 K-S 结果与偏度。")
     if skewed:
         head = "、".join(skewed[:6]) + ("…" if len(skewed) > 6 else "")
         notes.append(f"{len(skewed)}/{len(rows)} 个连续变量偏离正态（Shapiro p<{alpha}）："
@@ -225,30 +259,48 @@ def chi_square(df: pd.DataFrame, row: str, col: str,
                      f"{'已给出 Fisher 精确检验' if 'fisher_p' in extra else '结论需谨慎'}。")
     if tab.shape == (2, 2) and "fisher_p" in extra:
         verdict.append(f"Fisher 精确检验 {_fmt_p(extra['fisher_p'])}。")
-    pct = pd.DataFrame(tab)
-    return Result("chi_square", [("contingency", pct), ("expected", pd.DataFrame(expected)),
-                                 ("row_percent", (tab.div(tab.sum(axis=1), axis=0) * 100).round(1))],
+    # 三张表都必须带行标签：`pd.DataFrame(tab)` 会把 index 变成 0/1，
+    # 读者无法知道第一行是"甲"还是"乙"，表就失去意义了。
+    pct = tab.reset_index()
+    expected_df = pd.DataFrame(expected, index=tab.index,
+                               columns=tab.columns).round(2).reset_index()
+    row_pct = (tab.div(tab.sum(axis=1), axis=0) * 100).round(1).reset_index()
+    return Result("chi_square", [("contingency", pct), ("expected", expected_df),
+                                 ("row_percent", row_pct)],
                   {"chi2": float(chi2), "dof": int(dof), "p": float(p),
                    "cramers_v": float(cramers), **extra}, verdict, notes)
 
 
 def chi_square_pairs(df: pd.DataFrame, row: str, col: str,
                      adjust: str = "bonferroni", alpha: float = 0.05) -> Result:
-    """Pairwise 2x2 tests when a level has more than two categories."""
+    """Pairwise tests when a level has more than two categories.
+
+    Each pair keeps both rows and *all* column levels (2×k), because a 3-level
+    outcome makes every pair 2×3 — accepting only 2×2 silently produced zero
+    pairs, so r×k tables never got their post-hoc comparison at all.
+    """
     sub = df[[row, col]].dropna()
     levels = list(pd.crosstab(sub[row], sub[col]).index)
     rows = []
     for a, b in itertools.combinations(levels, 2):
         part = sub[sub[row].isin([a, b])]
         tab = pd.crosstab(part[row], part[col])
-        if tab.shape != (2, 2):
+        if tab.shape[0] != 2 or tab.shape[1] < 2 or int(tab.values.sum()) == 0:
             continue
-        _, p, _, exp = stats.chi2_contingency(tab, correction=False)
+        try:
+            _, p, dof, exp = stats.chi2_contingency(tab, correction=False)
+        except ValueError:
+            continue
+        method = "chi2"
+        if tab.shape == (2, 2) and float(exp.min()) < 5:
+            p = float(stats.fisher_exact(tab)[1])
+            method = "fisher"
         rows.append({"pair": f"{a} vs {b}", "n": int(tab.values.sum()),
-                     "p_raw": round(float(p), 6),
+                     "levels_compared": int(tab.shape[1]), "test": method,
+                     "dof": int(dof), "p_raw": round(float(p), 6),
                      "min_expected": round(float(exp.min()), 2)})
     if not rows:
-        raise MethodError("没有可比较的 2×2 子表")
+        raise MethodError("没有可比较的子表（每对至少要有两行）")
     out = pd.DataFrame(rows)
     m = len(out)
     out["p_adj"] = (out["p_raw"] * m).clip(upper=1).round(6) if adjust == "bonferroni" \
@@ -287,10 +339,15 @@ def t_test_independent(df: pd.DataFrame, value: str, group: str,
     d = (a.mean() - b.mean()) / pooled if pooled else float("nan")
     diff_ci = None
     try:
-        se = math.sqrt(s1 ** 2 / n1 + s2 ** 2 / n2) if not equal_var else \
-            pooled * math.sqrt(1 / n1 + 1 / n2)
-        dof = (n1 + n2 - 2) if equal_var else None
-        q = stats.t.ppf(1 - alpha / 2, dof or min(n1, n2) - 1)
+        if equal_var:
+            se = pooled * math.sqrt(1 / n1 + 1 / n2)
+            dof = float(n1 + n2 - 2)
+        else:
+            v1, v2 = s1 ** 2 / n1, s2 ** 2 / n2
+            se = math.sqrt(v1 + v2)
+            # Welch–Satterthwaite；原来用 min(n1,n2)-1 近似，区间被放宽约 2%
+            dof = (v1 + v2) ** 2 / (v1 ** 2 / (n1 - 1) + v2 ** 2 / (n2 - 1))
+        q = stats.t.ppf(1 - alpha / 2, dof)
         diff_ci = (round(float(a.mean() - b.mean() - q * se), 4),
                    round(float(a.mean() - b.mean() + q * se), 4))
     except Exception:
@@ -307,7 +364,8 @@ def t_test_independent(df: pd.DataFrame, value: str, group: str,
                          "sd": round(float(s2), 4)}])
     test = pd.DataFrame([{"levene_stat": round(float(lev_stat), 4),
                           "levene_p": round(float(lev_p), 6), "equal_var": bool(equal_var),
-                          "t": round(float(t), 4), "dof": (n1 + n2 - 2) if equal_var else None,
+                          "t": round(float(t), 4),
+                          "dof": round(float((n1 + n2 - 2) if equal_var else dof), 2),
                           "p": round(float(p), 6), "cohens_d": round(float(d), 4),
                           "mean_diff_ci_low": diff_ci[0] if diff_ci else None,
                           "mean_diff_ci_high": diff_ci[1] if diff_ci else None}])
@@ -425,7 +483,16 @@ def posthoc(df: pd.DataFrame, value: str, group: str, adjust: str = "bonferroni"
     out["stars"] = out["p_adj"].map(_stars)
     sig = out.loc[out["p_adj"] < alpha, "pair"].tolist()
     verdict = [f"事后比较（{adjust}，共 {m} 对）："
-               + ("；".join(sig) if sig else "没有任意一对差异显著")]
+               + ("；".join(sig) if sig else "没有任意一对差异显著"),
+               "标准误由合并组内方差（MSE）算出，即 LSD 法；这是最宽松的事后比较。"]
+    try:
+        lev_p = float(stats.levene(*groups).pvalue)
+        if lev_p < alpha:
+            verdict.append(f"注意：Levene {_fmt_p(lev_p)}，各组方差不齐，"
+                           f"LSD 的 p 值偏小，应改用 Games-Howell/Tamhane 或直接看 "
+                           f"Kruskal-Wallis（m17）。")
+    except Exception:
+        pass
     if out["p_raw"].min() < alpha <= out["p_adj"].min():
         verdict.append("有配对在未校正时显著、校正后不显著——这是多重比较的典型现象，"
                        "不要按未校正的 p 报告。")
@@ -469,8 +536,11 @@ def mannwhitney(df: pd.DataFrame, value: str, group: str, alpha: float = 0.05) -
     b = sub.loc[sub[group] == levels[1], value].astype(float)
     u, p = stats.mannwhitneyu(a, b, alternative="two-sided")
     n1, n2 = len(a), len(b)
-    rb = 1 - (2 * u) / (n1 * n2)  # rank-biserial correlation
-    verdict = [f"Mann-Whitney U={u:.1f}，{_fmt_p(p)}；秩相关 r={rb:.3f}。",
+    # 秩相关要能读出方向：第一组更大时为正。scipy 的 U 是"第一组的 U"，
+    # 所以是 2U/(n1n2)-1；写成 1-2U/(n1n2) 会把方向整个翻过来（且不报错）。
+    rb = (2 * u) / (n1 * n2) - 1
+    verdict = [f"Mann-Whitney U={u:.1f}，{_fmt_p(p)}；秩相关 r={rb:.3f}"
+               f"（r>0 表示 {levels[0]} 的秩更高，即取值更大）。",
                f"报告写成中位数（四分位）：{levels[0]} {a.median():.2f}"
                f"（{a.quantile(0.25):.2f}–{a.quantile(0.75):.2f}），"
                f"{levels[1]} {b.median():.2f}"
@@ -487,9 +557,13 @@ def wilcoxon(df: pd.DataFrame, before: str, after: str, alpha: float = 0.05) -> 
     both = pd.concat([a, b], axis=1).dropna()
     if both.shape[0] < 5:
         raise MethodError("配对样本少于 5 对，Wilcoxon 检验没有意义")
-    stat, p = stats.wilcoxon(both.iloc[:, 0], both.iloc[:, 1])
     diff = both.iloc[:, 0] - both.iloc[:, 1]
+    stat, p = stats.wilcoxon(both.iloc[:, 0], both.iloc[:, 1])
+    zeros = int((diff == 0).sum())
     verdict = [f"Wilcoxon 符号秩 W={stat:.1f}，{_fmt_p(p)}；差值中位数={diff.median():.3f}。"]
+    if zeros:
+        verdict.append(f"有 {zeros} 对差值为 0，按 scipy 默认 zero_method='wilcox' 已丢弃；"
+                       "论文里应说明这一点（否则 n 对不上）。")
     return Result("wilcoxon", [("test", pd.DataFrame([{"W": float(stat), "p": float(p),
                                                        "median_diff": round(float(diff.median()), 4)}]))],
                   {"W": float(stat), "p": float(p)}, verdict)
@@ -503,7 +577,12 @@ def wilcoxon(df: pd.DataFrame, before: str, after: str, alpha: float = 0.05) -> 
 def correlation(df: pd.DataFrame, columns: list, method: str = "auto",
                 alpha: float = 0.05) -> Result:
     """Pearson for normal pairs, Spearman otherwise (or when forced)."""
-    cols = [c for c in columns if c in df.columns]
+    cols = list(columns)
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise MethodError(
+            f"列不存在：{missing}；数据里可用的列是 {list(df.columns)[:12]}"
+            + ("…" if df.shape[1] > 12 else ""))
     if len(cols) < 2:
         raise MethodError("相关分析至少需要两个变量")
     data = df[cols].apply(pd.to_numeric, errors="coerce")
@@ -601,6 +680,7 @@ def linear_regression(df: pd.DataFrame, y: str, xs: list,
             vif[name] = round(float(variance_inflation_factor(Xm.values, i)), 3)
     except Exception:
         pass
+    se_type = str(robust) if robust else "nonrobust"
     params = pd.DataFrame({
         "term": fit.params.index,
         "beta": fit.params.values.round(4),
@@ -629,6 +709,7 @@ def linear_regression(df: pd.DataFrame, y: str, xs: list,
         "adj_r2": round(float(fit.rsquared_adj), 4),
         "F": round(float(fit.fvalue), 3), "F_p": float(fit.f_pvalue),
         "rmse": round(float(math.sqrt(fit.mse_resid)), 4),
+        "se_type": se_type,
         "durbin_watson": round(float(sm.stats.durbin_watson(resid)), 3),
         "breusch_pagan_p": round(float(bp), 6) if bp is not None else None,
         "resid_normality_p": round(sw_p, 6) if sw_p is not None else None,
@@ -640,6 +721,9 @@ def linear_regression(df: pd.DataFrame, y: str, xs: list,
         f"{'模型可解释约 ' + format(fit.rsquared * 100, '.0f') + '% 的方差' if fit.rsquared_adj > 0.2 else '解释力偏弱（调整 R²<0.2），结论要谨慎'}。",
         f"共线性：最大 VIF={max_vif:.2f}"
         f"（{'<5，可接受' if max_vif < 5 else '≥5，存在共线性，见下方提示'}）。",
+        f"标准误用 {se_type}"
+        + ("（异方差稳健；与 SPSS 的普通 OLS 标准误不同，别拿两张表直接比 t 值）"
+           if robust else "（普通 OLS 标准误）") + "。",
         (f"残差诊断：Shapiro {_fmt_p(sw_p)}；Breusch-Pagan {_fmt_p(bp)}。"
          if sw_p is not None else "残差诊断：样本量不足未做。"),
     ]
@@ -652,7 +736,7 @@ def linear_regression(df: pd.DataFrame, y: str, xs: list,
                   [("coefficients", params), ("model", fit_row)],
                   {"r2": float(fit.rsquared), "adj_r2": float(fit.rsquared_adj),
                    "F": float(fit.fvalue), "p": float(fit.f_pvalue),
-                   "max_vif": float(max_vif)}, verdict, notes)
+                   "max_vif": float(max_vif), "se_type": se_type}, verdict, notes)
 
 
 # ---------------------------------------------------------------------------
@@ -724,6 +808,12 @@ def logistic(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
     separated = bool(np.isinf(or_hi).any() or np.isinf(or_lo).any()
                      or (np.abs(fit.params.values) > 12).any())
     notes = []
+    n_events = int(Y.sum())
+    epv = n_events / max(1, len(names))
+    if epv < 10:
+        notes.append(f"EPV={epv:.1f}（每个自变量只有 {epv:.1f} 个事件，"
+                     f"经验下限 10）：系数方差偏大，OR 置信区间会过宽，"
+                     f"应减少自变量或改用惩罚似然/精确 Logistic。")
     if separated:
         notes.append("存在准完全分离：至少一个系数或它的置信区间发散，" 
                      "OR 与 CI 的数值不可解释（inf 表示 MLE 不存在）；" 
@@ -807,8 +897,18 @@ def _varimax(loadings: np.ndarray, max_iter: int = 100, tol: float = 1e-6) -> np
 
 def efa(df: pd.DataFrame, cols: list, n_factors: int | None = None,
         rotate: str = "varimax", alpha: float = 0.05) -> Result:
-    """Exploratory factor analysis by principal axis on the correlation matrix."""
-    cols = [c for c in cols if c in df.columns]
+    """Exploratory factor analysis, **principal component extraction**.
+
+    Loadings are eigvec·sqrt(eigval) of the correlation matrix, i.e. what SPSS
+    calls 主成分法 (the default). This is *not* 主轴因子法 (principal axis
+    factoring), which would iterate on communalities; the two give different
+    loadings, and a paper must say which one it used.
+    """
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise MethodError(
+            f"列不存在：{missing}；数据里可用的列是 {list(df.columns)[:12]}"
+            + ("…" if df.shape[1] > 12 else ""))
     if len(cols) < 3:
         raise MethodError("因子分析至少需要三个变量")
     R = _corr_matrix(df, cols)
@@ -825,17 +925,23 @@ def efa(df: pd.DataFrame, cols: list, n_factors: int | None = None,
     L = pd.DataFrame(loadings, index=cols,
                      columns=[f"F{i + 1}" for i in range(k)]).round(3)
     L["communality"] = communality.round(3)
+    # eigenvalue/variance_pct 是**未旋转**的（Kaiser 与碎石图都按它判）；
+    # 旋转会重新分配方差，所以旋转后方差另列，不能拿未旋转的那列当"旋转后解释率"。
+    ss_rot = (loadings ** 2).sum(axis=0)
     var = pd.DataFrame({"factor": [f"F{i + 1}" for i in range(k)],
                         "eigenvalue": eigval[:k].round(3),
                         "variance_pct": (eigval[:k] / len(cols) * 100).round(2),
-                        "cumulative_pct": (np.cumsum(eigval[:k]) / len(cols) * 100).round(2)})
+                        "cumulative_pct": (np.cumsum(eigval[:k]) / len(cols) * 100).round(2),
+                        "ss_loading_rotated": np.round(ss_rot, 3),
+                        "variance_pct_rotated": (ss_rot / len(cols) * 100).round(2),
+                        "cumulative_pct_rotated": (np.cumsum(ss_rot) / len(cols) * 100).round(2)})
     kb = kmo_bartlett(df, cols)
     verdict = [
         f"KMO={kb['kmo']:.3f}（{'可接受' if kb['kmo'] >= 0.6 else '偏低，不适合做因子分析'}）；"
         f"Bartlett χ²({kb['bartlett_dof']})={kb['bartlett_chi2']:.1f}，"
         f"{_fmt_p(kb['bartlett_p'])}。",
         f"特征值>1 的因子 {kaiser} 个，提取 {k} 个，累计解释 "
-        f"{var['cumulative_pct'].iloc[-1]:.1f}% 的方差。",
+        f"{var['cumulative_pct'].iloc[-1]:.1f}% 的方差（主成分法）。",
     ]
     notes = []
     weak = L[(L.drop(columns=["communality"]).abs().max(axis=1) < 0.4)]
@@ -850,7 +956,11 @@ def efa(df: pd.DataFrame, cols: list, n_factors: int | None = None,
 def pca(df: pd.DataFrame, cols: list, n_components: int = 2,
         alpha: float = 0.05) -> Result:
     """Principal components on standardised variables (SVD, no sklearn)."""
-    cols = [c for c in cols if c in df.columns]
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise MethodError(
+            f"列不存在：{missing}；数据里可用的列是 {list(df.columns)[:12]}"
+            + ("…" if df.shape[1] > 12 else ""))
     data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
     if data.shape[0] < len(cols) + 1:
         raise MethodError("样本量不足")
@@ -860,7 +970,10 @@ def pca(df: pd.DataFrame, cols: list, n_components: int = 2,
     share = var / var.sum()
     k = min(n_components, len(cols))
     scores = U[:, :k] * S[:k]
-    loadings = pd.DataFrame(Vt[:k].T, index=cols,
+    # Vt.T 是单位特征向量（方向），**不是**载荷。载荷 = 特征向量×sqrt(特征值)，
+    # 等于 corr(x, PC)；拿方向去套"载荷>0.4 才解释"，阈值作用在错的量上。
+    load = Vt[:k].T * np.sqrt(np.clip(var[:k], 0, None))
+    loadings = pd.DataFrame(load, index=cols,
                             columns=[f"PC{i + 1}" for i in range(k)]).round(3)
     var_tab = pd.DataFrame({"component": [f"PC{i + 1}" for i in range(len(cols))],
                             "eigenvalue": var.round(3),
@@ -877,7 +990,11 @@ def pca(df: pd.DataFrame, cols: list, n_components: int = 2,
 
 def cronbach(df: pd.DataFrame, cols: list, alpha: float = 0.05) -> Result:
     """Cronbach's alpha with corrected item-total correlations."""
-    cols = [c for c in cols if c in df.columns]
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise MethodError(
+            f"列不存在：{missing}；数据里可用的列是 {list(df.columns)[:12]}"
+            + ("…" if df.shape[1] > 12 else ""))
     data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
     k = len(cols)
     if k < 2 or data.shape[0] < 3:
@@ -961,11 +1078,23 @@ def _kmeans(X: np.ndarray, k: int, n_init: int = 20, max_iter: int = 300,
     return best[1], best[2]
 
 
-def _silhouette(X: np.ndarray, labels: np.ndarray) -> float:
+def _silhouette(X: np.ndarray, labels: np.ndarray, max_n: int = 5000,
+                seed: int = 0) -> float:
+    """Mean silhouette; above ``max_n`` it is computed on a fixed subsample.
+
+    Returning NaN for large n was worse than an approximation: the verdict then
+    read "nan ⇒ 结构弱", i.e. it called a clean three-cluster solution bad.
+    The subsample is drawn with a fixed seed so two runs agree.
+    """
     n = len(labels)
     uniq = np.unique(labels)
-    if len(uniq) < 2 or n > 5000:
+    if len(uniq) < 2:
         return float("nan")
+    if n > max_n:
+        rng = np.random.default_rng(seed)
+        idx = np.sort(rng.choice(n, size=max_n, replace=False))
+        X, labels = X[idx], labels[idx]
+        n = max_n
     d = np.sqrt(((X[:, None, :] - X[None, :, :]) ** 2).sum(-1))
     s = []
     for i in range(n):
@@ -985,20 +1114,35 @@ def kmeans_analysis(df: pd.DataFrame, cols: list, k: int = 3,
     data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
     if data.shape[0] <= k:
         raise MethodError("样本量应大于聚类数")
-    Z = ((data - data.mean()) / data.std(ddof=1)).values
+    mu, sd = data.mean(), data.std(ddof=1)
+    Z = ((data - mu) / sd).values
     labels, centers = _kmeans(Z, k, seed=seed)
     sil = _silhouette(Z, labels)
+    sil_sampled = bool(len(labels) > 5000)
+    sil_note_text = ""
+    if sil_sampled:
+        # 抽样算的轮廓系数仍是可解释的估计值，但必须标明，否则读者以为用了全部样本
+        sil_note_text = "轮廓系数按 5000 例固定种子子样本估计（全样本 O(n²) 内存不允许）。"
     sizes = pd.Series(labels).value_counts().sort_index()
-    prof = pd.DataFrame(centers, columns=cols)
+    # 聚类在 z 分数上做，但簇中心必须用原始单位报告：centers 是 z 分数，
+    # 直接挂原始变量名会让读者把 0.86 当成"平均 0.86 元"，静默错尺度。
+    prof = pd.DataFrame(centers * sd.values + mu.values, columns=cols)
     prof.insert(0, "cluster", [f"C{i + 1}" for i in range(k)])
     prof.insert(1, "n", [int(sizes.get(i, 0)) for i in range(k)])
+    zprof = pd.DataFrame(centers, columns=cols)
+    zprof.insert(0, "cluster", [f"C{i + 1}" for i in range(k)])
     verdict = [f"K={k}：轮廓系数 {sil:.3f}"
                f"（{'结构清晰' if sil >= 0.5 else '结构一般' if sil >= 0.25 else '结构弱，K 可能不合适'}）。",
-               "聚类结果对标准化敏感；本结果基于 z 分数。"]
+               "profile 表是原始单位均值；profile_z 表是标准化后的中心，"
+               "只用于比较各变量对划分的相对贡献。"]
+    if sil_note_text:
+        verdict.append(sil_note_text)
     return Result("kmeans", [("profile", prof.round(3)),
+                             ("profile_z", zprof.round(3)),
                              ("summary", pd.DataFrame([{"k": k, "n": int(len(data)),
                                                         "silhouette": round(sil, 4)}]))],
-                  {"k": k, "silhouette": sil}, verdict)
+                  {"k": k, "silhouette": sil,
+                   "units": "profile=original, profile_z=z-score"}, verdict)
 
 
 def hclust(df: pd.DataFrame, cols: list, k: int = 3, method: str = "ward") -> Result:
@@ -1043,8 +1187,10 @@ def lda(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
         mu = Xi.mean(axis=0)
         Sw += (Xi - mu).T @ (Xi - mu)
         Sb += len(Xi) * np.outer(mu - overall, mu - overall)
-    Sw /= max(1, len(X) - len(levels))
-    Sb /= max(1, len(levels) - 1)
+    # 解特征值时 Sw 与 Sb 必须同量纲：用 SSCP（都不除自由度）。
+    # 原实现把 Sb 除以 (g-1)、Sw 除以 (n-g) 再一起解，量纲不一致，
+    # Wilks Λ 被系统性低估（实测 0.0168，真值 0.6012）。
+    St = Sw + Sb
     try:
         vals, vecs = np.linalg.eig(np.linalg.solve(Sw, Sb))
     except np.linalg.LinAlgError:
@@ -1062,9 +1208,10 @@ def lda(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
     acc = float((pred == yv).mean())
     coef = pd.DataFrame({"variable": xs, "LD1": np.round(vecs[:, 0], 3)})
     coef["standardised"] = np.round(vecs[:, 0] * X.std(axis=0), 3)
-    wilks = float(np.prod(1 / (1 + vals)))
+    wilks = float(np.linalg.det(Sw) / np.linalg.det(St))
     verdict = [f"提取 {vecs.shape[1]} 个判别函数，第 1 个解释 "
-               f"{vals[0] / vals.sum() * 100:.1f}% 的组间差异；Wilks' Λ={wilks:.3f}。",
+               f"{vals[0] / vals.sum() * 100:.1f}% 的组间差异；"
+               f"Wilks' Λ={wilks:.3f}（=det(W)/det(T)，越小说明组间差异越大）。",
                f"回代准确率 {acc * 100:.1f}%（这是上限，不是泛化精度；"
                f"正式报告请做交叉验证或留一法）。"]
     return Result("lda", [("coefficients", coef),
@@ -1085,6 +1232,13 @@ def time_series(df: pd.DataFrame, time: str, value: str,
     data = df[[time, value]].copy()
     data[value] = pd.to_numeric(data[value], errors="coerce")
     data = data.dropna().sort_values(time)
+    # 同一时点出现多次（一批问卷、同一天立案）时，按时间取均值再建模：
+    # 否则 ARIMA 把 320 行记录当成 320 个时点估计阶数，而图画的是均值序列，
+    # 模型与图对不上，阶数也没有意义。
+    dup_rows = int(data[time].duplicated().sum())
+    if dup_rows:
+        data = (data.groupby(time, as_index=False)[value].mean()
+                    .sort_values(time))
     if data.shape[0] < 8:
         raise MethodError("时间序列至少需要 8 个时点")
     y = data[value].astype(float).values
@@ -1201,26 +1355,21 @@ def mediation(df: pd.DataFrame, x: str, m: str, y: str, n_boot: int = 2000,
 # ---------------------------------------------------------------------------
 
 
+#: 经典 Kano 评价表（Berger et al. 1993；行=功能题 1–5，列=反功能题 1–5，
+#: 1=不喜欢、3=无所谓、5=喜欢）。五分制下 25 个格子全部有确定分档：
+#:   A 魅力型  O 期望型  M 必备型  I 无差异  R 反向  Q 可疑
 KANO_RULES = {
-    # (functional, dysfunctional) -> category, using the classic 5-point table
-    "A": [(5, 1), (5, 2), (4, 1), (4, 2)],
-    "O": [(5, 3), (5, 4), (5, 5), (4, 3), (4, 4), (4, 5), (3, 4), (3, 5)],
-    "M": [(1, 5), (2, 5), (1, 4), (2, 4), (1, 3), (2, 3)],
-    "I": [(3, 3), (3, 1), (3, 2), (1, 1), (1, 2), (2, 1), (2, 2)],
-    "R": [(1, 1), (5, 1), (1, 5), (5, 5)],
+    (5, 5): "Q", (5, 4): "A", (5, 3): "A", (5, 2): "A", (5, 1): "O",
+    (4, 5): "R", (4, 4): "I", (4, 3): "I", (4, 2): "I", (4, 1): "M",
+    (3, 5): "R", (3, 4): "I", (3, 3): "I", (3, 2): "I", (3, 1): "M",
+    (2, 5): "R", (2, 4): "I", (2, 3): "I", (2, 2): "I", (2, 1): "M",
+    (1, 5): "R", (1, 4): "R", (1, 3): "R", (1, 2): "R", (1, 1): "Q",
 }
 
 
 def _kano_category(f: int, d: int) -> str:
-    if f >= 4 and d <= 2:
-        return "A"          # attractive
-    if f >= 4 and d >= 4:
-        return "O"          # one-dimensional
-    if f <= 2 and d >= 4:
-        return "M"          # must-be
-    if f <= 2 and d <= 2:
-        return "I"          # indifferent
-    return "Q" if (f == 3 and d == 3) else "R"
+    """Look the pair up in the classic table; out-of-range answers are Q."""
+    return KANO_RULES.get((int(f), int(d)), "Q")
 
 
 def kano(df: pd.DataFrame, pairs: dict) -> Result:
@@ -1236,26 +1385,32 @@ def kano(df: pd.DataFrame, pairs: dict) -> Result:
         sub = df[[fc, dc]].apply(pd.to_numeric, errors="coerce").dropna()
         if sub.empty:
             continue
-        counts = {"A": 0, "O": 0, "M": 0, "I": 0, "R": 0}
+        counts = {"A": 0, "O": 0, "M": 0, "I": 0, "R": 0, "Q": 0}
         for f, d in zip(sub[fc].astype(int), sub[dc].astype(int)):
-            cat = _kano_category(f, d)
-            counts[cat if cat in counts else "I"] += 1
-        total = sum(counts.values())
-        better = (counts["A"] + counts["O"]) / total if total else float("nan")
-        worse = -(counts["O"] + counts["M"]) / total if total else float("nan")
-        top = max(counts, key=counts.get)
-        rows.append({"feature": feature, "n": total, **counts,
+            counts[_kano_category(f, d)] += 1
+        # better/worse 的分母只含 A/O/M/I：R 是反向答案（功能做得好反而不满意，
+        # 通常题目写反了），Q 是自相矛盾答案。算进分母会稀释系数。
+        valid = counts["A"] + counts["O"] + counts["M"] + counts["I"]
+        excluded = counts["R"] + counts["Q"]
+        better = (counts["A"] + counts["O"]) / valid if valid else float("nan")
+        worse = -(counts["O"] + counts["M"]) / valid if valid else float("nan")
+        scored = {k: counts[k] for k in ("A", "O", "M", "I")}
+        top = max(scored, key=scored.get) if valid else "Q"
+        rows.append({"feature": feature, "n": int(sub.shape[0]), "valid": valid,
+                     **counts, "excluded": excluded,
                      "better": round(better, 3), "worse": round(worse, 3),
                      "category": top,
                      "label": {"A": "魅力型", "O": "期望型", "M": "必备型",
-                               "I": "无差异", "R": "反向"}[top]})
+                               "I": "无差异", "R": "反向", "Q": "可疑"}[top]})
     out = pd.DataFrame(rows)
     if out.empty:
         raise MethodError("没有任何可用配对")
     verdict = [f"{len(out)} 个需求的类型："
                + "；".join(f"{r.feature}={r.label}" for r in out.itertuples()) + "。",
                "better 越接近 1 表示满足该需求带来的满意度提升越大；"
-               "worse 越接近 -1 表示不满足时的不满意越强。"]
+               "worse 越接近 -1 表示不满足时的不满意越强。",
+               "better/worse 的分母只含 A/O/M/I；R（反向）与 Q（自相矛盾）"
+               "记为 excluded，R/Q 多说明题目表述有问题，应先改问卷再解读系数。"]
     return Result("kano", [("kano", out)], {"features": len(out)}, verdict)
 
 

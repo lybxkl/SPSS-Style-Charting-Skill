@@ -547,6 +547,10 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m16" and res.tables:
             load = res.tables[0][1]
             mat = load.set_index(load.columns[0])
+            # communality lives on a 0..1 scale, not the -1..1 loading scale, so
+            # it stays in the table and out of the colour bar.
+            keep = [c for c in mat.columns if str(c).lower() not in ("communality", "共同度")]
+            mat = mat[keep]
             fig, axes = _fig(h_in=3.2)
             PF.heatmap(axes[0][0], mat.values, [str(i) for i in mat.index],
                        [str(c) for c in mat.columns], annotate=True, fmt=".2f",

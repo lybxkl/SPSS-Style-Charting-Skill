@@ -2,6 +2,31 @@
 
 本仓库此前没有版本记录，从本轮起按日期记。缺陷编号对应 `docs/ISSUES-FIXED.md`（审计索引），审计明细在 `docs/skill-audit/` 之外未随仓库发布——本文只保留可验证的行为变化。
 
+## 2026-11-10 新增：十六种经典方法（`methods_pack.py`）
+
+教材与 SPSS 笔记里那 16 种分析方法此前只能靠人肉在 SPSS 里点，脚本层只有二元 Logit 与 OLS。
+本轮把它们做成一条命令，并且**把"这份数据能不能做这个方法"写进代码**：
+
+- 新增 `scripts/methods_lib.py`（约 1200 行）：描述统计（按正态性选均值/中位数并写明理由）、
+  正态性、卡方（含 Cramér's V 与稀疏格 Fisher）、两两比较（Bonferroni）、独立/配对 t（先 Levene / 先配对相关）、
+  ANOVA（η²、Levene、Welch）、事后比较、Kruskal-Wallis、Mann-Whitney、Wilcoxon、相关（自动 Pearson/Spearman）、
+  线性回归（HC1、标准化 β、VIF、DW、Breusch-Pagan、残差正态）、Logistic（OR+CI、McFadden、LLR χ²、HL、
+  EPV 提醒、分离时拒绝解释 OR）、KMO/Bartlett、EFA（varimax）、PCA、Cronbach α（含 item-total r 与删题后 α）、
+  效度（复用 EFA 并说明内容效度不替代）、K-means（k-means++ + 轮廓系数）、层次聚类、Fisher 判别（Wilks Λ，
+  回代准确率标注为上限）、ARIMA（AIC 选阶 + Ljung-Box）、中介（Baron-Kenny + Sobel + percentile bootstrap）、
+  Kano（better/worse 系数）；`sem()` **显式拒绝**并给三条替代路径。
+- 新增 `scripts/methods_pack.py`（约 800 行）：`CATALOG` 18 条（1–16 号与清单逐条对应，17 非参数族、18 二元 Logit），
+  `--list` / `--methods all|m04,m05|family` / `--only`；每个方法先自查槽位与前置条件，缺列、组数不对、
+  因变量不是 0/1、题项不足、KMO 过低一律 `skipped` 并写替代方法，**不抛 traceback、不硬算**；
+  产出 `methods_report.md`（总览 + 每法一节 + 报告句式表）、`methods_manifest.csv`（含 `status`/`reason`）、
+  每张表一份 CSV、**每个跑通的方法一张 600 dpi/15 cm 配图**（共 16 种图）。
+- 退出码：有 `error` → 2；一个方法都没跑通 → 2（沉默的零产出不算成功）。
+- 文档：新增 `references/11-methods-catalog.md`（16 方法 × 变量要求 × 前置判据 × 表/图 × 报告句式 × 常见误用 +
+  两步法流程 + 三件脚本不替你做的事）；`SKILL.md` 阶段 4 增 §4C、脚本清单与参考文献索引更新；README 增功能条目与快速开始 6b。
+- 测试：`tests/test_methods_pack.py` 18 例（含"三组数据做 t 检验必须被拒"、"SEM 必须被拒"、
+  "因变量三分类做 Logit 必须被拒"、"配置列不存在是 skip 不是崩溃"、"空配置下 m01 仍能跑但 m18 不能"、
+  以及 α 范围、中介间接效应 = a×b、PCA 累计方差 = 100%、稀疏格提示等数值断言）。
+
 ## 2026-11-10 第四轮：全局审计后的修复
 
 第四轮换了方法：不再逐文件找 bug，而是先建"脚本—产物—消费者—文档承诺"的全局图，

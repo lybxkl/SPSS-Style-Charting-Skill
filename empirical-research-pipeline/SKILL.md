@@ -313,6 +313,38 @@ B. 或在 SPSS/R/Stata 中按同一份预设规格估计，把系数导出成同
 
 报告表至少要有：系数/OR、95%CI、p、N、拟合指标、参照组说明。每个模型单独一行 N。
 
+### 4C 十六种经典方法一次跑完（`methods_pack.py`）
+
+`auto_stats.py` 只做二元 Logit 与 OLS；教材里那套"描述 → 差异 → 关联 → 模型 → 降维 → 测量 → 分类"的方法清单
+（描述统计、PCA、相关、ANOVA、卡方、SEM、判别、时序、因子、聚类、回归、T 检验、中介、卡诺、信度、效度）
+由 `methods_pack.py` 统一执行，**每个方法先自检前置条件，不满足就 `skipped` 并指出替代方法**，绝不硬算：
+
+```bash
+python scripts/methods_pack.py --list                       # 十八个编号（16 个方法 + 非参数族 + 二元 Logit）
+python scripts/methods_pack.py --data data/analysis.csv --config methods.json \
+  --out output/methods --methods all
+python scripts/methods_pack.py --data data/analysis.csv --config methods.json \
+  --out output/methods --only m04,m05
+```
+
+`methods.json` 用命名槽位声明变量（不认识就跳过，不猜）：
+
+```json
+{"outcome": {"col": "restore_any", "positive": 1},
+ "continuous": {"col": "restore_amount"},
+ "predictors": ["gongyi", "charge_group", "year"],
+ "group": "charge_group", "row": "charge_group", "column": "gongyi",
+ "items": {"scale": ["q1", "q2", "q3"]}, "cluster_vars": ["v1", "v2"],
+ "discriminant": {"group": "g", "vars": ["v1", "v2"]},
+ "kano": {"响应速度": ["f1", "d1"]}, "path": {"x": "x", "m": "m", "y": "y"},
+ "time": {"col": "year", "value": "amount"}, "cluster_k": 3, "n_factors": 2}
+```
+
+产物：`methods_report.md`（总览 + 每方法一节 + 可直接改写的报告句式）、`methods_manifest.csv`、
+每张表一份 CSV、每个跑通的方法一张 600 dpi 配图。**一个都没跑通时退出码 2**——沉默的零产出不算成功。
+
+方法选择、变量要求、前置判据、报告句式与常见误用见 `references/11-methods-catalog.md`。
+
 把做过的和跳过的分析写进 `analysis_manifest.md`（模板见 `references/08-analysis-expansion.md`），不要只报显著结果。
 
 SPSS 语法模板与解释规范见 `references/03-analysis-spss.md`；扩展分析清单见 `references/08-analysis-expansion.md`。
@@ -478,6 +510,8 @@ python scripts/verify_numbers.py --out output/verify \
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
+| `scripts/methods_lib.py` | 十六种方法的统计内核（描述/正态性/卡方/t/ANOVA/事后/相关/OLS/Logit/PCA/EFA/信度/效度/聚类/判别/时序/中介/Kano/非参数）；SEM 显式拒绝 |
+| `scripts/methods_pack.py` | 按 `methods.json` 跑 1–16 号方法（另加非参数与二元 Logit）：前置条件不满足即 `skipped` 并给替代，产出 `methods_report.md`/`methods_manifest.csv`/每法一图 |
 | `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest（实测 15–44 张，上限 60） |
 | `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型；`compose_figure()` 组装多面板并回读 PNG 校验 dpi |
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
@@ -496,6 +530,8 @@ python scripts/verify_numbers.py --out output/verify \
 | `references/07-chart-atlas.md` | 选图型、对应 SPSS 高级图形、确定图表数量时 |
 | `references/08-analysis-expansion.md` | 主模型之外还要跑哪些分析、如何记录做/不做时 |
 | `references/09-field-extraction.md` | 要把材料取成一行一个观测的结构化数据（写 profile、查证据、判 NA）时 |
+| `references/10-contracts.md` | 查脚本之间的键列/漏斗/N/缺失值/退出码约定时 |
+| `references/11-methods-catalog.md` | 选方法、查变量要求与前置判据、写结果句式、避开常见误用时 |
 
 ## 模板
 

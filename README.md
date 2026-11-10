@@ -15,6 +15,7 @@
 - **表格数据质量**：行/列、主键、缺失、分类编码、异常值、日期范围；CSV/Excel 直接进入统计流程，不混入文本编码。
 - **SPSS 数据**：输出 CSV/JSONL；生成 `.sps` 读入语法、变量标签、值标签、`MISSING VALUES` 与 `VARIABLE LEVEL`（NA 不再与 0 混同），并自动把“是/否、有/无、支持/不支持”等二值文本 `RECODE` 为 `*_num`。
 - **自动统计筛查**：描述统计、组间检验、相关、单变量 OLS/Logit；多分类自变量自动哑变量化，完全分离/不可估计模型写入跳过清单。`--spec` 提供**多变量模型入口**（logit/ols、聚类稳健、HC0/HC1/HC3、显式参照组、空单元分离检测），输出可直接喂图表的 `coef_<id>.csv`。
+- **十六种经典方法**：`scripts/methods_pack.py` 按 `methods.json` 一次跑完教材里那 16 种方法（描述统计、PCA、相关、ANOVA、卡方、SEM、判别、时序、因子、聚类、回归、T 检验、中介、卡诺、信度、效度），另加非参数检验族与二元 Logistic 两节。**每个方法先自检前置条件**（两组才做 t、0/1 才做 Logit、KMO≥0.6 才做因子、n>参数数才做回归…），不满足就 `skipped` 并指出替代方法，绝不硬算；产出 `methods_report.md`（含可直接改写的报告句式）、`methods_manifest.csv`、每法一张 600 dpi 配图。SEM 因为没有引擎而**明确拒绝**，不给假模型。用法与判据见 `references/11-methods-catalog.md`。
 - **全景图表包**：默认覆盖 A 数据质量、B 单变量、C 双变量、D 多变量、E 时间、F 模型诊断、G 附录，实测 15–44 张（`--max-charts` 默认上限 60，0 = 不限；`--only`/`--sections` 只跑需要的）；含 PCA、Ward 聚类、MDS、对应分析、控制图、ROC/PR/校准/混淆矩阵/Lift、Kaplan–Meier 等。
 - **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF、LZW 无损 TIFF（默认三格式；`--no-tiff` 可关）。log 轴次刻度标注已关闭，不再出现 `4×10⁻¹` 混排。
 - **多面板正文图**：`scripts/paper_figures.py --paper paper.json` 按 GridSpec 组装 (a)(b)(c)，支持 `bar/bar_with_ci/stacked_bar/line/scatter/hist/pie/forest`，返回每格实际厘米与**实测最小字号**，产出 `FigureN.*` + 与图包同构的 manifest；森林图直接吃 `coef_all.csv`。
@@ -22,7 +23,7 @@
 - **成稿组装**：`scripts/assemble_manuscript.py --spec manuscript.json` 直接产出 `.docx`——三线表（1.5/0.75/1.5 pt、无竖线）、行不跨页、表头重复、图按正文栏宽嵌入、图题与图同页、中西文字体分别设置、首行缩进按字符、页脚页码；表格与图**引用 CSV/PNG 而非手抄数值**，同时写出本文档实际印出的每个 N（`manuscript_numbers.csv`）与回填用的 `figure_map.json`。取不到的占位符直接报错，不会印出半个 `N=`。
 - **终检**：核对样本流程、N、图注、图表清单、PDF/图片的**有效 dpi**（不是像素宽）、**最小字号**（按实际安置宽度折算）、**分类色灰度/色盲可分性**；`chart_manifest.csv` 支持图号唯一性、N 合理性（允许 `3111→2713` 这类区间与 `n_scope`）和相对路径检查；有 error 退出码 2。
 - **数字溯源**：`scripts/verify_numbers.py` 查表内合计、表图同值、正文每个 `N=/OR=/p<` 能否找回表、图号连续且被引用、样本 N 跨表一致、漏斗单调不增；产物 `number_issues.csv` + `number_trace.csv`。
-- **可测试**：`tests/` 下 360 个 `unittest` 用例，全部使用运行时生成的最小 fixture，不依赖网络、真实资料或 SPSS/Word。
+- **可测试**：`tests/` 下 378 个 `unittest` 用例，全部使用运行时生成的最小 fixture，不依赖网络、真实资料或 SPSS/Word。
 
 ## 支持的资料
 
@@ -58,6 +59,7 @@ SPSS-Style-Charting-Skill/
 │   ├── test_extract_lib.py
 │   ├── test_stats_charts.py
 │   ├── test_chart_pack.py
+│   ├── test_methods_pack.py
 │   ├── test_figures_paper.py
 │   ├── test_verify_numbers.py
 │   ├── test_output_layer.py
@@ -170,6 +172,12 @@ python scripts/auto_stats.py --data data/analysis.csv --config assets/chart_conf
 #    多变量主模型：先在 spec 里显式写清因变量、预测变量与参照组，再估计
 python scripts/auto_stats.py --data data/analysis.csv --spec model_spec.json \
   --out output/models --separation drop --vif --roc
+
+# 6b. 十六种经典方法一次跑完（前置条件不满足就 skipped 并给替代，不硬算）
+python scripts/methods_pack.py --list
+python scripts/methods_pack.py --data data/analysis.csv --config methods.json \
+  --out output/methods --methods all
+#    只跑部分：--methods m04,m05 或 --only m14；方法说明见 references/11-methods-catalog.md
 
 # 7. 生成全景图表包（PNG + PDF + TIFF 三格式；试跑可加 --no-tiff 提速约 30%）
 python scripts/auto_chart_pack.py --data data/analysis.csv --config assets/chart_config.example.json --out output/chart_pack

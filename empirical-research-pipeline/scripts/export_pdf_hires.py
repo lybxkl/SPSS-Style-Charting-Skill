@@ -163,7 +163,13 @@ def find_figure_page(pdf, tag: str, title: str):
 
 
 def image_widths(pdf) -> list[dict]:
-    """Only count placed figure images; replacement leaves unused xrefs behind."""
+    """Only count placed figure images; report the effective resolution too.
+
+    ``width`` alone cannot tell 600 dpi from 200 dpi: a 15 cm figure at 200 dpi is
+    1180 px, and Word's PDF export caps bitmaps near 220 dpi no matter what the
+    DOCX contains.  ``dpi`` is computed from the placement rectangle, which is the
+    number that actually matters for print.
+    """
     out = []
     for i, page in enumerate(pdf):
         for im in page.get_images(full=True):
@@ -174,10 +180,14 @@ def image_widths(pdf) -> list[dict]:
                 info = pdf.extract_image(im[0])
             except Exception:
                 continue
-            if info["width"] * info["height"] < 200_000 and info["width"] < 1000:
+            # A 1 cm rule or a logo is not a figure; require a real placement box.
+            small = rect.width < 56.7 and rect.height < 56.7   # ~2 cm x 2 cm
+            if small and info["width"] * info["height"] < 200_000:
                 continue
+            dpi = info["width"] / (rect.width / 72.0)
             out.append({"page": i + 1, "xref": im[0],
-                        "width": info["width"], "height": info["height"]})
+                        "width": info["width"], "height": info["height"],
+                        "rect_w_pt": round(rect.width, 1), "dpi": round(dpi, 1)})
     return out
 
 
@@ -188,7 +198,11 @@ def main() -> int:
     parser.add_argument("--figure-map", default=None)
     parser.add_argument("--raw-pdf", default=None, help="keep the Word-exported PDF here")
     parser.add_argument("--min-width", type=int, default=3000,
-                        help="warn if an embedded image is narrower than this")
+                        help="fail if an embedded image is narrower than this (0 disables)")
+    parser.add_argument("--min-dpi", type=int, default=600,
+                        help="fail if an embedded figure resolves below this at its placed size")
+    parser.add_argument("--allow-low", action="store_true",
+                        help="only warn about low-resolution figures instead of failing")
     parser.add_argument("--no-backfill", action="store_true")
     args = parser.parse_args()
 
@@ -241,18 +255,26 @@ def main() -> int:
                     continue
                 page, xref = hit
                 page.replace_image(xref, filename=os.path.abspath(image))
+                # replace_image only swaps the stream; the old bitmap stays in
+                # /Resources until the page content is rewritten.  Without this
+                # the file keeps both copies (9.8 MB -> 5.3 MB in our test).
+                page.clean_contents(sanitize=True)
                 replaced.append({"tag": tag, "page": page.number + 1, "image": image})
-        pdf.save(out_pdf, garbage=3, deflate=True)
+        # garbage=4 also drops the now-unreferenced image objects.
+        pdf.save(out_pdf, garbage=4, deflate=True)
         widths = image_widths(pdf)
         pdf.close()
-        low = [w for w in widths if w["width"] < args.min_width]
+        low = [w for w in widths if args.min_width and w["width"] < args.min_width]
+        low_dpi = [w for w in widths if args.min_dpi and w["dpi"] < args.min_dpi]
         report = {
             "docx": docx,
             "pdf": out_pdf,
             "figures_replaced": replaced,
             "images": widths,
             "low_resolution": low,
+            "low_dpi": low_dpi,
             "min_width": args.min_width,
+            "min_dpi": args.min_dpi,
         }
         report_path = os.path.splitext(out_pdf)[0] + "_export_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
@@ -262,10 +284,18 @@ def main() -> int:
         check.close()
         print(f"pages: {pages}")
         print(f"figures replaced: {len(replaced)}")
-        print(f"embedded images: {len(widths)}; below {args.min_width}px: {len(low)}")
+        print(f"embedded figures: {len(widths)}; "
+              f"below {args.min_width}px: {len(low)}; below {args.min_dpi} dpi: {len(low_dpi)}")
+        for w in low_dpi:
+            print(f"  LOW-DPI p{w['page']}: {w['width']}x{w['height']} "
+                  f"@ {w['dpi']:.0f} dpi (placed {w['rect_w_pt']} pt wide)")
         for w in low:
-            print(f"  LOW p{w['page']}: {w['width']}x{w['height']}")
+            print(f"  LOW-WIDTH p{w['page']}: {w['width']}x{w['height']}")
         print(f"report: {report_path}")
+        if (low or low_dpi) and not args.allow_low:
+            print("ERROR: figure resolution below target; fix the source images "
+                  "or pass --allow-low to downgrade this to a warning.", file=sys.stderr)
+            return 2
     finally:
         if tmp and os.path.exists(tmp):
             os.remove(tmp)

@@ -50,7 +50,19 @@ note.paragraph_format.space_after = Cm(0.3)
 
 - 三线表：顶线、表头下线、底线；不要竖线。
 - 表头重复：`tblHeader`。
-- 行不跨页：`cantSplit`。
+- 行不跨页：`cantSplit`——**python-docx 没有这个 API**，必须手写 OOXML：
+
+```python
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+def no_split(row):
+    trPr = row._tr.get_or_add_trPr()
+    el = OxmlElement("w:cantSplit")
+    trPr.append(el)
+```
+
+- 整表不跨页更省事的做法：读代码前先想清楚——`keep_with_next` 加在**表格单元格**上 Word 会忽略（改了半天 PDF 字节不变）；真正有用的是给**表题段落**设 `keep_with_next = True`，并让短表整体不跨页（除最后一行外全部 `keep_with_next`）。长表宁可用 `cantSplit` 允许跨页，也别留下"表题+表头孤行在页底"。
 - 数字右对齐/小数点对齐；文字左对齐。
 - 括号里的 CI 用 en dash `–`，不用 hyphen。
 - 显著性星号在表注解释：`*** p<0.001，** p<0.01，* p<0.05`。
@@ -67,10 +79,11 @@ note.paragraph_format.space_after = Cm(0.3)
 
 做法：
 
-1. 所有数字从同一张 `numbers.csv` 取，不手打。
+1. 所有数字从同一张 `numbers.csv` 取，不手打——注意**技能目前没有生成 `numbers.csv` 的脚本**，这是约定不是现成功能；项目里应自己写一个「派生数字表」脚本，正文与表图都从它取。
 2. 摘要、正文、表、图注、附录交叉核对。
 3. 每个 N 后面注明口径：描述样本 / 模型样本 / 有效样本。
-4. 百分比保留一位小数；合计偏差在表注说明“因四舍五入不等于 100%”。
+4. 百分比保留一位小数；合计偏差在表注说明"因四舍五入不等于 100%"。
+5. 正文里的定性判断（"上升/下降/最高"）必须由数据现算，不能凭印象写；数字变了方向也会变。
 
 ## Word → PDF
 
@@ -94,10 +107,11 @@ python scripts/export_pdf_hires.py \
 
 脚本会：
 
-1. 用 Word 导出 PDF。
+1. 用 Word 导出 PDF（**依赖 Windows + Microsoft Word + pywin32**：内部走 `win32com.client.DispatchEx("Word.Application")` 与 `SaveAs2(FileFormat=17)`，不需要 LibreOffice）。
 2. 按“图号 + 图题”定位页面；tag 有数字边界（`图1` 不会命中 `图10`），并优先选择图题在行首的页面。
 3. 用原图替换 Word 压缩后的图。
-4. 检查内嵌图宽度，输出 `*_export_report.json`。
+4. **替换后清理内容流**（`page.clean_contents(sanitize=True)`）并以 `garbage=4` 保存——少了这一步，旧的低分辨率位图仍挂在 `/Resources` 里：实测同一文档会从 16 张图变成 32 张、体积从 5.3 MB 涨到 9.8 MB，成品里同时存在 600 dpi 与 200 dpi 两份位图。
+5. 按版面尺寸算有效 dpi 并写进 `*_export_report.json`；低于 `--min-dpi`（默认 600）返回 2，`--allow-low` 可放行。
 
 `--no-backfill` 只导出不回填，用于对比低分辨率问题；`--raw-pdf` 可保留 Word 原始导出件，但不能与 `--out-pdf` 相同。Word 未安装或导出失败会返回 2，不会留下半成品。
 
@@ -116,5 +130,5 @@ python scripts/export_pdf_hires.py \
 - 没有“见图 X”但图 X 不存在。
 - 参考文献格式统一。
 - PDF 内嵌字体；中文没有乱码。
-- PDF 内嵌图 ≥3000 px 宽。
+- PDF 内嵌图按版面尺寸折算的**有效 dpi ≥600**（15 cm 宽 = 3543 px；3000 px 只有 508 dpi）。
 - 文件命名包含版本/日期，避免“最终版最终版2”。

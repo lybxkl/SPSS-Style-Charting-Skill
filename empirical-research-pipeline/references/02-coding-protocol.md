@@ -43,29 +43,40 @@
 
 | 字段 | 规则 | 仍需人工做什么 |
 |---|---|---|
+| `rel_path` / `relpath` | 相对 `--root` 的路径，统一用 `/`，两列同值（契约键列） | 作为与 audit/dedupe/统计脚本对接的主键 |
 | `source_type` | 文件扩展名/类型（pdf/docx/txt/html…） | 确认格式是否影响文本完整性 |
-| `doc_type` | generic: 文件类型；legal: 判决/裁定/调解/决定/其他 | legal profile 下核对文书类型是否符合纳入范围 |
-| `title` | 正文首个非空行，或文件名 | 核对标题是否被页眉/导航污染 |
-| `year` | 文件名年份优先，其次正文前 500 字 | 统一年份口径（发布/事件/裁判） |
-| `case_no` | 仅 legal profile：文件名案号优先，其次“本院/我院/本案”附近案号 | 核对是否误取引用案例 |
-| `court` | 仅 legal profile：文件名法院优先，其次正文前 2000 字 | 核对法院层级 |
-| `province` | 仅 legal profile：路径省份目录或法院名前的省/市/自治区 | 统一地区口径；无省份留空并注明 |
-| `category_candidates` | 关键词词典命中的类别/案由候选；文件名优先，正文兜底 | 不要把正文引用的其他类别当主类别 |
-| `signals` | 关键词命中的证据句（每词最多 3 句，截断 500 字） | 按 codebook 判定，否定表述优先 |
+| `doc_type` | generic: 文件类型；legal: 判决/裁定/调解/决定/其他 | `--doc-type` 是白名单，可重复（`--doc-type judgment ruling`）；`all` 表示不过滤 |
+| `title` | 前 12 行里以“判决书/裁定书/调解书/决定书/调解协议”结尾的行优先，跳过以“人民法院/人民检察院”结尾的行 | 核对标题是否被页眉/导航污染 |
+| `year` | 文件名年份优先，其次正文；只认 1949–今年、且前后都不是数字的四位数 | 统一年份口径（发布/事件/裁判） |
+| `case_no` | 仅 legal profile：文件名案号优先，其次正文；覆盖刑初/刑终/刑再/刑更/刑他/刑申/民初/民终/民再/民特/民辖/民申/行初/行终/知行/执/执异/破申/诉前调，保留“字第”与“之一” | 核对是否误取引用案例 |
+| `court` | 仅 legal profile：文件名法院优先，其次正文；只收含省/市/自治区/自治州/区/县等行政区划前缀或“最高人民法院”的名称，排除“原审法院/一审法院/二审法院/本院” | 核对法院层级 |
+| `province` | 仅 legal profile：路径省份目录优先，其次法院名；必须在省级白名单内（“广州市”不算省份，留空） | 统一地区口径；无省份留空并注明 |
+| `*_src` | `year_src`/`doc_type_src`/`case_no_src`/`court_src`/`province_src` 记录取值来源（filename/title/body/path/case_no/redacted/fallback） | 来源为 `fallback` 的字段重点复核 |
+| `category_candidates` | 关键词词典命中的类别/案由候选；文件名命中与正文“案由：”命中合并去重 | 不要把正文引用的其他类别当主类别 |
+| `signals` / `evidence` | 关键词命中的证据句，每词最多 3 句；输出契约格式证据串（见下节） | 按 codebook 判定，否定表述优先 |
 
-无法读取、0 字节、低于 `--min-chars`、表格/图片/音视频、格式不支持都会写入 `skipped_documents.csv`，并在 `reason` 列说明原因；做样本流程时逐类对账，不要只写“其余排除”。`--audit` 只保留 `valid` 文件，`--dedupe-plan` 再剔除计划移动/复制的副本。
+脱敏文书（法院名含 `****`）的 `court` 返回空串并记 `court_src="redacted"`，不得伪造“人民法院”。
+
+所有排除（扩展名、格式、读取失败、0 字节、低于 `--min-chars`、`--audit`、`--dedupe-plan`、`--doc-type`）统一写入 `skipped_documents.csv`，列为 `rel_path,relpath,file,doc_type,chars,reason,detail,skip_stage,file_kind`；`skip_stage` 取机器可读枚举（`ext_filter/format/read/size/min_chars/audit/dedupe/doc_type`）。同时写 `sample_flow.csv`（列 `stage,n,note`，`n` 单调不增：文件总数 → 有效文件 → 通过筛选 → 编码完成），漏斗可直接从产物重建。`--audit` 清单里没有任何 `valid` 行时，脚本先把每个文件写进 skipped，再以退出码 2 结束，不会假装“成功抽取 0 份”；确需 0 行输出时显式加 `--allow-empty`。
 
 ## 证据片段规则
 
-每个编码值旁边保存一句原文，字段名统一为 `<变量>_ev`。
+每个编码值旁边保存一段原文，并带上它在正文中的位置。统一格式（契约）：
+
+```text
+<字段>=<片段>@<char_start>-<char_end>
+```
+
+多个证据用中文分号 `；` 连接。`<char_start>`/`<char_end>` 是片段在**原始正文**中的字符偏移（左闭右开）。片段超过 200 字时截断为前 199 字加 `…`，偏移仍指向完整片段，便于回原文核对。
 
 ```json
 {
   "file": "example_interview_001.txt",
+  "rel_path": "interview/example_interview_001.txt",
   "stage": 3,
-  "stage_ev": "示例：受访者表示相关款项已经支付，并提供了凭证",
-  "outcome_binary": 1,
-  "outcome_binary_ev": "示例：访谈记录明确提到该事项已经完成"
+  "evidence": {
+    "stage": ["stage=示例：受访者表示相关款项已经支付@120-146"]
+  }
 }
 ```
 
@@ -74,10 +85,12 @@
 规则：
 
 - 证据句必须来自**资料正文/访谈原文/结果字段**，不能来自研究者概括、他人转述或附件中的建议。
-- 否定表述优先：出现“不支持”“不足以认定”“未发生”时，不能因为同句出现“支持”就记 1。
+- 否定优先：同一句里“不支持/未发生/不予认定/驳回”先于“支持/发生”判定；每个命中都带 `negated` 与 `polarity`（positive/negative），并列命中时按否定记账。
 - 一句话同时包含多个事实时，拆分到对应变量，不要整句复制到所有字段。
+- 分句保留顿号/逗号边界（在 `、，,` 之后切分），避免把两个相反判断黏在同一句里。
 - 找不到证据句：记 `NA` 或 `未记载`，不要记 0。0 表示“文本明确说没有”，不是“没找到”。
 - 同一份资料由多段组成时，记录段落/页码/时间戳，便于回溯。
+- `signals` 的 included/skipped 计数打印在 stdout（每词上限 3 句），用来核对证据是否被截断。
 
 ## 有序层级变量
 
@@ -118,6 +131,18 @@
 - 开放式题项先主题编码，再转成计数/类别变量；不要直接把词频当主题。
 - 表格数据的主键、单位、时间字段必须能回溯到原始文件或原始行。
 - 合并多来源数据时，先定主键与去重规则，再合并；保留来源列。
+
+## 导出到 SPSS 的导入语法
+
+`csv_to_spss_syntax.py` 生成的 `.sps` 必须满足：
+
+- **编码一致**：`--encoding` 默认 `utf-8-sig`，写文件的编码与 `/ENCODING` 声明一致（utf-8 → `UTF8`；gb18030/gbk → `GBK` 并以该编码写文件；big5 → `BIG5`）。不允许 UTF-8 字节配 `GBK` 声明。
+- **数值列不因个别值降级**：千分位（`1,234`）与 NA 哨兵（`NA/N/A/null/None/-/—`）按数值/缺失处理；真出现非数值才退回字符串，并在 stderr 列明哪一列、首个非数值是什么。
+- **缺失值**：每个数值变量写 `MISSING VALUES var (-99, -98, -97).`；若数据本身已出现这三个值，改用 `-999999/-999998/-999997` 并在 stderr 说明。
+- **测量层次**：每个变量写 `VARIABLE LEVEL var (NOMINAL|ORDINAL|SCALE)`；字符串与二值列 NOMINAL，3–10 级整数列 ORDINAL，其余 SCALE。
+- **值标签**：分类变量写 `VALUE LABELS`（占位：值→值，待 codebook 替换）；值标签按 SPSS 上限截到 120 字节以内。
+- **分隔符**：`--delimiter` 省略时按表头自动嗅探 `, ; 制表符 |`；表头只解析出一列而数据行有多列时打印 WARN。
+- 参差行计数并 WARN，不静默丢值；改名结果写 `renamed_map.csv`（`raw,spss_name,format,renamed`）。
 
 ## 信度检验
 

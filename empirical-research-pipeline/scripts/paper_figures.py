@@ -28,7 +28,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from pubfig import (  # noqa: E402
-    CM, INK, CATEGORICAL, set_style, style_axis, bar_counts, bar_with_ci,
+    CM, CATEGORICAL, set_style, style_axis, bar_counts, bar_with_ci,
     stacked_bar, line_ci, scatter_fit, pie_chart, forest_plot, compose_figure,
 )
 #: Reading N is the checker's job, not a second implementation's: a manifest we
@@ -295,30 +295,6 @@ CHART_DRAW = {
 
 
 # --------------------------------------------------------------- figure build
-
-def panel_data_length(panel: dict) -> int:
-    """Best-effort N for one panel: array length, or the coef CSV row count."""
-    data = panel.get("data") or {}
-    if data.get("coef") or data.get("coef_path") or data.get("file"):
-        try:
-            import pandas as pd
-            return int(len(pd.read_csv(data.get("coef") or data.get("coef_path")
-                                       or data.get("file"))))
-        except Exception:
-            return 0
-    best = 0
-    for key in ("x", "y", "values", "labels", "estimate", "low", "high",
-                "terms", "series"):
-        value = data.get(key)
-        if isinstance(value, (list, tuple)):
-            length = len(value)
-        elif isinstance(value, dict):
-            length = len(value.get("values") or [])
-        else:
-            continue
-        best = max(best, length)
-    return best
-
 
 def figure_n(spec: dict, data_rows: int | None = None):
     """The declared N, or ``None``.

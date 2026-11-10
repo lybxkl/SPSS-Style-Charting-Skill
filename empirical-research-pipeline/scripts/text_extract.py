@@ -69,14 +69,6 @@ def effective_chars(text: str) -> int:
     return len(re.sub(r"\s", "", "\n".join(lines)))
 
 
-def text_size(rec: dict) -> int:
-    """Effective character count of an inspect_file() record (falls back to raw)."""
-    value = rec.get("chars_effective")
-    if value is None:
-        value = rec.get("chars")
-    return int(value or 0)
-
-
 def _rec(pages=None, chars=None, images=None) -> dict:
     """Build a uniform inspect_file() record so every caller sees every key."""
     return {"pages": pages, "chars": chars, "chars_effective": None,
@@ -175,15 +167,6 @@ def looks_binary(raw: bytes, sample_size: int = 8192) -> bool:
         return False
     ctrl = sum(1 for b in sample if b < 9 or 13 < b < 32)
     return sample.count(0) > 0 and ctrl / len(sample) > 0.05
-
-
-def strip_markup(value: str) -> str:
-    value = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", value, flags=re.I | re.S)
-    value = re.sub(r"<[^>]+>", " ", value)
-    value = html.unescape(value)
-    value = re.sub(r"[ \t\r\f\v]+", " ", value)
-    value = re.sub(r"\n\s*\n+", "\n", value)
-    return value.strip()
 
 
 class _HTMLText(HTMLParser):

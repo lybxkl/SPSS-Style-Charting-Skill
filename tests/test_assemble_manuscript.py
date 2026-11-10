@@ -57,6 +57,20 @@ class AssemblerCase(TempCase):
 
 
 class TestBuild(AssemblerCase):
+    def test_scalar_margin_is_accepted(self):
+        """`"margin_cm": 3.17` is natural; it must not crash on .get()."""
+        spec = {"page": {"size": "A4", "margin_cm": 3.0},
+                "blocks": [{"type": "para", "text": "正文。"}]}
+        path = self.p("m_scalar.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(spec, fh, ensure_ascii=False)
+        proc = run("assemble_manuscript.py", "--spec", path,
+                   "--out", self.p("scalar.docx"))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        from docx import Document
+        doc = Document(self.p("scalar.docx"))
+        self.assertAlmostEqual(doc.sections[0].left_margin.cm, 3.0, places=1)
+
     def test_minimal_manuscript_builds(self):
         result = run("assemble_manuscript.py", *self.spec(SPEC_MIN["blocks"]))
         self.assertEqual(result.returncode, 0, result.stderr)

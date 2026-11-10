@@ -39,7 +39,6 @@ from datetime import datetime
 from text_extract import (
     STRUCTURED_EXTS,
     SUPPORTED_EXTS,
-    effective_chars,
     extract_text,
     inspect_file,
     kind_of,

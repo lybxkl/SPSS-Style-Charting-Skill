@@ -296,6 +296,11 @@ class Builder:
         width = float(page.get("width_cm", 21.0))
         height = float(page.get("height_cm", 29.7))
         margin = page.get("margin_cm") or {}
+        if not isinstance(margin, dict):
+            # "margin_cm": 3.17 is a perfectly natural thing to write; failing
+            # with "'float' object has no attribute 'get'" is not an answer.
+            margin = {"top": margin, "bottom": margin, "left": margin,
+                      "right": margin}
         top = float(margin.get("top", 2.54))
         bottom = float(margin.get("bottom", 2.54))
         left = float(margin.get("left", 3.17))

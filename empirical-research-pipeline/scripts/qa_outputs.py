@@ -122,11 +122,6 @@ def lightness(color: str) -> float | None:
     return None if rgb is None else rgb_to_lab(rgb)[0]
 
 
-def delta_e76(first, second) -> float:
-    lab_a, lab_b = rgb_to_lab(first), rgb_to_lab(second)
-    return float(sum((a - b) ** 2 for a, b in zip(lab_a, lab_b)) ** 0.5)
-
-
 def simulate_cvd(rgb, kind: str = "deuteranopia"):
     """Apply a Machado 2009 matrix in linear RGB and return sRGB (0-1)."""
     linear = [_srgb_to_linear(float(v)) for v in rgb]

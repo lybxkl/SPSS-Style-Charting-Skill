@@ -70,6 +70,21 @@ def build_fixture(path: str, n: int = 240, seed: int = 11) -> dict:
     }
 
 
+class EfaGateTest(unittest.TestCase):
+    def test_low_kmo_refuses_the_factor_solution(self):
+        import methods_pack as MP
+        rng = np.random.default_rng(7)
+        df = pd.DataFrame({name: rng.normal(size=120)
+                           for name in ("q1", "q2", "q3", "q4")})
+        ctx = {"df": df, "cfg": {"items": ["q1", "q2", "q3", "q4"]},
+               "alpha": 0.05}
+        with self.assertRaises(MP.Skip) as caught:
+            MP.run_m09_factor_analysis(ctx)
+        message = str(caught.exception)
+        self.assertIn("KMO", message)
+        self.assertIn("不输出因子解", message)
+
+
 def read_text(path: str) -> str:
     with open(path, encoding="utf-8") as fh:
         return fh.read()

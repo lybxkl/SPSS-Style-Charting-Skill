@@ -55,9 +55,9 @@ def tag_hit(text: str, tag: str, title: str) -> tuple[bool, bool]:
         line_n = norm(line)
         if not pattern.search(line_n):
             continue
-        any_hit = True
         if title_n and title_n not in line_n:
             continue
+        any_hit = True
         if line_n.startswith(tag_n):
             line_hit = True
             break
@@ -117,8 +117,9 @@ def caption_rect(page, tag: str, title: str):
         block_text = norm(block[4] if len(block) > 4 else "")
         if pattern.search(block_text) and (not title_n or title_n in block_text):
             return fitz.Rect(block[:4])
-    for rect in page.search_for(tag):
-        return rect
+    if not title_n:
+        for rect in page.search_for(tag):
+            return rect
     return None
 
 
@@ -135,6 +136,8 @@ def find_figure_page(pdf, tag: str, title: str):
         if not any_hit:
             continue
         cap = caption_rect(page, tag, title)
+        if cap is None:
+            continue
         best_score = None
         best_xref = None
         for im in page.get_images(full=True):
@@ -188,10 +191,13 @@ def image_widths(pdf) -> list[dict]:
             small = rect.width < 56.7 and rect.height < 56.7   # ~2 cm x 2 cm
             if small and info["width"] * info["height"] < 200_000:
                 continue
-            dpi = info["width"] / (rect.width / 72.0)
+            dpi_x = info["width"] / (rect.width / 72.0)
+            dpi_y = info["height"] / (rect.height / 72.0)
+            dpi = min(dpi_x, dpi_y)
             out.append({"page": i + 1, "xref": im[0],
                         "width": info["width"], "height": info["height"],
-                        "rect_w_pt": round(rect.width, 1), "dpi": round(dpi, 1)})
+                        "rect_w_pt": round(rect.width, 1), "rect_h_pt": round(rect.height, 1),
+                        "dpi_x": round(dpi_x, 1), "dpi_y": round(dpi_y, 1), "dpi": round(dpi, 1)})
     return out
 
 
@@ -201,7 +207,7 @@ def main() -> int:
     parser.add_argument("--out-pdf", required=True)
     parser.add_argument("--figure-map", default=None)
     parser.add_argument("--raw-pdf", default=None, help="keep the Word-exported PDF here")
-    parser.add_argument("--min-width", type=int, default=3000,
+    parser.add_argument("--min-width", type=int, default=0,
                         help="fail if an embedded image is narrower than this (0 disables)")
     parser.add_argument("--min-dpi", type=int, default=600,
                         help="fail if an embedded figure resolves below this at its placed size")
@@ -269,7 +275,7 @@ def main() -> int:
         widths = image_widths(pdf)
         pdf.close()
         low = [w for w in widths if args.min_width and w["width"] < args.min_width]
-        low_dpi = [w for w in widths if args.min_dpi and w["dpi"] < args.min_dpi]
+        low_dpi = [w for w in widths if args.min_dpi and w["dpi"] < args.min_dpi * .995]
         report = {
             "docx": docx,
             "pdf": out_pdf,

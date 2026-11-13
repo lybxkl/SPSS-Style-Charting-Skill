@@ -1481,10 +1481,11 @@ def roc_curve(ax, y_true: Iterable[int], y_score: Iterable[float],
                 ha="center", va="center", fontsize=8)
         ax.set_axis_off()
         return float("nan")
-    order = np.argsort(-s)
-    y = y[order]
-    tp = np.cumsum(y)
-    fp = np.cumsum(1 - y)
+    order = np.argsort(-s, kind="stable")
+    y, s = y[order], s[order]
+    ends = np.r_[np.flatnonzero(np.diff(s)), len(s) - 1]
+    tp = np.r_[0, np.cumsum(y)[ends]]
+    fp = np.r_[0, np.cumsum(1 - y)[ends]]
     tpr = tp / max(tp[-1], 1)
     fpr = fp / max(fp[-1], 1)
     auc = float(np.trapezoid(tpr, fpr)) if hasattr(np, "trapezoid") else float(np.trapz(tpr, fpr))
@@ -1587,10 +1588,11 @@ def pareto(ax, labels: Sequence[str], counts: Iterable[float],
 
 
 def scree_plot(ax, explained_variance: Iterable[float],
-               color: str = BLUE) -> None:
+               color: str = BLUE, *, values_are_percent: bool = False,
+               total_variables: int | None = None) -> None:
     """Scree + cumulative variance plot for PCA/factor analysis."""
     ev = np.asarray(list(explained_variance), dtype=float)
-    if ev.sum() > 1.5:
+    if not values_are_percent and ev.sum() > 1.5:
         ev = ev / ev.sum() * 100
     x = np.arange(1, len(ev) + 1)
     ax.plot(x, ev, color=color, marker="o", markersize=3.6, linewidth=0.9,
@@ -1602,8 +1604,8 @@ def scree_plot(ax, explained_variance: Iterable[float],
     ax.set_xlim(0.6, len(ev) + 0.4)
     if len(ev) >= 2:
         # 特征值>1 等价于"解释方差 > 100/p"，画成参考线才读得出 Kaiser 判据
-        ax.axhline(100.0 / len(ev), color=LGRAY, lw=0.8, ls="--",
-                   label=f"Kaiser 线（{100.0 / len(ev):.1f}%）")
+        cutoff = 100.0 / (total_variables or len(ev))
+        ax.axhline(cutoff, color=LGRAY, lw=0.8, ls="--", label=f"Kaiser 线（{cutoff:.1f}%）")
     ax.set_xlabel("成分/因子序号")
     ax.set_ylabel("解释方差（%）")
     ax2 = ax.twinx()
@@ -1875,21 +1877,22 @@ def control_chart(ax, x: Sequence, y: Iterable[float],
         ax.set_axis_off()
         return
     pos = np.arange(len(yv))
+    nv = np.asarray(list(n), dtype=float)[mask] if n is not None else None
+    if nv is not None and (not np.isfinite(nv).all() or (nv <= 0).any()):
+        raise ValueError("p-chart sample sizes must be finite and positive")
     if center is None:
-        center = float(np.nanmean(yv))
+        center = float(np.average(yv, weights=nv)) if nv is not None else float(np.nanmean(yv))
     if sigma is None:
         if n is not None:
-            nv = np.asarray(list(n), dtype=float)[mask]
-            nv = np.where(nv > 0, nv, np.nan)
-            sigma = np.sqrt(max(center * (1 - center), 1e-12) / np.nanmean(nv))
+            sigma = np.sqrt(max(center * (1 - center), 0) / nv)
         else:
             sigma = float(np.nanstd(yv, ddof=1))
-    upper = center + 3 * sigma
-    lower = max(0.0, center - 3 * sigma)
+    upper = np.minimum(1.0, center + 3 * sigma) if n is not None else center + 3 * sigma
+    lower = np.maximum(0.0, center - 3 * sigma) if n is not None else center - 3 * sigma
     ax.plot(pos, yv, color=BLUE, linewidth=0.9, marker="o", markersize=2.8, zorder=3)
     ax.axhline(center, color=GREEN, linewidth=0.8, linestyle="-", label=f"中心线 {center:.3f}")
-    ax.axhline(upper, color=RED, linewidth=0.7, linestyle="--", label="±3σ 控制限")
-    ax.axhline(lower, color=RED, linewidth=0.7, linestyle="--")
+    ax.plot(pos, np.broadcast_to(upper, yv.shape), color=RED, linewidth=0.7, linestyle="--", label="±3σ 控制限")
+    ax.plot(pos, np.broadcast_to(lower, yv.shape), color=RED, linewidth=0.7, linestyle="--")
     out = (yv > upper) | (yv < lower)
     if out.any():
         ax.scatter(pos[out], yv[out], s=26, color=RED, zorder=4, label="越界点")
@@ -1898,8 +1901,8 @@ def control_chart(ax, x: Sequence, y: Iterable[float],
     ax.set_xticks(tick_pos)
     ax.set_xticklabels([str(v) for v in xv][::step], rotation=0)
     ax.set_ylabel(ylabel)
-    ax.set_ylim(min(lower, float(np.nanmin(yv))) - 0.05,
-                max(upper, float(np.nanmax(yv))) + 0.05)
+    ax.set_ylim(min(float(np.min(lower)), float(np.nanmin(yv))) - 0.05,
+                max(float(np.max(upper)), float(np.nanmax(yv))) + 0.05)
     style_axis(ax, "y")
     ax.legend(frameon=False, fontsize=7.4, loc="best")
 
@@ -1998,10 +2001,11 @@ def pr_curve(ax, y_true: Iterable, y_score: Iterable[float]) -> float:
                 ha="center", va="center", fontsize=8)
         ax.set_axis_off()
         return float("nan")
-    order = np.argsort(s)[::-1]
-    y = y[order]
-    tp = np.cumsum(y)
-    fp = np.cumsum(1 - y)
+    order = np.argsort(-s, kind="stable")
+    y, s = y[order], s[order]
+    ends = np.r_[np.flatnonzero(np.diff(s)), len(s) - 1]
+    tp = np.cumsum(y)[ends]
+    fp = np.cumsum(1 - y)[ends]
     precision = tp / np.maximum(tp + fp, 1)
     recall = tp / max(tp[-1], 1)
     ap = float(np.sum(np.diff(np.r_[0, recall]) * precision))
@@ -2098,7 +2102,7 @@ def kaplan_meier(ax, time: Iterable[float], event: Iterable,
         return
     g = (pd.Series(list(group)).astype(str)
          .replace({"nan": "未记载", "None": "未记载", "<NA>": "未记载"}).to_numpy()
-         if group is not None else np.array(["全体"] * len(t), dtype=object))
+         if group is not None else np.array(["全体"] * len(mask), dtype=object))
     g = g[mask]
     palette = list(CATEGORICAL)
     for i, level in enumerate(pd.Series(g).value_counts().head(6).index):

@@ -77,7 +77,7 @@ FIELDS = [
     "rel_path", "relpath", "top", "name", "ext", "kind", "bytes",
     "pages", "chars", "chars_effective", "images", "encrypted",
     "status", "year_hint", "md5", "dup_group", "dup_content_group",
-    "dup_role", "dup_role_content", "error", "error_kind",
+    "dup_role", "dup_role_content", "dedupe_group", "dedupe_role", "error", "error_kind",
 ]
 DUP_FIELDS = [
     "group", "md5", "role", "keeper_reason", "top", "file", "rel_path",
@@ -242,11 +242,10 @@ def classify(path: str, rec: dict, ext: str, min_chars: int) -> str:
 
 
 def content_key(text: str) -> str:
-    """sha1 of whitespace/punctuation-free lowercase text (content-level dedupe)."""
+    """Conservative text identity: preserve punctuation, decimals and case."""
     if not text:
         return ""
-    normalized = unicodedata.normalize("NFKC", text).lower()
-    normalized = re.sub(r"[\W_]+", "", normalized)
+    normalized = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip()
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest() if normalized else ""
 
 
@@ -277,6 +276,38 @@ def mark_groups(rows: list[dict], key_field: str, group_field: str,
             if reason_field:
                 item[reason_field] = reason
     return {"groups": groups, "files": files, "redundant": redundant, "ties": ties}
+
+
+def consolidate_duplicates(rows):
+    """Union byte/content duplicate components and elect exactly one keeper."""
+    parent = list(range(len(rows)))
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for column in ("dup_group", "dup_content_group"):
+        first = {}
+        for i, row in enumerate(rows):
+            label = row.get(column)
+            if label:
+                if label in first:
+                    parent[find(i)] = find(first[label])
+                else:
+                    first[label] = i
+    groups = defaultdict(list)
+    for i, row in enumerate(rows):
+        row["dedupe_group"] = row["dedupe_role"] = ""
+        groups[find(i)].append(row)
+    seq = 0
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        seq += 1
+        keeper, _ = pick_keeper(group)
+        for row in group:
+            row["dedupe_group"] = f"D{seq:04d}"
+            row["dedupe_role"] = "keeper" if row is keeper else "duplicate"
 
 
 def fmt_int(value) -> str:
@@ -477,9 +508,10 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows:
             row.pop("_content", None)
 
+    consolidate_duplicates(rows)
     status_counts = Counter(row["status"] for row in rows)
     valid_rows = [row for row in rows if row["status"] == "valid"]
-    keeper_rows = [row for row in valid_rows if row["dup_role"] != "duplicate"]
+    keeper_rows = [row for row in valid_rows if row["dedupe_role"] != "duplicate"]
 
     def total(field: str, items: list[dict]) -> int:
         return sum(int(item.get(field) or 0) for item in items)

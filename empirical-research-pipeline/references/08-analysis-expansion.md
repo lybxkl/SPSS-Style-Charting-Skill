@@ -2,6 +2,8 @@
 
 用户给的数据通常足够支撑一组“主分析 + 描述 + 异质性 + 稳健性 + 诊断”的组合。默认把能做的都做一遍，再把不支持的写明原因；不要等用户反复追问“还能不能再看点什么”。
 
+本页是内置分析入口和候选提示，不限制数据集形态或模型族。按 `12-exhaustive-research.md` 为每个数据集建立开放模型清单；缺变量、事件数、时点或设计信息时必须回原材料/附件查找，补取后重新整合与逐格复核。内置引擎缺方法时由 Agent 自写或选择专用引擎，真实无法取得数据的模型保留评估与回查记录。
+
 先跑自动筛查：
 
 ```bash
@@ -16,7 +18,7 @@ python scripts/auto_stats.py --data data/analysis.csv   --config assets/chart_co
 python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack --only descriptives
 ```
 
-`--max-predictors`（单变量筛查的预测变量上限，默认 60）与 `--max-models`（spec 模型数上限，默认 20）是显式的规模上限；超过上限直接报错退出（退出码 2），不会静默截断。
+`--max-predictors`（单变量筛查）与 `--max-models`（spec 模型数）默认均为 0=不限。正数是 Agent 显式选择的分批/试跑预算，必须记录并最终补全；不能把预算作为研究范围上限。
 
 ### 多变量入口：`--spec`（已实现）
 
@@ -184,7 +186,7 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 
 这张表就是“为什么没做/做了什么”的答案，能显著减少用户反复追问。
 
-输出规模有硬上限：`--max-predictors`（默认 60，筛查的预测变量数）与 `--max-models`（默认 20，spec 模型数）超限即报错（退出码 2），不静默截断。图表那边 `auto_chart_pack.py --max-charts`（默认 60）同样是硬上限，另有 `--only/--sections` 只跑指定图；典型任务的图数约 40–55 张，宽表会先撞到 60 的上限，需要更多时显式调大或分两次跑。
+`--max-predictors`、`--max-models` 与图包 `--max-charts` 默认均为 0=不限。图/表按实际数据与开放候选清单产出，不预设张数；分批或只选 only/sections 时记录覆盖并最终合并，未运行项继续处理或给实际回查依据。
 
 ## 12. 不要做的事
 

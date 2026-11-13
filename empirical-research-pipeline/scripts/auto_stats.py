@@ -59,8 +59,8 @@ except ImportError:  # pragma: no cover
 # ---------------------------------------------------------------------------
 # Limits and section bookkeeping (documented in references/08-analysis-expansion.md)
 # ---------------------------------------------------------------------------
-DEFAULT_MAX_PREDICTORS = 60   # univariate screening budget (S-08 used to be a silent [:20])
-DEFAULT_MAX_MODELS = 20       # model spec budget (documented, configurable via --max-models)
+DEFAULT_MAX_PREDICTORS = 0    # 0 = no count limit; positive budgets must be explicit
+DEFAULT_MAX_MODELS = 0
 
 SECTION_ORDER = ("descriptives", "group_tests", "binary_rates", "correlations",
                  "univariate", "models", "vif", "roc")
@@ -237,6 +237,8 @@ def infer_columns(df: pd.DataFrame, cfg: dict, max_categories: int = 12):
         categorical = [c for c in cfg["categorical"] if c in df.columns]
     if cfg.get("binary"):
         binaries = [c for c in cfg["binary"] if c in df.columns]
+    from analysis_utils import apply_declared_roles
+    numeric, categorical, binaries = apply_declared_roles(df, cfg, numeric, categorical, binaries)
     return time_col, group_col, treatment_col, outcome_col, numeric, categorical, binaries
 
 
@@ -307,7 +309,7 @@ def describe(df: pd.DataFrame, numeric: list[str], categorical: list[str]) -> pd
             "missing": len(df) - len(s), "mean": np.nan, "sd": np.nan,
             "median": np.nan, "p25": np.nan, "p75": np.nan,
             "min": np.nan, "max": np.nan,
-            "levels": "; ".join(f"{k}:{v}" for k, v in vc.head(8).items()),
+            "levels": "; ".join(f"{k}:{v}" for k, v in vc.items()),
             "rate_ci": "",
         })
     return pd.DataFrame(rows)
@@ -455,7 +457,7 @@ def correlations(df: pd.DataFrame, numeric: list[str], binaries: list[str],
     in the ``method`` column.
     """
     cols = [c for c in numeric + binaries if c in df.columns]
-    cols = [c for c in cols if not is_constant(df[c])][:14]
+    cols = list(dict.fromkeys(c for c in cols if not is_constant(df[c])))
     rows = []
     for i, a in enumerate(cols):
         for b in cols[i + 1:]:
@@ -555,8 +557,8 @@ def univariate_models(df: pd.DataFrame, outcome: str, numeric: list[str],
     rows = []
     candidates = [c for c in numeric + binaries
                   if c != outcome and c in df.columns and not is_constant(df[c])]
-    predictors = candidates[:max_predictors]
-    for c in candidates[max_predictors:]:
+    predictors = candidates[:max_predictors] if max_predictors > 0 else candidates
+    for c in (candidates[max_predictors:] if max_predictors > 0 else []):
         audit_skip(local, "univariate", outcome, c,
                    f"not screened: predictor cap ({max_predictors}); raise --max-predictors")
     for c in predictors:
@@ -724,7 +726,7 @@ def describe_outcome(df: pd.DataFrame, outcome: str, kind: str) -> pd.DataFrame:
         "variable": outcome, "type": "outcome (categorical)", "n": n, "missing": missing,
         "mean": np.nan, "sd": np.nan, "median": np.nan, "p25": np.nan, "p75": np.nan,
         "min": np.nan, "max": np.nan,
-        "levels": "; ".join(f"{k}:{v}" for k, v in vc.head(10).items()), "rate_ci": "",
+        "levels": "; ".join(f"{k}:{v}" for k, v in vc.items()), "rate_ci": "",
     }])
 
 
@@ -1083,7 +1085,7 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
         print("ERROR: statsmodels 未安装，无法运行 --spec 多变量模型", file=sys.stderr)
         return 2
     models = spec["models"]
-    if len(models) > args.max_models:
+    if args.max_models > 0 and len(models) > args.max_models:
         print(f"ERROR: spec 有 {len(models)} 个模型，超过 --max-models {args.max_models}；"
               "请拆分 spec 或提高上限", file=sys.stderr)
         return 2
@@ -1669,7 +1671,8 @@ def run_screening(df: pd.DataFrame, cfg: dict, args, out_dir: str,
     cfg["outcome"] = outcome_col
 
     kind, encoded, outcome_map, kind_msg = outcome_kind(
-        df[outcome_col], args.max_categories, cfg.get("outcome_map"))
+        df[outcome_col], args.max_categories, cfg.get("outcome_map"),
+        declared_type=cfg.get("outcome_type") or cfg.get("variable_types", {}).get(outcome_col))
     if kind == "unsupported":
         print(f"ERROR: {kind_msg}", file=sys.stderr)
         return 2
@@ -1795,9 +1798,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", default="output/analysis_pack")
     parser.add_argument("--max-categories", type=int, default=12)
     parser.add_argument("--max-predictors", type=int, default=DEFAULT_MAX_PREDICTORS,
-                        help=f"单变量筛查的预测变量上限（默认 {DEFAULT_MAX_PREDICTORS}）")
+                        help=f"单变量筛查的预测变量上限（默认 {DEFAULT_MAX_PREDICTORS} = 不限）")
     parser.add_argument("--max-models", type=int, default=DEFAULT_MAX_MODELS,
-                        help=f"spec 里的模型数上限（默认 {DEFAULT_MAX_MODELS}）")
+                        help=f"spec 里的模型数上限（默认 {DEFAULT_MAX_MODELS} = 不限）")
     parser.add_argument("--only", "--sections", dest="only", default=None,
                         help="只跑指定 section：descriptives,group_tests,binary_rates,"
                              "correlations,univariate,models,vif,roc（或 screen/all/models）")
@@ -1832,8 +1835,8 @@ def main() -> int:
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-    if args.max_predictors < 1 or args.max_models < 1:
-        print("ERROR: --max-predictors/--max-models 必须 >= 1", file=sys.stderr)
+    if args.max_predictors < 0 or args.max_models < 0:
+        print("ERROR: --max-predictors/--max-models 必须 >= 0（0 = 不限）", file=sys.stderr)
         return 2
     if not os.path.isfile(args.data):
         print(f"ERROR: data not found: {args.data}", file=sys.stderr)

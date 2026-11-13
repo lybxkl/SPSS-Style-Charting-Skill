@@ -76,6 +76,10 @@ def archive_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
@@ -92,10 +96,10 @@ def main(argv: list[str] | None = None) -> int:
         expected = {f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}" for f in files}
         missing = expected - inside
         extra = inside - expected
-        stale = [f for f in files
-                 if f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}" in inside
-                 and zipfile.ZipFile(DIST).read(
-                     f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}") != f.read_bytes()]
+        with zipfile.ZipFile(DIST) as zf:
+            stale = [f for f in files
+                     if f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}" in inside
+                     and zf.read(f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}") != f.read_bytes()]
         if missing or extra or stale:
             for label, items in (("missing", missing), ("unexpected", extra), ("stale", stale)):
                 for it in sorted(items):
@@ -106,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         if not sidecar.is_file():
             print(f"FAIL: {sidecar.name} is missing (run without --check first)")
             return 1
-        if sidecar.read_text(encoding="utf-8").split("  ")[0].strip() != archive_digest(DIST):
+        if sidecar.read_text(encoding="utf-8").split("  ")[0].strip() != file_digest(DIST):
             print(f"FAIL: {sidecar.name} does not match the archive")
             return 1
         return 0
@@ -118,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     # The digest is the only way a user can tell whether the .skill they
     # imported is the one CI built: the file name and mtime prove nothing.
     DIST.with_suffix(DIST.suffix + ".sha256").write_text(
-        f"{digest}  {DIST.name}\n", encoding="utf-8")
+        f"{file_digest(DIST)}  {DIST.name}\n", encoding="utf-8")
     print(f"wrote {DIST.name}.sha256")
     return 0
 

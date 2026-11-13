@@ -129,7 +129,7 @@ class PackCLICase(TempCase):
             with self.subTest(chart=row["id"]):
                 self.assertEqual(int(row["dpi"]), 600)
                 self.assertIn(row["n_scope"], {"sample", "corpus", "subgroup"})
-                self.assertRegex(row["data_hash"], r"^[0-9a-f]{8}$")
+                self.assertRegex(row["data_hash"], r"^[0-9a-f]{64}$")
                 self.assertIn("N=", row["caption"])
                 self.assertIn("top=", row["note"])        # adjust() recorded
                 self.assertTrue(int(row["n"]) > 0)

@@ -194,17 +194,22 @@ def load_numbers(path: str | None) -> dict:
         return numbers
     if not os.path.exists(path):
         raise SpecError(f"numbers file not found: {path}")
-    with open(path, encoding="utf-8-sig", newline="") as fh:
-        reader = csv.DictReader(fh)
-        if not reader.fieldnames or "key" not in reader.fieldnames:
-            raise SpecError("numbers CSV needs a 'key' column")
-        for row in reader:
+    from verify_dataset import read_csv
+    try:
+        header, rows = read_csv(path)
+        if not {"key", "value"} <= set(header):
+            raise SpecError("numbers CSV needs key,value columns")
+        for row in rows:
             key = (row.get("key") or "").strip()
             if not key:
-                continue
+                raise SpecError("numbers CSV has an empty key")
             if key in numbers:
                 raise SpecError(f"numbers CSV repeats key {key!r}")
             numbers[key] = (row.get("value") or "").strip()
+            if not numbers[key]:
+                raise SpecError(f"numbers CSV has an empty value for {key!r}")
+    except ValueError as exc:
+        raise SpecError(str(exc)) from exc
     return numbers
 
 
@@ -231,11 +236,13 @@ def read_table(spec: dict, base_dir: str) -> tuple[list, list, str]:
     path = path if os.path.isabs(path) else os.path.join(base_dir, path)
     if not os.path.exists(path):
         raise SpecError(f"table CSV not found: {path}")
-    with open(path, encoding="utf-8-sig", newline="") as fh:
-        rows = list(csv.DictReader(fh))
+    from verify_dataset import read_csv
+    try:
+        header, rows = read_csv(path)
+    except ValueError as exc:
+        raise SpecError(str(exc)) from exc
     if not rows:
         raise SpecError(f"table CSV has no rows: {path}")
-    header = list(rows[0].keys())
     columns = spec.get("columns")
     if columns:
         cols = []
@@ -459,7 +466,7 @@ class Builder:
             )
 
         px_width = _png_width(full)
-        if px_width is not None and px_width < FIGURE_PX_MIN:
+        if px_width is not None and px_width / (width_cm / 2.54) < 600 * .995:
             self.warnings.append(
                 f"figure {os.path.basename(full)} is {px_width} px wide; at "
                 f"{width_cm:.1f} cm that is {px_width / (width_cm / 2.54):.0f} dpi, "

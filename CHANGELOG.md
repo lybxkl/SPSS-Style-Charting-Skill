@@ -2,6 +2,28 @@
 
 本仓库此前没有版本记录，从本轮起按日期记。缺陷编号对应 `docs/ISSUES-FIXED.md`（审计索引），审计明细在 `docs/skill-audit/` 之外未随仓库发布——本文只保留可验证的行为变化。
 
+## 2026-11-13 开放研究范围与整合后的逐格回源复核
+
+- skill 明确开放数据集数量/形态、脚本/引擎与数学/统计模型；先全资料发现，逐候选检查数据/设计，缺数必须回原材料和附件补取，补数后重整合/复核，不把内置方法当上限。
+- 新增 `verify_dataset.py`：全部单元格的来源 SHA256、CSV/JSON/JSONL/文本/PDF页/XLSX/元数据定位与 raw 回读，派生值独立复算，显式可信适配器扩展；prepare 仅生成 pending 任务，final 要求逐格回源复读的版本签名/时间/记录。不能用抽样、只审 flags 或自动盖章代替真实复核；语义真实性仍需实际复读。
+- 新增 `run_model.py` 任意命令执行回执；新增 `research_gate.py` 全来源覆盖、原始目录重扫、开放模型终态/缺数回查、样本键/N、输入/代码/输出哈希和数据复核版本检查。
+- 新增注册表示例与 `references/12-exhaustive-research.md`，同步跨脚本契约与交付清单。
+- `auto_stats` 的预测变量/模型数和 `auto_chart_pack` 总图数默认 0=不限；移除相关统计前14列与若干单变量/降维图的静默列数截断。图表数据指纹改为全表值/顺序 SHA256，防止总和不变的换值逃过版本检查。
+- 自动 PCA 默认完整案例且不插补/截尾，显式处理才在图注留痕；相关散点按变量对处理缺失，不再因第三列缺失丢掉本来可画的数据，相关热图分别报告样本框/成对样本范围/完整案例数。
+- 新增 39 项来源真实性、全格复核、版本失效、模型补数、任意引擎执行与开放覆盖测试；独立合成资料前向实测覆盖 3 数据集、42 格复读和 10 个模型候选，资料/模型闸门通过。
+- 三条新契约补上正反用例：可读页不完整的 PDF 默认拒绝（只有 `allow_partial=True` 才返回已读页）、位图图不显式声明 `--allow-raster-text` 时计为「未核」而非通过、manifest 行必须给出 png/pdf。`tests/_helpers.py` 固定子进程 `PYTHONIOENCODING=utf-8`，`ΔL*`/`ΔE` 断言不再依赖哪个测试模块先被导入。
+
+## 2026-11-13 LLM 原生：候选集、判断台账与复审闭环
+
+- 抽取层不再静默取值：数值/日期/时长先同行，标签行 NA 短语优先于跨行数字；孤立的「点/點」不再读成 0；`canon` 过滤被更长命中包含的子串（`不满意` 不再同时算 `满意`）。
+- 每个字段带 `candidates` / `flags` / `needs_review`，新增 `extraction_review.csv`、`extraction_candidates.jsonl`、`decisions_todo.csv`；`--require-review` 把任一 flag 变成退出码 2。
+- 新增 `decisions.jsonl` 契约与 `check_decisions.py`：schema、证据 span/引文、候选值是否真的出现过、重复 target、`needs_human` 未决，全部机器校验。
+- `make_coding_sheet.py` 新增 `--decisions` / `--allow-unresolved`：`value` 写回 dataset 并把来源记为 `decision`，`na` 记为 `decision:na`，`exclude` 移除整份文档；`run.json.review` 记录复审与决策计数（重跑不会再保留旧计数）。
+- 新增 `review_pack.py`：样本/缺失来源/漏斗、模型 N、图表状态、数字溯源、未决 decisions、审稿人最可能先问的问题；Markdown + JSON 双出。
+- `methods_pack.py` 的 m09/m16 增加 EFA 前置闸门：KMO<0.6 或 Bartlett 不显著时跳过并给出诊断值，不再把不可解释的因子解标成“完成”。
+- 修复 `references/10-contracts.md` 第 9 节的控制字符损坏（`assemble`→`ssemble`、`exit`→`xit`），并补第 10 节判断台账契约。
+- 测试 446 → 464；dist 41 → 43 文件。
+
 ## 2026-11-10 审计：十六种方法的数值、编排与配图
 
 第五轮审计按四个角度做：数值正确性（用 scipy/statsmodels/手算三条独立路径比对）、

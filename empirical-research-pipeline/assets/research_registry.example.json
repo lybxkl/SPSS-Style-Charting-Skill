@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "source_root": "materials",
+  "source_inventory": "output/audit/corpus_files.csv",
+  "source_coverage": "output/source_coverage.jsonl",
+  "discovery_report": "output/discovery_report.md",
+  "model_plan": "output/model_plan.jsonl",
+  "datasets": [
+    {
+      "id": "person_wave",
+      "path": "data/person_wave.csv",
+      "key": ["person_id", "wave"],
+      "unit": "一位受访者的一次实际测量；按资料改写，不限制数据集形态",
+      "codebook": "data/person_wave_codebook.md",
+      "provenance": "data/person_wave_provenance.jsonl",
+      "review": "data/person_wave_review.jsonl",
+      "artifacts": []
+    }
+  ]
+}

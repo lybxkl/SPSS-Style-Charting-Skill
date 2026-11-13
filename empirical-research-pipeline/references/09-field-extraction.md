@@ -83,7 +83,7 @@
 
 - 锚点取值顺序：`hint` > `labels` > `label` > `start`。写了 `label: 受访者年龄` 的字段不必再重复一遍 `hint`。
 - 锚点按"逐字可夹空白"匹配（同 §1.1 形态 B）。
-- 窗口**先向后 160 字，再向前 160 字**。数量通常紧跟名词（`修复费1250元`）；先向前会抓到上一条目的金额（在实际语料里常见是尚未退缴的违法所得）。
+- 窗口**先同行，再向后 160 字，最后向前 160 字**。同行优先是因为表头值不会跑到下一行：`受访者年龄：未记录` 的下一个数字是访谈日期，不是年龄。向后优先是因为数量通常紧跟名词（`修复费1250元`）；先向前会抓到上一条目的金额（在实际语料里常见是尚未退缴的违法所得）。
 - 命中的数字若在窗口内出现多处，按 §1.2 第 5 条取最早。
 - 锚点命中但带不出单位时（`受访者年龄：62`），允许回落到裸数值，`source="label"` 且 `unit_inferred=true`。
 - **`date` 用锚点位置裁决远近**：`裁判日期：2021.03****` 与正文里一个完整的 `1988 年7 月11 日` 同时存在时，取离锚点近的那个；没有锚点则取文档中**最早出现**的日期（不是"最完整"的那个）。按完整度优先选日期，会静默错 30 多年。
@@ -98,6 +98,9 @@
 | 段存在，`count_unique` 计数为 0 | `0` | `count` |
 | 值本身是 NA 短语（`未提及` 等） | NA 短语 | 原来源 |
 | 值落在否定域内（`尚未退缴…5000元`） | NA 短语（`na_negated` 可覆盖） | 原来源 + `negated=true` |
+| 标签行写了 NA 短语，附近还有数字 | NA 短语；数字进候选并标 `rejected_by_na` | `na` |
+
+数值/日期/时长字段的优先级是：**同行读数 > 标签行 NA 短语 > 跨行读数**。跨行读数落在 header 字段时会带 `cross_line_header` 并进入复审，不会静默当成事实。
 
 **`False` 与 `0` 是有信息的取值，不是缺失。** 把"没投诉"写成 NA，等于扔掉了一次测量。
 
@@ -173,7 +176,7 @@
 列顺序：`rel_path, file, doc_type, <field1>, <field1>_src, <field2>, <field2>_src, …`
 
 - 值列：`numeric`/`count` 写数字（`""` 当缺失），整数不带 `.0`；其余写字符串。
-- `<field>_src ∈ kv_block | label | vocab | pattern | contains | count | filename | absent | none`。
+- `<field>_src ∈ kv_block | label | vocab | pattern | contains | count | filename | absent | none | decision | decision:na`。
 - 缺失一律写 `""`；为什么缺失看 `evidence.jsonl` 与 `run.json`。
 - `doc_type` 是**文档类型**，不是文件格式。通用 profile 下写 `document`（`doc_type_src="default"`），不得回落到 `pdf`/`txt`。
 
@@ -206,6 +209,27 @@
 
 `profile_sha256` 覆盖 profile 文件字节——换 profile 必须能被发现。
 
+### 3.4 `extraction_review.csv` / `extraction_candidates.jsonl`（复审层）
+
+`--extract` 现在总是写这三件，不是可选项：
+
+| 文件 | 内容 |
+|---|---|
+| `extraction_review.csv` | 一行一个文档×字段：`value, raw, source, span, na_hit, cross_line, needs_review, flags, alternatives, note` |
+| `extraction_candidates.jsonl` | 每文档一份，保留每个候选的 `value/raw/span/source/note/same_line` |
+| `decisions_todo.csv` | 只列 `needs_review=true` 的行，`target` 已拼成 `<rel_path>#<field>`，供模型写 decisions |
+
+Flag 语义：
+
+- `cross_line_header`：header 字段的值来自标签下一行。可能是拆分表头，也可能是偷了下一字段的值，必须看原文。
+- `na_conflict`：标签行有 NA 短语，但附近还有数字。
+- `multiple_values`：同一字段出现两个以上不同读数。
+- `value_withheld`：当前值是空，但候选里还有非空读数。
+
+`--require-review` 让任一 flag 变成退出码 2；模型写 `decisions.jsonl` 后用 `--decisions` 重跑。`value` 必须是候选之一（由 `check_decisions.py` 机器校验），`na` 不需要候选但要给原文 span。重跑后 `run.json.review` 记录 `fields / needs_review / decisions_applied / documents_excluded_by_decision`，复审计数随本次运行更新，不沿用旧值。
+
+决策覆盖某个字段时，`evidence.jsonl` 里该字段的旧证据行会被移除，只留 `<field>=decision:<id>`，`span` 置空；被否决的读数仍保留在 `extraction_candidates.jsonl`，读者能看见“曾经抽到什么、为什么没采用”，但不会把它误当成最终证据。
+
 ---
 
 ## 4. 与既有产物的关系
@@ -225,6 +249,7 @@
 4. **无领域分支**：`extract_lib.py` 里不得出现任何学科词（由 `tests/test_extract_lib.py::LibraryIsDomainNeutralTest` 强制）。
 5. **证据可回验**：每个字段至少 1 条证据，且 `verify_evidence(text, line)` 为真，覆盖率 100%。
 6. **NA 可区分**：同一份语料里，"段不存在"、"段存在但没提到"、"提到但为否" 三类必须能分开（分别落 `source=none`、`none`、`absent`，`contains` 的 `False` 不等于 NA）。
+7. **复审闭环**：每个 `needs_review=true` 的字段都能在 `decisions.jsonl` 找到同 target 的记录，且 `check_decisions.py` 0 error；否则交付闸门不通过。
 
 ---
 
@@ -251,3 +276,7 @@
 10. 文本统一换行后再算偏移。
 11. `doc_type` 不再回落到文件扩展名。
 12. 验收第 1 条改为**条件召回**口径。
+13. 数值类锚点先同行、再向后、再向前；标签行 NA 短语优先于跨行数字。
+14. 每个字段带 `candidates/flags/needs_review`；`--require-review` 与 `--decisions` 形成复审闭环。
+15. `canon` 过滤被更长命中包含的子串（`不满意` 不再同时算 `满意`）。
+16. 孤立的「点/點」不再被读成数字 0。

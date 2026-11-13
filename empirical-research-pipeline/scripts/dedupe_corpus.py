@@ -103,6 +103,8 @@ def build_plan(groups: dict, root: str, dest_name: str, copy_mode: bool):
         keeper_rel = rel_of(keeper)
         keeper_path = safe_relpath(keeper_rel, root) if keeper_rel else None
         keeper_ok = bool(keeper_path and os.path.isfile(keeper_path))
+        if keeper_ok and keeper.get("md5"):
+            keeper_ok = md5_file(keeper_path) == keeper["md5"]
         if not keeper_ok:
             skipped_groups += 1
             print(f"warning: group {group} keeper missing on disk: {keeper_rel}; "
@@ -141,7 +143,7 @@ def build_plan(groups: dict, root: str, dest_name: str, copy_mode: bool):
                 reason = "MD5 changed since audit"
             else:
                 action = "copy" if copy_mode else "move"
-                reason = f"same MD5 as {keeper.get('name', '')}"
+                reason = f"audited byte/content identity with {keeper.get('name', '')}"
             plan.append({
                 "group": group, "action": action, "role": "duplicate",
                 "file": row.get("name", ""), "rel_path": rel, "relpath": rel,
@@ -160,9 +162,11 @@ def apply_plan(plan: list[dict], root: str, dest_name: str, log_path: str) -> di
     keeper_ok: dict[str, bool] = {}
     for row in plan:
         if row["role"] == "keeper":
-            keeper_ok[row["group"]] = row["exists"] == "yes"
+            path = safe_relpath(row["rel_path"], root)
+            keeper_ok[row["group"]] = bool(path and os.path.isfile(path) and row.get("md5")
+                                            and md5_file(path) == row["md5"])
     counts = Counter()
-    log: list[dict] = []
+    log: list[dict] = read_csv(log_path)[0] if os.path.isfile(log_path) else []
     for row in plan:
         if row["action"] not in {"copy", "move"}:
             if row["action"] == "skip":
@@ -182,7 +186,7 @@ def apply_plan(plan: list[dict], root: str, dest_name: str, log_path: str) -> di
             status, reason = "failed", "source missing"
         elif not dest:
             status, reason = "failed", "unsafe destination"
-        elif row.get("md5") and not row.get("md5_ok"):
+        elif row.get("md5"):
             try:
                 ok = md5_file(src) == row["md5"]
             except OSError as exc:
@@ -191,6 +195,8 @@ def apply_plan(plan: list[dict], root: str, dest_name: str, log_path: str) -> di
             if not ok:
                 status = "failed"
                 reason = reason or "MD5 changed since audit"
+        else:
+            status, reason = "failed", "source has no audit MD5; re-audit before applying"
         if status:
             log.append({"group": group, "src": src or row["rel_path"], "dest": dest or "",
                         "action": row["action"], "status": status, "reason": reason})
@@ -342,6 +348,9 @@ def main(argv: list[str] | None = None) -> int:
 
     groups: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
+        if "dedupe_group" in fields:
+            row = dict(row, dup_group=row.get("dedupe_group", ""),
+                       dup_role=row.get("dedupe_role", ""))
         group = (row.get("dup_group") or "").strip()
         if group:
             groups[group].append(row)

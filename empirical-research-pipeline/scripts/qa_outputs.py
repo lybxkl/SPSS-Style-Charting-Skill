@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 import os
@@ -231,18 +232,17 @@ def parse_n(value) -> tuple[int | None, bool]:
 
 
 def read_rows(path: str) -> list[dict]:
+    from verify_dataset import read_csv
     last_error = None
     for encoding in CSV_ENCODINGS:
         try:
-            with open(path, encoding=encoding, newline="") as fh:
-                return list(csv.DictReader(fh))
+            return read_csv(path, encoding)[1]
         except UnicodeDecodeError as exc:
             last_error = exc
             continue
     if last_error is not None:
         raise last_error
-    with open(path, encoding="utf-8-sig", newline="") as fh:
-        return list(csv.DictReader(fh))
+    return read_csv(path)[1]
 
 
 def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
@@ -358,10 +358,14 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
                         fonts.append(entry)
                         page_fonts.append((entry, bbox))
             for im, rect, info in page_images:
-                dpi = info["width"] / (rect.width / 72.0)
+                dpi_x = info["width"] / (rect.width / 72.0)
+                dpi_y = info["height"] / (rect.height / 72.0)
+                dpi = min(dpi_x, dpi_y)
                 widths.append({"page": i + 1, "width": info["width"],
                                "height": info["height"],
                                "rect_w_pt": round(rect.width, 1),
+                               "rect_h_pt": round(rect.height, 1),
+                               "dpi_x": round(dpi_x, 1), "dpi_y": round(dpi_y, 1),
                                "dpi": round(dpi, 1)})
                 if not raster_expected:
                     # A figure PDF is judged per page, not per image: an imshow
@@ -385,7 +389,7 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
                         "width": info["width"],
                         "height": info["height"],
                         "rect_w_pt": round(rect.width, 1),
-                        "dpi": round(info["width"] / (rect.width / 72.0), 1),
+                        "dpi": round(min(dpi_x, dpi_y), 1),
                     })
             if not raster_expected and page_images and len(page_fonts) < 3:
                 info = page_images[0][2]
@@ -394,7 +398,8 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
                     "width": info["width"],
                     "height": info["height"],
                     "rect_w_pt": round(page_images[0][1].width, 1),
-                    "dpi": round(info["width"] / (page_images[0][1].width / 72.0), 1),
+                    "dpi": round(min(info["width"] / (page_images[0][1].width / 72.0),
+                                     info["height"] / (page_images[0][1].height / 72.0)), 1),
                 })
     finally:
         doc.close()
@@ -512,6 +517,19 @@ def check_docx(path: str) -> dict:
             n_values.add(m.group(1))
     result["paragraphs"] = len(paragraphs)
     result["inline_images"] = len(doc.inline_shapes)
+    placements = []
+    for shape in doc.element.xpath(".//wp:inline | .//wp:anchor"):
+        refs = shape.xpath(".//a:blip/@r:embed")
+        extents = shape.xpath("./wp:extent")
+        if not extents:
+            continue
+        for ref in refs:
+            part = doc.part.related_parts.get(ref)
+            if part is not None:
+                placements.append({"sha256": hashlib.sha256(part.blob).hexdigest(),
+                                   "width_cm": float(extents[0].get("cx")) / 360000,
+                                   "height_cm": float(extents[0].get("cy")) / 360000})
+    result["placements"] = placements
     image_parts = sum(1 for rel in doc.part.rels.values()
                       if "image" in getattr(rel, "reltype", ""))
     result["image_parts"] = image_parts
@@ -616,6 +634,12 @@ def check_manifest(path: str, data_rows: int | None = None,
     palette_rows: list[dict] = []
     for r in rows:
         cid = r.get("id", "?")
+        status = str(r.get("status") or "ok").strip().lower()
+        if status != "ok":
+            result["warnings"].append(f"{cid}: chart status is {status}")
+            continue
+        if not str(cid).strip() or not (str(r.get("png") or "").strip() or str(r.get("pdf") or "").strip()):
+            file_bad.append(f"{cid}: no output image/PDF")
         raw_n = (r.get("n") or "").strip()
         # "NA" is a producer saying "I do not know the sample size".  It must not
         # be silently replaced by a row count, and it is a warning, not an error:
@@ -747,7 +771,7 @@ def check_manifest(path: str, data_rows: int | None = None,
 
 def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
                   min_fontsize: float | None = None,
-                  allow_raster_text: bool = False) -> dict:
+                  allow_raster_text: bool = False, placements: list | None = None) -> dict:
     """Check the raster figures in a directory for real resolution.
 
     Counting files is not QA: a 72 dpi PNG passed the old check.  For each image
@@ -763,7 +787,10 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
         from PIL import Image
     except ImportError:  # pragma: no cover
         Image = None
+        result["errors"].append("Pillow is required to validate raster image files")
     low, no_meta = [], []
+    placement_by_stem, image_sha_by_stem = {}, {}
+    bound_font_images = set()
     # Same 0.5% tolerance as check_pdf: 15 cm at 600 dpi is 3543.3 px, and a
     # 3543 px file lands on 599.9 -- a rounding artefact, not a low-res export.
     dpi_limit = min_dpi * 0.995 if min_dpi else 0
@@ -777,11 +804,23 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
                 with Image.open(full) as im:
                     w, h = im.size
                     meta = im.info.get("dpi")
+                    im.load()
+                with open(full, "rb") as source_image:
+                    checksum = hashlib.sha256(source_image.read()).hexdigest()
+                stem = os.path.splitext(name)[0]
+                matching = [p for p in (placements or []) if p["sha256"] == checksum]
+                if matching:
+                    image_sha_by_stem[stem] = checksum
+                    placement_by_stem[stem] = min(min(p["width_cm"], p["height_cm"] * w / h) for p in matching)
+                print_width = max((p["width_cm"] for p in matching), default=width_cm)
+                print_dpi = min((min(w / (p["width_cm"] / 2.54), h / (p["height_cm"] / 2.54)) for p in matching),
+                                default=w / (width_cm / 2.54))
                 info.update({"px_width": w, "px_height": h,
                              "dpi_meta": round(float(meta[0]), 1) if meta else None,
-                             "dpi_at_width": round(w / (width_cm / 2.54), 1)})
+                             "dpi_at_width": round(print_dpi, 1), "placed_width_cm": print_width})
             except Exception as exc:
                 info["error"] = f"{type(exc).__name__}: {exc}"[:120]
+                result["errors"].append(f"{name}: cannot read image: {exc}")
         result["files"].append(info)
         if info.get("dpi_at_width") is None:
             continue
@@ -801,12 +840,16 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
         for name in sorted(os.listdir(path)):
             if not name.lower().endswith(".pdf"):
                 continue
+            stem = os.path.splitext(name)[0]
+            placed_width = placement_by_stem.get(stem, width_cm)
             pdf_info = check_pdf(os.path.join(path, name), 0, 0, min_fontsize,
-                                 width_cm, allow_raster_text,
+                                 placed_width, allow_raster_text,
                                  raster_expected=False)
+            if stem in placement_by_stem and not pdf_info.get("errors") and pdf_info.get("font_spans", 0) > 0:
+                bound_font_images.add(image_sha_by_stem[stem])
             pdf_rows.append({
                 "file": name,
-                "pages": pdf_info.get("pages"),
+                "pages": pdf_info.get("pages"), "placed_width_cm": placed_width,
                 "min_fontsize": pdf_info.get("min_fontsize"),
                 "min_fontsize_effective": pdf_info.get("min_fontsize_effective"),
                 "low_font_count": pdf_info.get("low_font_count", 0),
@@ -818,8 +861,7 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
                 min_effective = effective if min_effective is None \
                     else min(min_effective, effective)
             for message in pdf_info.get("errors", []):
-                if "pt after placement" in message or "no_text_layer" in message:
-                    result["errors"].append(f"{name}: {message}")
+                result["errors"].append(f"{name}: {message}")
             for message in pdf_info.get("warnings", []):
                 if "no_text_layer" in message:
                     result["warnings"].append(f"{name}: {message}")
@@ -835,7 +877,7 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
             # A PNG/TIFF has no text layer by definition, so this is not a
             # no_text_layer defect -- but it is not a pass either: say it once.
             if result["files"]:
-                result["warnings"].append(
+                result["warnings" if allow_raster_text else "errors"].append(
                     f"{len(result['files'])} raster file(s): pixel images have no "
                     f"text layer, so the {float(min_fontsize):g} pt minimum was not "
                     f"verified; check the source figure PDF (qa_outputs --pdf)")
@@ -852,6 +894,7 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
     if no_meta:
         result["warnings"].append(
             f"{len(no_meta)} figure(s) carry no dpi metadata (pixel size is still checked)")
+    result["font_verified_image_hashes"] = sorted(bound_font_images)
     return result
 
 
@@ -934,7 +977,18 @@ def main() -> int:
     if args.figures:
         report["checks"]["figures"] = check_figures(
             args.figures, args.min_dpi, args.figure_width_cm, min_fontsize,
-            not raster_is_error)
+            not raster_is_error, report["checks"].get("docx", {}).get("placements"))
+    if raster_is_error:
+        docx_check = report["checks"].get("docx", {})
+        verified_fonts = set(report["checks"].get("figures", {}).get("font_verified_image_hashes", []))
+        unverified = [p for p in docx_check.get("placements", []) if p["sha256"] not in verified_fonts]
+        if docx_check.get("image_parts", 0) and not docx_check.get("placements"):
+            docx_check["errors"].append("DOCX image placement could not be bound/measured")
+        if unverified:
+            docx_check["errors"].append(f"{len(unverified)} placed image(s) lack verified source-vector type at their actual DOCX size")
+        pdf_check = report["checks"].get("pdf", {})
+        if pdf_check.get("raster_figures") and (not docx_check.get("placements") or unverified):
+            pdf_check["errors"].append("bitmap figure type/placement is unverified; provide DOCX and matching PNG/vector PDF sources")
 
     if not report["checks"]:
         print("ERROR: no check targets supplied", file=sys.stderr)

@@ -1,5 +1,16 @@
 # 交付前质检清单
 
+## 先检查全量与回源
+
+- [ ] 原始清单逐份有处置，重扫无新漏文件；发现报告覆盖实体、字段、章节/表格/附件和未利用项。
+- [ ] 数据集数量/形态由资料决定，各自有单位、单/复合主键、codebook 和可核对关联，原生文件与无损审计视图都保留。
+- [ ] 全部单元格（含键、空值、标记、派生值）有精确来源哈希/定位/原值或独立复算输入。
+- [ ] 整合后再次逐格复读原材料与上下文，非抽样、非只看 flags、非批量盖 verified；数据/来源/规则变化后旧复核不复用。
+- [ ] `verify_dataset.py --stage final` 返回 0，报告 stage=final、status=verified；原件/规则版本与当前一致。
+- [ ] 开放模型清单逐项有数据/设计诊断；缺数模型已回全部材料，找到的真实数据已补入并重新复核，无法获得的留缺口与原因。
+- [ ] 每个完成模型有实际命令/代码/环境、输入/输出 SHA256 回执、样本键与 N；所有有意义、不显著、失败和不适用项目都有可查看位置。
+- [ ] `research_gate.py` 返回 0；随后仍需下面的统计/图表/文稿检查。详细契约见 `12-exhaustive-research.md`。
+
 ## A. 样本与资料
 
 - [ ] 原始文件数、有效资料数、唯一样本数、分析样本数各有明确来源。
@@ -88,9 +99,26 @@
 - [ ] 局限部分写明：资料选择偏差、编码单位、未记载不等于未发生、公开资料覆盖限制。
 - [ ] 政策/规范建议从结果推出，不超出数据能支持的范围。
 
+## H. 判断台账与复审
+
+- [ ] 每个 `needs_review=true` 的字段都能在 `decisions.jsonl` 找到同 target 的记录。
+- [ ] `check_decisions.py` 0 error；`needs_human` 要么为 false，要么作者已在对话里拍板（不是用 `--allow-unresolved` 跳过）。
+- [ ] 每条 decision 的 `evidence` 能在原文命中；`extract` 的 `value` 是候选之一。
+- [ ] 抽样 10 条：`dataset.csv` 的值 → `evidence.jsonl` 的 span → 原文逐字命中。
+- [ ] `review_pack.md` 的五个“审稿人问题”都能回答；答不上来的已补分析或降结论。
+- [ ] 删除、覆盖、外发、定稿四类操作都有作者明确同意。
+
 ## 一键检查
 
 ```bash
+python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目录" \
+  --review output/coding/extraction_review.csv --out output/qa/decision_issues.csv
+
+python scripts/review_pack.py --data "data/analysis.csv" --stats output/stats \
+  --figures output/chart_pack/chart_manifest.csv --verify output/verify/number_issues.csv \
+  --decisions decisions.jsonl --sample-flow output/coding/sample_flow.csv \
+  --missing output/coding/missing_by_source.csv --out output/review/review_pack.md
+
 python scripts/qa_outputs.py \
   --docx "成稿.docx" \
   --pdf "成稿.pdf" \
@@ -105,5 +133,5 @@ python scripts/qa_outputs.py \
 
 `--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 顺序找主键，找不到直接报错——不会静默跳过重复检查。
 
-脚本只查格式和可计算项；A–G 中涉及判断的条目仍需人工过一遍。
+脚本只查格式、可计算项和台账契约；A–H 中涉及研究判断的条目仍需人工过一遍。
 

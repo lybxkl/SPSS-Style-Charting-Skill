@@ -56,7 +56,7 @@ FIG_W = 15 / 2.54  # 15 cm text width, A4 with standard margins
 # Cap on the number of figures a single run may write. The documented default pack
 # is ~40-55 charts (references/07-chart-atlas.md §1/§5); --max-charts defaults to
 # this ceiling and can only be lowered explicitly.
-MAX_CHARTS = 60
+MAX_CHARTS = 0  # unlimited by default; a positive preview budget is explicit
 
 N_SCOPES = ("sample", "corpus", "subgroup")
 
@@ -185,25 +185,16 @@ def png_pixel_info(path: str) -> tuple[int, int]:
 
 
 def data_fingerprint(df: pd.DataFrame, key_cols: list[str] | None = None) -> str:
-    """8-hex md5 over column names, row count and a summary of the key columns.
+    """SHA256 over all columns, dtypes, index and cell values, preserving order.
 
-    Lets a later reader check that a manifest row was produced from the same
-    dataset without shipping the data itself.
+    Column sums cannot detect a swapped record or an edit outside selected key
+    columns. The external run receipt additionally binds the input file bytes.
     """
-    digest = hashlib.md5()
-    digest.update("|".join(str(c) for c in df.columns).encode("utf-8"))
-    digest.update(f"|rows={len(df)}".encode("utf-8"))
-    candidates = [c for c in (key_cols or []) if c in df.columns] or list(df.columns)
-    for col in candidates[:12]:
-        series = df[col]
-        numeric = pd.to_numeric(series, errors="coerce")
-        n_num = int(numeric.notna().sum())
-        if n_num:
-            digest.update(f"|{col}:n{n_num}:s{float(numeric.sum()):.6f}".encode("utf-8"))
-        else:
-            digest.update(f"|{col}:n{int(series.notna().sum())}"
-                          f":u{int(series.nunique(dropna=True))}".encode("utf-8"))
-    return digest.hexdigest()[:8]
+    digest = hashlib.sha256()
+    digest.update(json.dumps([(str(c), str(t)) for c, t in zip(df.columns, df.dtypes)],
+                             ensure_ascii=False).encode("utf-8"))
+    digest.update(pd.util.hash_pandas_object(df, index=True).to_numpy().tobytes())
+    return digest.hexdigest()
 
 
 def top_counts(series: pd.Series, n: int) -> tuple[list[str], np.ndarray]:
@@ -272,6 +263,8 @@ def role_columns(df: pd.DataFrame, cfg: dict, max_categories: int):
         categorical = [c for c in cfg_cat if c in df.columns]
     if cfg_bin:
         binaries = [c for c in cfg_bin if c in df.columns]
+    from analysis_utils import apply_declared_roles
+    numeric, categorical, binaries = apply_declared_roles(df, cfg, numeric, categorical, binaries)
     return id_col, time_col, group_col, treatment_col, outcome_col, numeric, categorical, binaries
 
 
@@ -289,8 +282,8 @@ CHART_CATALOG = [
     ("B", "outcome_qq", "normal Q-Q", "结果变量是否接近正态分布？", "连续结果"),
     ("B", "treatment_distribution", "bar", "处理阶段/核心分组的构成如何？", "识别到处理变量"),
     ("B", "treatment_donut", "donut", "处理阶段/核心分组的占比如何？", "处理变量 2–6 类"),
-    ("B", "dist_{}", "histogram + box", "该变量的分布是否偏态/多峰/有异常值？", "前 6 个数值变量"),
-    ("B", "cat_{}", "bar", "该变量的类别构成如何？", "前 6 个类别变量"),
+    ("B", "dist_{}", "histogram + box", "该变量的分布是否偏态/多峰/有异常值？", "每个可用数值变量"),
+    ("B", "cat_{}", "bar", "该变量的类别构成如何？", "每个可用类别变量"),
     ("C", "outcome_mean_by_{}", "bar + 95%CI", "连续结果的组间均值是否不同？", "连续结果 + 分组/处理/地区/审级"),
     ("C", "outcome_composition_by_{}", "100% stacked bar", "多分类结果的构成是否不同？", "多分类结果 + 分组/处理/地区/审级"),
     ("C", "outcome_by_group", "bar + 95%CI", "不同类别的结果率是否趋同？", "二分类结果"),
@@ -302,8 +295,8 @@ CHART_CATALOG = [
     ("C", "outcome_by_region", "bar + 95%CI", "不同地区的结果率是否不同？", "二分类结果 + 地区"),
     ("C", "outcome_by_trial", "bar + 95%CI", "不同审级的结果率是否不同？", "二分类结果 + 审级"),
     ("C", "correlation_heatmap", "correlation heatmap", "变量之间是否存在明显相关/共线？", "≥2 个数值/二元变量"),
-    ("C", "scatter_{}_{}", "scatter + OLS", "两个变量是否相关？", "相关性最高的 3 对数值变量"),
-    ("D", "violin_{}", "violin + box + points", "该变量在不同类别间是否不同？", "前 2 个数值变量 + 分组"),
+    ("C", "scatter_{}_{}", "scatter + OLS", "两个变量是否相关？", "全部可用数值变量对；max_scatter_pairs 可显式限制"),
+    ("D", "violin_{}", "violin + box + points", "该变量在不同类别间是否不同？", "每个可用数值变量 + 分组"),
     ("D", "scatter_matrix", "scatter matrix", "数值变量两两之间是否存在非线性/离群结构？", "数值变量 ≥2"),
     ("D", "two_rate_gap_dumbbell", "dumbbell", "两类处理比例差距多大？", "config.dumbbell 指定两个 0/1 列"),
     ("D", "pca_scree", "scree + cumulative", "前几个主成分解释了多少方差？", "数值变量 ≥3"),
@@ -757,7 +750,7 @@ class ChartPack:
     # ------------------------------------------------------------------
     def data_quality(self, group, time, region):
         miss = self.df.isna().mean().sort_values(ascending=False)
-        miss = miss[miss > 0].head(25)
+        miss = miss[miss > 0]
         if len(miss):
             fig, ax = plt.subplots(figsize=(FIG_W, max(2.6, 0.24 * len(miss) + 1.2)))
             labels = [self.vlabel(c) for c in miss.index]
@@ -806,7 +799,6 @@ class ChartPack:
         if not cols:
             self.skip("A 数据质量", "关键二元变量的发生率是多少？", "没有可用的二元变量")
             return
-        cols = cols[:10]
         est, lo, hi, sizes = [], [], [], []
         for c in cols:
             s = pd.to_numeric(self.df[c], errors="coerce").dropna()
@@ -977,7 +969,7 @@ class ChartPack:
                               "处理阶段/核心分组的占比如何？", "donut",
                               [treatment], int(vc.sum()),
                               self.caption(f"按 {self.vlabel(treatment)} 统计；环形中心为 N"))
-        for c in numeric[:6]:
+        for c in numeric:
             s = pd.to_numeric(self.df[c], errors="coerce").dropna()
             if len(s) < self.min_n:
                 continue
@@ -993,7 +985,7 @@ class ChartPack:
                       [c], len(s), self.caption(f"{self.vlabel(c)} 的分布；箱线图显示中位数与异常值" +
                                                 ("；已用 log10 变换" if note == "log" else
                                                  "；横轴截断至 P99" if note == "clip" else "")))
-        for c in categorical[:6]:
+        for c in categorical:
             if c == treatment:
                 continue
             labels, vals = top_counts(self.df[c], min(self.top_n, 8))
@@ -1215,7 +1207,6 @@ class ChartPack:
     def correlations(self, numeric, binaries):
         cols = [c for c in numeric if c in self.df.columns]
         cols += [c for c in binaries if c in self.df.columns and c not in cols]
-        cols = cols[:14]
         if len(cols) < 2:
             self.skip("C 双变量", "变量之间是否存在明显相关？", "可用数值变量不足")
             return
@@ -1229,15 +1220,19 @@ class ChartPack:
         heat = dat.copy()
         heat.columns = [self.vlabel(c) for c in heat.columns]
         n_complete = int(dat.dropna().shape[0])
+        available = dat.notna().astype(int)
+        pair_counts = available.T.dot(available).to_numpy()
+        pair_ns = pair_counts[np.triu_indices(dat.shape[1], k=1)]
+        pair_note = f"变量对有效样本数 {int(pair_ns.min())}–{int(pair_ns.max())}；全列完整案例 {n_complete}"
         fig, ax = plt.subplots(figsize=(FIG_W, 6.2))
         corr_heatmap(ax, heat)
         self.save(fig, "correlation_heatmap", "C 双变量",
                   "变量之间是否存在明显相关/共线？", "correlation heatmap",
-                  list(dat.columns), n_complete,
-                  self.caption(f"Pearson 相关（成对删除，完整案例 N={n_complete}）；"
+                  list(dat.columns), len(dat),
+                  self.caption(f"Pearson 相关（成对删除；{pair_note}）；"
                                "用于筛查共线性与探索性关联"))
         # scatter fits for the most correlated numeric pairs
-        num = dat[[c for c in numeric if c in dat.columns]].dropna()
+        num = dat[[c for c in numeric if c in dat.columns]]
         if len(num.columns) >= 2 and len(num) >= self.min_n:
             corr = num.corr().abs()
             pairs = []
@@ -1247,13 +1242,18 @@ class ChartPack:
                     if np.isfinite(value):
                         pairs.append((value, a, b))
             pairs.sort(reverse=True)
-            for _, a, b in pairs[:3]:
+            pair_limit = int(self.cfg.get("max_scatter_pairs", 0))
+            for _, a, b in (pairs[:pair_limit] if pair_limit > 0 else pairs):
+                pair = num[[a, b]].dropna()
+                if len(pair) < self.min_n or pair[a].nunique() < 2 or pair[b].nunique() < 2:
+                    self.skip("C 双变量", f"{a} 与 {b} 是否相关？", "该变量对有效样本不足或为常量")
+                    continue
                 fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
-                r = scatter_fit(ax, num[a].values, num[b].values,
+                r = scatter_fit(ax, pair[a].values, pair[b].values,
                                 xlabel=self.vlabel(a), ylabel=self.vlabel(b))
                 self.save(fig, f"scatter_{re.sub(r'[^A-Za-z0-9]+', '_', a)}_{re.sub(r'[^A-Za-z0-9]+', '_', b)}",
                           "C 双变量", f"{a} 与 {b} 是否相关？", "scatter + OLS",
-                          [a, b], len(num), self.caption(f"Pearson r={r:.2f}"))
+                          [a, b], len(pair), self.caption(f"Pearson r={r:.2f}"))
         # violin by group is done in multivariate()
 
     # ------------------------------------------------------------------
@@ -1261,7 +1261,7 @@ class ChartPack:
     # ------------------------------------------------------------------
     def multivariate(self, numeric, group, treatment):
         if group and numeric:
-            for c in numeric[:2]:
+            for c in numeric:
                 s = pd.to_numeric(self.df[c], errors="coerce")
                 sub = pd.DataFrame({group: self.df[group], c: s}).dropna()
                 counts = sub[group].value_counts()
@@ -1357,7 +1357,7 @@ class ChartPack:
                           self.caption(f"两端分别为{self.vlabel(left_col)}与{self.vlabel(right_col)}比例"))
 
     def pca(self, numeric, group):
-        cols = [c for c in numeric if c in self.df.columns][:10]
+        cols = [c for c in numeric if c in self.df.columns]
         if len(cols) < 3:
             self.skip("D 多变量", "数值变量是否存在潜在结构？", "数值变量不足 3 个")
             return
@@ -1368,22 +1368,41 @@ class ChartPack:
             self.skip("D 多变量", "数值变量是否存在潜在结构？",
                       f"有效数值变量不足或 N<{self.min_n}")
             return
-        dat = dat.fillna(dat.median()).astype(float)
-        dat = dat.clip(lower=dat.quantile(0.01), upper=dat.quantile(0.99), axis=1)
+        missing_policy = self.cfg.get("pca_missing", "complete")
+        if missing_policy == "complete":
+            dat = dat.dropna().astype(float)
+            preprocessing = "完整案例；未插补"
+        elif missing_policy == "median":
+            dat = dat.fillna(dat.median()).astype(float)
+            preprocessing = "显式指定中位数插补；插补值非原始观测"
+        else:
+            raise ValueError("pca_missing must be complete or median")
+        if len(dat) < self.min_n:
+            self.skip("D 多变量", "数值变量是否存在潜在结构？", f"缺失处理后有效 N={len(dat)} < {self.min_n}")
+            return
+        bounds = self.cfg.get("pca_clip_quantiles")
+        if bounds is not None:
+            if not isinstance(bounds, list) or len(bounds) != 2 or not 0 <= float(bounds[0]) < float(bounds[1]) <= 1:
+                raise ValueError("pca_clip_quantiles needs [low, high] within [0,1]")
+            low, high = map(float, bounds)
+            dat = dat.clip(lower=dat.quantile(low), upper=dat.quantile(high), axis=1)
+            preprocessing += f"；显式截尾至分位数 {low:g}–{high:g}"
         dat = dat.loc[:, dat.std() > 0]
         if dat.shape[1] < 3:
             self.skip("D 多变量", "数值变量是否存在潜在结构？", "有效数值变量不足")
             return
+        cols = list(dat.columns)
         z = (dat - dat.mean()) / dat.std()
         u, s, vt = np.linalg.svd(z.values, full_matrices=False)
         ev = s ** 2 / np.sum(s ** 2) * 100
         fig, ax = plt.subplots(figsize=(FIG_W, 3.4))
-        scree_plot(ax, ev[:min(10, len(ev))])
+        scree_plot(ax, ev[:min(10, len(ev))], values_are_percent=True, total_variables=len(dat.columns))
         self.save(fig, "pca_scree", "D 多变量",
                   "前几个主成分解释了多少方差？", "scree + cumulative",
-                  cols, len(dat), self.caption("对数值变量标准化后做 PCA"))
+                  cols, len(dat), self.caption("对数值变量标准化后做 PCA；" + preprocessing))
         scores = u[:, :2] * s[:2]
-        loadings = vt[:2].T
+        eigenvalues = s ** 2 / (len(dat) - 1)
+        loadings = vt[:2].T * np.sqrt(eigenvalues[:2])
         fig, ax = plt.subplots(figsize=(FIG_W, 4.8))
         if group:
             groups = (self.df.loc[dat.index, group].astype(str)
@@ -1417,9 +1436,9 @@ class ChartPack:
         self.save(fig, "pca_biplot", "D 多变量",
                   "样本在主轴平面上是否形成类别结构？", "PCA biplot",
                   cols + ([group] if group else []), len(dat),
-                  self.caption("点为样本得分，箭头为变量载荷；缺失值中位数填补；仅作探索性展示"))
+                  self.caption("点为样本得分，箭头为变量载荷；" + preprocessing + "；仅作探索性展示"))
         k = min(3, vt.shape[0])
-        load = vt[:k, :].T
+        load = vt[:k, :].T * np.sqrt(eigenvalues[:k])
         fig, ax = plt.subplots(figsize=(FIG_W, max(3.0, 0.32 * len(dat.columns) + 1.2)))
         vmax = max(float(np.abs(load).max()), 1e-9)
         heatmap(ax, load, [self.vlabel(c) for c in dat.columns],
@@ -1428,10 +1447,10 @@ class ChartPack:
         self.save(fig, "pca_loadings", "D 多变量",
                   "哪些变量在主轴上的载荷最高？", "PCA loadings heatmap",
                   list(dat.columns), len(dat),
-                  self.caption("单元格为变量在前三个主成分上的载荷；仅作探索性展示"))
+                  self.caption("单元格为变量在前三个主成分上的载荷；" + preprocessing + "；仅作探索性展示"))
 
     def clustering(self, numeric, group):
-        cols = [c for c in numeric if c in self.df.columns][:8]
+        cols = [c for c in numeric if c in self.df.columns]
         if len(cols) < 2:
             self.skip("D 多变量", "样本是否形成自然聚类？", "数值变量不足 2 个")
             return
@@ -1916,6 +1935,7 @@ class ChartPack:
                       "survival_event 不是可识别的 0/1 或 是/否 标签")
             return
         sub = pd.DataFrame({"t": t, "e": e}).dropna()
+        sub = sub[sub["t"] >= 0]
         if len(sub) < self.min_n:
             self.skip("F 模型诊断", "生存/随访时间如何变化？", f"有效 N<{self.min_n}")
             return
@@ -2002,8 +2022,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Generate a comprehensive chart pack.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=("常规产出约 40–55 张图（见 references/07-chart-atlas.md）；"
-                f"--max-charts 默认 {MAX_CHARTS}，只会更少不会更多。\n"
+        epilog=("图数随数据角色和问题而定，不预设总张数；"
+                f"--max-charts 默认 {MAX_CHARTS} = 不限。\n"
                 "用 --list-charts 查看全部图型，再用 --only / --sections 挑子集。"))
     parser.add_argument("--data", default=None,
                         help="analysis CSV（--list-charts 时可省略）")
@@ -2022,8 +2042,8 @@ def main() -> int:
     parser.add_argument("--sections", action="append", metavar="NAMES",
                         help="只产出这些段：A,B,… 或段名（数据质量）；逗号分隔，可重复")
     parser.add_argument("--max-charts", type=int, default=MAX_CHARTS, metavar="N",
-                        help=f"最多产出多少张图（默认 {MAX_CHARTS}；"
-                             "常规包约 40–55 张，调小可加快试跑）；"
+                        help=f"最多产出多少张图（默认 {MAX_CHARTS} = 不限；"
+                             "正数仅用于显式限制的试跑）；"
                              "0 或负数 = 不限制")
     parser.add_argument("--n-scope", choices=N_SCOPES, default=None,
                         help="manifest 的 n_scope 默认值；corpus 允许 n>数据行数的"
@@ -2143,7 +2163,8 @@ def main() -> int:
     outcome_map = {}
     if outcome_col:
         kind, encoded, outcome_map, kind_msg = outcome_kind(
-            df[outcome_col], args.max_categories, cfg.get("outcome_map"))
+            df[outcome_col], args.max_categories, cfg.get("outcome_map"),
+            declared_type=cfg.get("outcome_type") or cfg.get("variable_types", {}).get(outcome_col))
         if kind == "unsupported":
             print(f"ERROR: {kind_msg}", file=sys.stderr)
             return 2

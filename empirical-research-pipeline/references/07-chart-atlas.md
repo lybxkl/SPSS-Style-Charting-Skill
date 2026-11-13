@@ -5,13 +5,13 @@
 - **图是回答问题的，不是装饰。** 每张图先写一句“它回答什么问题”，再选图型。
 - **先出全景，再选主图。** 先跑一遍数据质量、单变量、双变量、时间、模型诊断；再从里面挑正文主图。
 - **一个主发现至少两张图。** 一张主结果图，一张稳健性/诊断/异质性图。
-- **图数不设上限。** 正文放 7–10 张主图，其余放附录；附录 20–50 张很正常。
+- **图数不设上限。** 正文与附录按实际发现和可读性安排，不预设张数；完整图集保留所有有意义结果与诊断。
 - **同一变量同一颜色、同一顺序。** 跨图比较时不要重新排序或换色。
 - **每张图有清单。** 图号、问题、变量、N、`n_scope`、图注、dpi、`data_hash`、文件路径，全部写进 `chart_manifest.csv`；画不出来的图也留一行说明为什么。
 
 ## 1. 默认图表包
 
-`auto_chart_pack.py` 在通用分析数据上默认生成约 40–55 张图：二分类约 44 张，带 `--coef`/`--pred` 约 51 张；连续约 42 张、多分类约 41 张。列类型、缺失和跳过项会使数量浮动，实际以 `chart_manifest.csv` 为准。`--max-charts`（默认 **60**）是硬上限：超出的图不画，stdout 里报 `limited: N`，manifest 不记这些行；传 `0` 或负数则**不限制**。
+`auto_chart_pack.py` 默认 `--max-charts 0` **不限制总图数**，图数随变量、模型和跳过项变化，以 `chart_manifest.csv` 为准。正数预算是明确的试跑/分批选择，超出数会在 stdout 报 limited；交付前必须按完整模型清单继续补齐。自动图包是初始工具，Agent 按需要自写/选择其他图形实现。
 
 所有图统一 **15 cm 宽**（`FIG_W = 15/2.54 in`，600 dpi 下 `px_width = 3543`，方图也是一样），高度随内容变；默认三种格式 `png + pdf + tiff`，`--no-tiff` 可回到只出 `png + pdf`。
 
@@ -28,8 +28,8 @@
 | B | `outcome_qq` | normal Q-Q | 结果变量是否接近正态分布？ | 连续结果 |
 | B | `treatment_distribution` | bar | 处理阶段/核心分组的构成如何？ | 识别到处理变量 |
 | B | `treatment_donut` | donut | 处理阶段/核心分组的占比如何？ | 处理变量 2–6 类 |
-| B | `dist_{}` | histogram + box | 该变量的分布是否偏态/多峰/有异常值？ | 前 6 个数值变量 |
-| B | `cat_{}` | bar | 该变量的类别构成如何？ | 前 6 个类别变量 |
+| B | `dist_{}` | histogram + box | 该变量的分布是否偏态/多峰/有异常值？ | 每个可用数值变量 |
+| B | `cat_{}` | bar | 该变量的类别构成如何？ | 每个可用类别变量 |
 | C 双变量 | `outcome_mean_by_{}` | bar + 95%CI | 连续结果的组间均值是否不同？ | 连续结果 + 分组/处理/地区/审级 |
 | C | `outcome_composition_by_{}` | 100% stacked bar | 多分类结果的构成是否不同？ | 多分类结果 + 分组/处理/地区/审级 |
 | C | `outcome_by_group` | bar + 95%CI | 不同类别的结果率是否趋同？ | 二分类结果 |
@@ -41,8 +41,8 @@
 | C | `outcome_by_region` | bar + 95%CI | 不同地区的结果率是否不同？ | 二分类结果 + 地区 |
 | C | `outcome_by_trial` | bar + 95%CI | 不同审级的结果率是否不同？ | 二分类结果 + 审级 |
 | C | `correlation_heatmap` | correlation heatmap | 变量之间是否存在明显相关/共线？ | ≥2 个数值/二元变量 |
-| C | `scatter_{}_{}` | scatter + OLS | 两个变量是否相关？ | 相关性最高的 3 对数值变量 |
-| D 多变量 | `violin_{}` | violin + box + points | 该变量在不同类别间是否不同？ | 前 2 个数值变量 + 分组 |
+| C | `scatter_{}_{}` | scatter + OLS | 两个变量是否相关？ | 全部可用数值变量对；max_scatter_pairs 可显式限制 |
+| D 多变量 | `violin_{}` | violin + box + points | 该变量在不同类别间是否不同？ | 每个可用数值变量 + 分组 |
 | D | `scatter_matrix` | scatter matrix | 数值变量两两之间是否存在非线性/离群结构？ | 数值变量 ≥2 |
 | D | `two_rate_gap_dumbbell` | dumbbell | 两类处理比例差距多大？ | config.dumbbell 指定两个 0/1 列 |
 | D | `pca_scree` | scree + cumulative | 前几个主成分解释了多少方差？ | 数值变量 ≥3 |
@@ -74,7 +74,7 @@
 - `--only <ids>` 只跑指定图：接受完整 slug（`group_treatment_stacked`）、slug 片段（`stacked` 命中所有含该片段的图）、前缀通配（`model_*`）或图号（`F21`）；逗号分隔、可重复。
 - `--sections <name,name>` 只跑某几段：接受字母（`A,C`）或中文段名（`数据质量,附录`）。
 - `--list-charts` 打印上面这份清单后退出，不读数据，适合先挑图再跑。
-- `--max-charts N` 限制张数（默认 60，`0` 或负数 = 不限制）；`--top-n` 控制每图最多类别数，`--min-n` 控制最小分析单元。
+- `--max-charts N` 限制张数（默认 0=不限制）；`--top-n` 控制图内类别展示，`--min-n` 控制最小分析单元；展示取舍不替代全量明细与模型覆盖。
 
 模型图需要 `--coef`（系数表）或 `--pred`（预测表）；没有就跳过，并在清单里写明原因。`--coef` 的列名同时接受 `term`/`estimate`+`ci_low`/`ci_high`、`or`/`or_low`/`or_high`（`beta`/`beta_low`/`beta_high` 亦可），建议带 `metric`（OR/HR/RR/beta）与 `n` —— 没有 `metric` 时按每一行实际填了哪族列来定：`or*`→OR（对数轴，参考线 1）、`hr*`→HR、`rr*`→RR，只有 `beta` 的行走线性轴（参考线 0）。**同一个文件里混排 logit 行与 OLS 行不会丢行**：按 `metric`（或按行实测的列族）分组，各自成图，图名在多尺度时追加后缀；该图的 `metric`、`rows_plotted`、`rows_dropped` 写进 `chart_pack.json` 与 `chart_pack.md`，有未绘行时图注也会注明。`--pred` 支持 0/1 与“是/否”标签，常数预测或单一类别会跳过 ROC/PR/校准/混淆矩阵/Lift。`term_labels` 可把模型项名映射为中文。双比例哑铃图需在 config 的 `dumbbell` 里指定两个 0/1 列。小样本下脚本宁可不画，也不画误导性组间比较。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可选 `--survival-group`）画 Kaplan–Meier；参数缺失、列名不存在或绘图失败只会在 manifest 的 `status` 里注明 skipped，不会中断整包。
 
@@ -199,7 +199,7 @@ SPSS 原生没有“森林图/小提琴图/相关热图”的标准入口时，�
 
 经验法则：**每个主发现至少 2 张图；每个模型至少 1 张系数图 + 1 张诊断图；每个关键变量至少 1 张分布图和 1 张分组图。** 图多不是问题，图重复、图无信息才是问题。
 
-`--max-charts`（默认 60）只防失控：一张图 600 dpi 的 png+pdf（默认还带 tiff）大约 1–3 秒，60 张接近两分钟，超过就该拆成多次跑（`--sections`/`--only`）而不是盲目调大上限；`--max-charts 0` 表示不限制，用在确实需要全量的场景。
+`--max-charts` 默认 0=不限制。大图集可按数据集/问题/模型分批（`--sections`/`--only`），记录每批覆盖并最终合并，避免资源压力使任务中断；不能把某一批输出冒充全量交付。
 
 ## 6. 图表清单 manifest
 

@@ -39,6 +39,9 @@ from datetime import date
 from text_extract import (
     STRUCTURED_EXTS, SUPPORTED_EXTS, extract_text, ext_of, kind_of,
 )
+from check_decisions import (
+    DecisionError, load_decisions, validate_decisions, write_issues,
+)
 
 # Stamped into run.json so an output directory names the code that built it.
 SCRIPT_VERSION = "2.0.0"
@@ -471,6 +474,7 @@ def read_valid_paths(audit: str | None,
     """
     keep: set[str] | None = None
     listed: set[str] = set()
+    removed: set[str] = set()
     if audit:
         fields, rows = _read_csv_rows(audit, "audit CSV")
         status_column = "status" if "status" in fields else ("valid" if "valid" in fields else "")
@@ -489,9 +493,12 @@ def read_valid_paths(audit: str | None,
             if rel:
                 listed.add(rel)
             status = str(row.get(status_column) or "").strip().lower()
+            duplicate = (row.get("dedupe_role") == "duplicate" if "dedupe_role" in fields
+                         else row.get("dup_role") == "duplicate" or row.get("dup_role_content") == "duplicate")
+            if duplicate and rel:
+                removed.add(rel)
             if rel and status in {"valid", "1", "true", "yes", "y", "ok"}:
                 keep.add(rel)
-    removed: set[str] = set()
     if dedupe_plan:
         fields, rows = _read_csv_rows(dedupe_plan, "dedupe plan")
         if "action" not in fields:
@@ -501,7 +508,7 @@ def read_valid_paths(audit: str | None,
                 "dedupe plan missing a path column; expected one of "
                 f"{list(KEY_COLUMNS)}; have: {sorted(fields)}"
             )
-        removed = {
+        removed |= {
             _pick_key(row) for row in rows
             if str(row.get("action") or "").strip().lower() in {"move", "copy"}
             and _pick_key(row)
@@ -557,7 +564,21 @@ def main() -> int:
     parser.add_argument("--extract", default=None, metavar="PROFILE_JSON",
                         help="run a field-extraction profile and write dataset.csv, "
                              "evidence.jsonl and run.json (contract: references/09-field-extraction.md)")
+    parser.add_argument("--require-review", action="store_true",
+                        help="exit 2 while any extracted field is flagged for review "
+                             "(write decisions.jsonl, then re-run with --decisions)")
+    parser.add_argument("--decisions", default=None, metavar="DECISIONS_JSONL",
+                        help="apply a validated decisions.jsonl to the dataset "
+                             "(value / na per field, exclude per document)")
+    parser.add_argument("--allow-unresolved", action="store_true",
+                        help="let needs_human=true decisions through (draft runs only)")
     args = parser.parse_args()
+    if args.require_review and not args.extract:
+        print("ERROR: --require-review only applies with --extract", file=sys.stderr)
+        return 2
+    if args.decisions and not args.extract:
+        print("ERROR: --decisions only applies with --extract", file=sys.stderr)
+        return 2
 
     root = os.path.abspath(args.root)
     if not os.path.isdir(root):
@@ -636,6 +657,8 @@ def main() -> int:
     skipped: list[dict] = []
     ds_rows: list[dict] = []
     ds_evidence: list[dict] = []
+    review_rows: list[dict] = []
+    candidate_rows: list[dict] = []
     ds_field_names: list[str] = []
     ds_na_counts: dict = {}
     # Why a field is empty matters: "the document never mentions it", "it was
@@ -862,18 +885,51 @@ def main() -> int:
                         ds_field_names = [f["name"] for f in extract_profile["fields"]]
                     ds_row = {"rel_path": rel, "file": name, "doc_type": doc_type}
                     ev_fields = {}
+                    doc_candidates = {"rel_path": rel, "fields": {}}
                     for fname in ds_field_names:
                         got = res["fields"].get(fname) or {}
                         value = got.get("value")
                         ds_row[fname] = "" if value is None else value
                         ds_row[f"{fname}_src"] = got.get("source", "none")
+                        flags = list(got.get("flags") or [])
+                        candidates = got.get("candidates") or []
                         ev_fields[fname] = {
                             "value": value, "raw": got.get("raw"),
                             "span": got.get("span"), "source": got.get("source"),
                             "na": got.get("na"), "negated": bool(got.get("negated")),
                             "fallback_used": got.get("fallback_used", 0),
                             "truncated": bool(got.get("truncated")),
+                            "flags": flags,
+                            "needs_review": bool(got.get("needs_review")),
+                            "cross_line": bool(got.get("cross_line")),
+                            "na_hit": bool(got.get("na_hit")),
+                            "candidates": candidates,
                         }
+                        doc_candidates["fields"][fname] = ev_fields[fname]
+                        alternatives = []
+                        for item in candidates:
+                            item_value = item.get("value")
+                            if item_value is None or str(item_value) == str(value):
+                                continue
+                            text_value = str(item_value)
+                            if text_value not in alternatives:
+                                alternatives.append(text_value)
+                        review_rows.append({
+                            "rel_path": rel, "field": fname,
+                            "value": "" if value is None else value,
+                            "raw": got.get("raw") or "",
+                            "source": got.get("source") or "none",
+                            "span": (f"{got['span'][0]}-{got['span'][1]}"
+                                     if got.get("span") else ""),
+                            "na_hit": bool(got.get("na_hit")),
+                            "cross_line": bool(got.get("cross_line")),
+                            "needs_review": bool(got.get("needs_review")),
+                            "flags": "|".join(flags),
+                            "alternatives": "|".join(alternatives[:6]),
+                            "note": "|".join(sorted({str(c.get("note") or "")
+                                                     for c in candidates
+                                                     if c.get("note")})),
+                        })
                         if value is None:
                             ds_na_counts[fname] = ds_na_counts.get(fname, 0) + 1
                             if got.get("negated"):
@@ -891,6 +947,7 @@ def main() -> int:
                         else:
                             ds_hit_counts[fname] = ds_hit_counts.get(fname, 0) + 1
                     ds_rows.append(ds_row)
+                    candidate_rows.append(doc_candidates)
                     ds_evidence.append({"_row_id": row_id, "rel_path": rel,
                                         "fields": ev_fields,
                                         "evidence": res["evidence"]})
@@ -946,6 +1003,129 @@ def main() -> int:
     print(f"summary: {csv_path}")
     print(f"sample_flow: {flow_path}")
 
+    review_index = {(row["rel_path"], row["field"]): row for row in review_rows}
+    applied_decisions: list[dict] = []
+    excluded_by_decision: list[str] = []
+    if extract_profile is not None and args.decisions:
+        try:
+            decisions = load_decisions(args.decisions)
+        except (OSError, DecisionError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        issues = validate_decisions(decisions, root=root, review=review_index,
+                                    allow_unresolved=args.allow_unresolved)
+        issue_path = os.path.join(out_dir, "decision_issues.csv")
+        write_issues(issue_path, issues)
+        errors = [issue for issue in issues if issue["severity"] == "error"]
+        if errors:
+            for issue in errors[:8]:
+                print(f"ERROR [{issue['check']}] {issue['id'] or '-'}: "
+                      f"{issue['detail']}", file=sys.stderr)
+            print(f"ERROR: {len(errors)} decision issue(s); see {issue_path}",
+                  file=sys.stderr)
+            return 2
+        by_target = {str(item.get("target") or ""): item for item in decisions
+                     if item.get("stage") == "extract"}
+        kept = []
+        for row in ds_rows:
+            rel = row.get("rel_path", "")
+            doc_decision = by_target.get(rel)
+            if doc_decision and doc_decision.get("decision") == "exclude":
+                excluded_by_decision.append(rel)
+                continue
+            for fname in ds_field_names:
+                decision = by_target.get(f"{rel}#{fname}")
+                if not decision:
+                    continue
+                kind = decision.get("decision")
+                if kind == "value":
+                    row[fname] = decision.get("value")
+                    row[f"{fname}_src"] = "decision"
+                elif kind == "na":
+                    row[fname] = ""
+                    row[f"{fname}_src"] = "decision:na"
+                else:
+                    continue
+                applied_decisions.append({
+                    "id": decision.get("id"), "target": decision.get("target"),
+                    "decision": kind, "value": decision.get("value"),
+                })
+                review_row = review_index.get((rel, fname))
+                if review_row is not None:
+                    review_row["needs_review"] = False
+                    review_row["value"] = row[fname]
+                    review_row["source"] = row[f"{fname}_src"]
+                    review_row["span"] = ""
+                    note = review_row.get("note") or ""
+                    review_row["note"] = (
+                        note + "|" if note else "") + f"decision:{decision.get('id')}"
+                for record in ds_evidence:
+                    if record.get("rel_path") != rel:
+                        continue
+                    field_record = (record.get("fields") or {}).get(fname)
+                    if field_record is not None:
+                        field_record["value"] = (row[fname]
+                                                 if row[fname] != "" else None)
+                        field_record["source"] = row[f"{fname}_src"]
+                        field_record["decision"] = decision.get("id")
+                        field_record["span"] = None
+                        field_record["raw"] = (decision.get("quote")
+                                               or decision.get("value"))
+                    # The rejected reading is not evidence for the decision.
+                    # Keeping both lines would let a reader cite the value the
+                    # author explicitly overruled.
+                    prefix = f"{fname}="
+                    record["evidence"] = [
+                        line for line in record.get("evidence", [])
+                        if not line.startswith(prefix)]
+                    record["evidence"].append(
+                        f"{fname}=decision:{decision.get('id')}")
+                    break
+            kept.append(row)
+        ds_rows = kept
+        if excluded_by_decision:
+            excluded_set = set(excluded_by_decision)
+            # A document excluded by decision must disappear from every
+            # artefact, not only from dataset.csv: a stale evidence row is
+            # still citable and would contradict the sample.
+            ds_evidence = [record for record in ds_evidence
+                           if record.get("rel_path") not in excluded_set]
+            review_rows = [row for row in review_rows
+                           if row.get("rel_path") not in excluded_set]
+            candidate_rows = [row for row in candidate_rows
+                              if row.get("rel_path") not in excluded_set]
+
+    final_hits = {name: sum(1 for row in ds_rows
+                            if row.get(name) not in ("", None))
+                  for name in ds_field_names}
+    # Missingness describes the FINAL dataset, not rejected readings or excluded
+    # documents. Recompute it after decisions have been applied.
+    if extract_profile is not None:
+        if args.decisions:
+            flow_rows.extend([
+                {"stage": "复审排除", "kind": "excluded", "n": len(excluded_by_decision),
+                 "note": "excluded by validated document decisions"},
+                {"stage": "最终字段数据集", "kind": "stage", "n": len(ds_rows),
+                 "note": "final dataset.csv after validated decisions"},
+            ])
+            with open(flow_path, "w", newline="", encoding="utf-8-sig") as fh:
+                writer = csv.DictWriter(fh, fieldnames=["stage", "n", "note", "kind"])
+                writer.writeheader()
+                writer.writerows(flow_rows)
+        ds_hit_counts = dict(final_hits)
+        ds_na_counts = {n: len(ds_rows) - final_hits[n] for n in ds_field_names}
+        ds_na_by_source = {n: {} for n in ds_field_names}
+        for record in ds_evidence:
+            for name, field in record.get("fields", {}).items():
+                if name not in ds_na_by_source or field.get("value") not in (None, ""):
+                    continue
+                bucket = ("decision_na" if field.get("source") == "decision:na" else
+                          "negated" if field.get("negated") else "redacted" if field.get("redacted") else
+                          "not_found" if field.get("source") in (None, "none") else
+                          "na_phrase" if field.get("na") else "unparsed")
+                counts = ds_na_by_source[name]
+                counts[bucket] = counts.get(bucket, 0) + 1
+
     if extract_profile is not None:
         ds_path = os.path.join(out_dir, "dataset.csv")
         ev_path = os.path.join(out_dir, "evidence.jsonl")
@@ -960,6 +1140,34 @@ def main() -> int:
         with open(ev_path, "w", encoding="utf-8") as fh:
             for rec in ds_evidence:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        review_path = os.path.join(out_dir, "extraction_review.csv")
+        with open(review_path, "w", newline="", encoding="utf-8-sig") as fh:
+            writer = csv.DictWriter(
+                fh, fieldnames=["rel_path", "field", "value", "raw", "source",
+                                "span", "na_hit", "cross_line", "needs_review",
+                                "flags", "alternatives", "note"],
+                extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(review_rows)
+        candidates_path = os.path.join(out_dir, "extraction_candidates.jsonl")
+        with open(candidates_path, "w", encoding="utf-8") as fh:
+            for record in candidate_rows:
+                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+        pending = [row for row in review_rows if row.get("needs_review")]
+        todo_path = os.path.join(out_dir, "decisions_todo.csv")
+        with open(todo_path, "w", newline="", encoding="utf-8-sig") as fh:
+            writer = csv.DictWriter(
+                fh, fieldnames=["target", "field", "current", "alternatives",
+                                "flags"], extrasaction="ignore")
+            writer.writeheader()
+            for row in pending:
+                writer.writerow({
+                    "target": f"{row['rel_path']}#{row['field']}",
+                    "field": row["field"],
+                    "current": row.get("value", ""),
+                    "alternatives": row.get("alternatives", ""),
+                    "flags": row.get("flags", ""),
+                })
         run = {
             "profile": extract_profile["profile"],
             "profile_path": os.path.abspath(args.extract),
@@ -973,6 +1181,13 @@ def main() -> int:
                        for name in ds_field_names},
             "generated_by": "make_coding_sheet.py --extract",
             "script_version": SCRIPT_VERSION,
+            "final_hits": final_hits,
+            "review": {
+                "fields": len(review_rows),
+                "needs_review": len(pending),
+                "decisions_applied": len(applied_decisions),
+                "documents_excluded_by_decision": len(excluded_by_decision),
+            },
         }
         na_path = os.path.join(out_dir, "missing_by_source.csv")
         with open(na_path, "w", newline="", encoding="utf-8-sig") as fh:
@@ -982,13 +1197,16 @@ def main() -> int:
                 per_field = ds_na_by_source.get(fname, {})
                 total = sum(per_field.values())
                 for bucket in ("not_found", "negated", "redacted", "na_phrase",
-                               "unparsed"):
+                               "unparsed", "decision_na"):
                     count = per_field.get(bucket, 0)
                     if not count:
                         continue
                     writer.writerow([fname, bucket, count,
                                      f"{count / total:.3f}" if total else ""])
         print(f"missing: {na_path}")
+        print(f"review: {review_path} ({len(pending)} field(s) flagged)")
+        print(f"candidates: {candidates_path}")
+        print(f"decisions todo: {todo_path}")
         # run.json is shared by every producer that writes into this directory.
         # Overwriting it wholesale would drop the other script's version stamp,
         # so each producer stores itself under "producers" and the top level is
@@ -1007,7 +1225,11 @@ def main() -> int:
         # Also mirror the scalars at the top level when nobody else claimed them,
         # so a reader that predates `producers` still finds `documents`/`fields`.
         for key, value in run.items():
-            merged.setdefault(key, value)
+            merged[key] = value
+        # `review` describes this extraction run, not the first one that ever
+        # wrote into the directory; a stale count here hides an unresolved
+        # field after a re-run with --decisions.
+        merged["review"] = run["review"]
         merged["producers"] = producers
         with open(run_path, "w", encoding="utf-8") as fh:
             json.dump(merged, fh, ensure_ascii=False, indent=1)
@@ -1016,6 +1238,12 @@ def main() -> int:
         print(f"run: {run_path}")
         # An extractor that hits nothing must not look like success: pointing a
         # profile at the wrong corpus yields a full dataset of NAs and exit 0.
+        if args.require_review and pending:
+            print(f"ERROR: {len(pending)} extracted field(s) still need review; "
+                  f"fill {todo_path} into decisions.jsonl, validate it with "
+                  f"check_decisions.py, then re-run with --decisions",
+                  file=sys.stderr)
+            return 2
         empty = [n for n in ds_field_names if not ds_hit_counts.get(n, 0)]
         if len(empty) == len(ds_field_names):
             print(f"ERROR: profile '{extract_profile['profile']}' matched 0 of "

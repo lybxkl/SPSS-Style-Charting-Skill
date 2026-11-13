@@ -15,6 +15,7 @@ import os
 import re
 import sys
 import zipfile
+import xml.etree.ElementTree as ET
 from contextlib import contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
@@ -355,13 +356,39 @@ def _decode_rtf(raw: bytes) -> str:
 
 
 def _xml_text(raw: bytes) -> str:
-    value = raw.decode("utf-8", errors="ignore")
-    value = re.sub(r"<(w:p|a:p|text:p|text:h|w:br)[^>]*>", "\n", value)
-    value = re.sub(r"<[^>]+>", " ", value)
-    value = html.unescape(value)
+    root = ET.fromstring(raw)
+    parts = []
+    def visit(node):
+        tag = node.tag.rsplit("}", 1)[-1]
+        if tag in {"p", "h", "tr", "table-row", "br", "line-break"}:
+            parts.append("\n")
+        elif tag in {"tab", "s"}:
+            parts.append(" ")
+        if node.text:
+            parts.append(node.text)
+        for child in node:
+            visit(child)
+            if child.tail:
+                parts.append(child.tail)
+    visit(root)
+    value = "".join(parts)
     value = re.sub(r"[ \t\r\f\v]+", " ", value)
     value = re.sub(r"\n\s*\n+", "\n", value)
     return value.strip()
+
+
+def office_members(path, kind):
+    """Text-bearing Office stories, including notes omitted by body-only reads."""
+    with _open_zip(path) as zf:
+        names = set(zf.namelist())
+    if kind == "docx":
+        return [n for n in ["word/document.xml", *sorted(n for n in names if re.fullmatch(
+            r"word/(?:header\d+|footer\d+|footnotes|endnotes|comments)\.xml", n))] if n in names]
+    slides = sorted((n for n in names if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
+                    key=lambda n: int(re.search(r"(\d+)", n).group(1)))
+    notes = sorted((n for n in names if re.fullmatch(r"ppt/notesSlides/notesSlide\d+\.xml", n)),
+                   key=lambda n: int(re.search(r"(\d+)", n).group(1)))
+    return slides + notes
 
 
 @contextmanager
@@ -507,7 +534,7 @@ def _inspect_docx(path: str, ext: str) -> dict:
         return rec
     try:
         if ext in {"docx", "docm"}:
-            text, images, _ = _zip_text(path, ["word/document.xml"])
+            text, images, _ = _zip_text(path, office_members(path, "docx"))
         elif ext == "odt":
             text, images, _ = _zip_text(path, ["content.xml"])
         else:  # pptx
@@ -516,8 +543,8 @@ def _inspect_docx(path: str, ext: str) -> dict:
                     (n for n in zf.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)),
                     key=lambda n: int(re.search(r"(\d+)", n).group(1)),
                 )
-            text, images, pages = _zip_text(path, slides)
-            rec["pages"] = pages
+            text, images, _ = _zip_text(path, office_members(path, "pptx"))
+            rec["pages"] = len(slides)
         rec["chars"] = len(text)
         rec["chars_effective"] = effective_chars(text)
         rec["images"] = images
@@ -632,7 +659,7 @@ def inspect_file(path: str) -> dict:
     return rec
 
 
-def extract_text(path: str) -> str:
+def extract_text(path: str, *, allow_partial: bool = False) -> str:
     """Extract plain text for coding. Raises ValueError for non-text materials."""
     kind = kind_of(path)
     ext = ext_of(path)
@@ -645,6 +672,8 @@ def extract_text(path: str) -> str:
                 raise ValueError("encrypted PDF: provide a decrypted copy")
             texts, bad = _pdf_pages_text(doc)
             text = "\n".join(texts)
+            if bad and not allow_partial:
+                raise ValueError(f"partial PDF extraction: {bad}/{doc.page_count} pages unreadable; repair/recover before full coding")
             # EXT-03: keep whatever pages could be read; only a fully
             # unreadable document is an extraction failure.
             if bad and bad >= doc.page_count and not text.strip():
@@ -655,7 +684,7 @@ def extract_text(path: str) -> str:
         finally:
             doc.close()
     if kind == "docx":
-        text, _, _ = _zip_text(path, ["word/document.xml"])
+        text, _, _ = _zip_text(path, office_members(path, "docx"))
         return text
     if kind == "odt":
         text, _, _ = _zip_text(path, ["content.xml"])
@@ -666,7 +695,7 @@ def extract_text(path: str) -> str:
                 (n for n in zf.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)),
                 key=lambda n: int(re.search(r"(\d+)", n).group(1)),
             )
-        text, _, _ = _zip_text(path, slides)
+        text, _, _ = _zip_text(path, office_members(path, "pptx"))
         return text
     if kind == "html":
         # _HTMLText already yields visible text; strip_markup would eat "<...>".

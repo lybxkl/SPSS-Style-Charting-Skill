@@ -515,11 +515,17 @@ class QaFontCase(TempCase):
         self.assertLess(pdf["raster_figures"][0]["dpi"], 200)
 
     def test_manuscript_bitmap_is_a_warning_when_the_resolution_is_right(self):
-        """Word->PDF manuscripts embed 600 dpi PNGs on purpose: warn, do not fail."""
+        """Word->PDF manuscripts embed 600 dpi PNGs on purpose: warn, do not fail.
+
+        The caller has to say the rasters are expected (``--allow-raster-text``);
+        undeclared, the same PDF is an error (see the test below), because a
+        bitmap justifies neither its font size nor its figure type.
+        """
         make_bitmap_pdf(self.p("manuscript.pdf"), px_width=3543)
         proc, report = self._report("--pdf", self.p("manuscript.pdf"),
                                     "--min-fontsize", "7.2",
-                                    "--target-width-cm", "15")
+                                    "--target-width-cm", "15",
+                                    "--allow-raster-text")
         self.assertEqual(proc.returncode, 0, proc.stdout)
         pdf = report["checks"]["pdf"]
         self.assertEqual(pdf["errors"], [])
@@ -528,6 +534,17 @@ class QaFontCase(TempCase):
         self.assertIn("600 dpi", message)
         self.assertIn("source figure PDF", message)
         self.assertGreaterEqual(pdf["raster_figures"][0]["dpi"], 590)
+
+    def test_manuscript_bitmap_without_declaring_it_is_an_error(self):
+        """Same PDF, no flag: the type at the real placement size is unverified."""
+        make_bitmap_pdf(self.p("manuscript_plain.pdf"), px_width=3543)
+        proc, report = self._report("--pdf", self.p("manuscript_plain.pdf"),
+                                    "--min-fontsize", "7.2",
+                                    "--target-width-cm", "15")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        errors = " ".join(report["checks"]["pdf"]["errors"])
+        self.assertIn("unverified", errors)
+        self.assertIn("DOCX", errors)
 
     def test_flattened_figure_pdf_in_a_directory_is_an_error(self):
         """A handed-in figure PDF that lost its text layer is a delivery defect."""
@@ -550,16 +567,37 @@ class QaFontCase(TempCase):
         self.assertEqual(pdf["errors"], [])
         self.assertIn("no_text_layer", " ".join(pdf["warnings"]))
 
+    def test_png_only_directory_skips_the_font_check(self):
+        """No PDF in the directory: the pt minimum is unverified, and it says so.
 
+        Declaring the rasters expected (``--allow-raster-text``) is what keeps
+        that honest statement a warning instead of a delivery error.
+        """
         figs = self.p("pngs")
         os.makedirs(figs, exist_ok=True)
         pf.set_style(WIDTH_CM)
         res = pf.compose_figure([{"draw": panel_bar}], out_dir=figs, name="fig1",
                                 formats=("png",), nrows=1, ncols=1, width_cm=WIDTH_CM)
         plt.close(res["fig"])
-        proc, report = self._report("--figures", figs, "--min-fontsize", "7.2")
+        proc, report = self._report("--figures", figs, "--min-fontsize", "7.2",
+                                    "--allow-raster-text")
         self.assertEqual(proc.returncode, 0, proc.stdout)
-        self.assertIn("skipped", report["checks"]["figures"]["font_size_check"])
+        figures = report["checks"]["figures"]
+        self.assertIn("skipped", figures["font_size_check"])
+        self.assertIn("no text layer", " ".join(figures["warnings"]))
+
+    def test_png_only_directory_is_an_error_by_default(self):
+        """Without the flag the same directory has no verified font size at all."""
+        figs = self.p("pngsdefault")
+        os.makedirs(figs, exist_ok=True)
+        pf.set_style(WIDTH_CM)
+        res = pf.compose_figure([{"draw": panel_bar}], out_dir=figs, name="fig1",
+                                formats=("png",), nrows=1, ncols=1, width_cm=WIDTH_CM)
+        plt.close(res["fig"])
+        proc, report = self._report("--figures", figs, "--min-fontsize", "7.2")
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertIn("no text layer",
+                      " ".join(report["checks"]["figures"]["errors"]))
 
 
 class QaManifestNCase(TempCase):
@@ -568,7 +606,10 @@ class QaManifestNCase(TempCase):
     def _manifest(self, n_values, name="m.csv"):
         header = ["id", "question", "chart_type", "variables", "n", "png", "pdf",
                   "caption"]
-        rows = [[f"F{i:02d}", "q", "bar", "a", value, "", "", "注：见正文。"]
+        # A row that names no output file is now an error of its own, so give
+        # every row a real PNG and leave N as the only thing under test.
+        png = make_png(self.p("fig.png"))
+        rows = [[f"F{i:02d}", "q", "bar", "a", value, png, "", "注：见正文。"]
                 for i, value in enumerate(n_values, start=1)]
         write_csv(self.p(name), header, rows)
         return self.p(name)
@@ -600,8 +641,8 @@ class QaPaletteCase(TempCase):
 
     def _manifest(self, palette, name="m.csv"):
         rows = [{"id": "F01", "question": "q", "chart_type": "bar",
-                 "variables": "a; b", "n": "10", "png": "", "pdf": "",
-                 "caption": "注：N=10。", "palette": palette}]
+                 "variables": "a; b", "n": "10", "png": make_png(self.p("fig.png")),
+                 "pdf": "", "caption": "注：N=10。", "palette": palette}]
         write_csv(self.p(name), list(rows[0]), [rows[0]])
         return self.p(name)
 
@@ -674,8 +715,8 @@ class QaPaletteCase(TempCase):
     def test_palette_shorter_than_the_series_count_warns(self):
         """Declaring 8 colours for 9 series is the silent-repeat case: say so."""
         rows = [{"id": "F09", "question": "q", "chart_type": "stacked bar",
-                 "variables": "a", "n": "10", "png": "", "pdf": "",
-                 "caption": "注：N=10。", "n_series": "9",
+                 "variables": "a", "n": "10", "png": make_png(self.p("nine.png")),
+                 "pdf": "", "caption": "注：N=10。", "n_series": "9",
                  "palette": "|".join(pf.CATEGORICAL)}]
         write_csv(self.p("nine.csv"), list(rows[0]), [rows[0]])
         out = run("qa_outputs.py", "--manifest", self.p("nine.csv"),

@@ -86,7 +86,7 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - `--separation drop|merge|error` 在**拟合前**检查空单元格（某水平在结果 0 或 1 上为 0 例）：`drop` 剔样本、`merge` 并入参照组、`error` 报错；处理明细写 `separation_report.csv`（`variable,level,n,events,action`）和 `model_summary.md`。估计后还有熔断：`|β|>12` 或 `se>8` 的项不写入系数表，避免分离造成的 `OR≈1e9` 进入正文。
 - 输出：`coef_<id>.csv`（`model,term,beta,se,beta_ci_low,beta_ci_high,p,or,or_low,or_high,ci_low,ci_high,metric,estimate,n,n_events,outcome,ref,note,se_type`）、`model_summary.md`（样本、参照组、分离处理、拟合、VIF/ROC）、`model_meta.json`；`--vif` 写 `vif.csv`，`--roc` 写 `roc.csv`（AUC + 1000 次 bootstrap 95%CI）。logit 的 `ci_low/ci_high` 是 OR 尺度，`beta/se` 是对数尺度；OLS 的 `metric=beta`。
 - `coef_<id>.csv` 可直接交给 `auto_chart_pack.py --coef` 画森林图，不需要再手抄 SPPS 输出。
-- 模型数超过 `--max-models`（默认 20）报错退出；单变量筛查的预测变量上限是 `--max-predictors`（默认 60）。
+- `--max-models` 与 `--max-predictors` 默认 0=不限；正数是显式分批/试跑预算，不能作为研究范围的固定上限。
 
 下面的 SPSS 语法仍适用于必须在 SPSS 内出表的场合；两者应当给出同方向的系数与 CI，若不一致先核对参照组与样本筛选。
 

@@ -21,6 +21,7 @@ import os
 import re
 import sys
 import warnings
+import numpy as np
 
 
 import matplotlib
@@ -248,12 +249,18 @@ def _forest_frame(data: dict):
         if metric_col is not None:
             values = [str(v).strip() for v in frame[metric_col].dropna().tolist()]
             metric = values[0].upper() if values else ""
-        est_col = next((rename[k] for k in ("or", "estimate", "beta", "hr", "coef")
-                        if k in rename), None)
-        low_col = next((rename[k] for k in ("or_low", "ci_low", "low", "ci_lower")
-                        if k in rename), None)
-        high_col = next((rename[k] for k in ("or_high", "ci_high", "high", "ci_upper")
-                         if k in rename), None)
+        if metric_col is not None and frame[metric_col].dropna().astype(str).str.upper().nunique() > 1:
+            raise ValueError("one forest panel cannot mix coefficient metrics")
+        ratio = metric in _LOG_METRICS
+        candidates = ("or", "hr", "rr", "estimate") if ratio else ("estimate", "beta", "coef", "or", "hr")
+        est_col = next((rename[k] for k in candidates if k in rename
+                        and pd.to_numeric(frame[rename[k]], errors="coerce").notna().any()), None)
+        low_names = ("or_low", "ci_low", "low", "ci_lower") if ratio else ("ci_low", "low", "ci_lower", "or_low")
+        high_names = ("or_high", "ci_high", "high", "ci_upper") if ratio else ("ci_high", "high", "ci_upper", "or_high")
+        low_col = next((rename[k] for k in low_names if k in rename
+                        and pd.to_numeric(frame[rename[k]], errors="coerce").notna().any()), None)
+        high_col = next((rename[k] for k in high_names if k in rename
+                         and pd.to_numeric(frame[rename[k]], errors="coerce").notna().any()), None)
         if term_col is None or est_col is None or low_col is None or high_col is None:
             raise ValueError(f"coef CSV needs term/estimate/ci_low/ci_high columns: {path}")
         if not metric:
@@ -276,6 +283,8 @@ def draw_forest(ax, data: dict) -> None:
     labels, est, low, high, metric = _forest_frame(data)
     if not labels:
         raise ValueError("forest panel needs a 'coef' CSV path or term/estimate arrays")
+    if not any(all(np.isfinite(v) for v in row) for row in zip(est, low, high)):
+        raise ValueError("forest panel has no finite estimate/interval")
     log_scale = metric in _LOG_METRICS
     ref = 1.0 if log_scale else 0.0
     forest_plot(ax, labels, est, low, high, ref=ref, log_scale=log_scale,

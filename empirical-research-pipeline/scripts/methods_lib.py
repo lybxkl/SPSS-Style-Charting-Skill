@@ -267,7 +267,7 @@ def chi_square(df: pd.DataFrame, row: str, col: str,
     row_pct = (tab.div(tab.sum(axis=1), axis=0) * 100).round(1).reset_index()
     return Result("chi_square", [("contingency", pct), ("expected", expected_df),
                                  ("row_percent", row_pct)],
-                  {"chi2": float(chi2), "dof": int(dof), "p": float(p),
+                  {"n": n, "chi2": float(chi2), "dof": int(dof), "p": float(p),
                    "cramers_v": float(cramers), **extra}, verdict, notes)
 
 
@@ -450,12 +450,20 @@ def anova(df: pd.DataFrame, value: str, group: str, alpha: float = 0.05) -> Resu
                           "levene_p": round(float(lev_p), 6),
                           "welch_F": round(welch[0], 4) if welch else None,
                           "welch_p": round(welch[1], 6) if welch else None}])
+    if lev_p < alpha and welch is None:
+        raise MethodError("方差不齐且 Welch 无法估计；不能以普通 ANOVA 代替")
+    selected = "Welch" if lev_p < alpha else "classical"
+    selected_f, selected_p = welch if selected == "Welch" else (float(f), float(p))
+    test["classical_F"], test["classical_p"] = f, p
+    test["F"], test["p"], test["selected_test"] = selected_f, selected_p, selected
+    verdict.append(f"主检验选用 {selected}：F={selected_f:.3f}，{_fmt_p(selected_p)}；后续比较按此检验决定。")
     return Result("anova", [("groups", desc), ("anova", test)],
-                  {"F": float(f), "p": float(p), "eta2": float(eta2)}, verdict)
+                  {"n": len(sub), "F": float(selected_f), "p": float(selected_p),
+                   "selected_test": selected, "classical_F": float(f), "classical_p": float(p), "eta2": float(eta2)}, verdict)
 
 
 def posthoc(df: pd.DataFrame, value: str, group: str, adjust: str = "bonferroni",
-            alpha: float = 0.05) -> Result:
+            alpha: float = 0.05, unequal: bool = False) -> Result:
     """Pairwise comparisons after a significant omnibus test."""
     sub = df[[value, group]].dropna()
     sub[value] = pd.to_numeric(sub[value], errors="coerce")
@@ -470,9 +478,13 @@ def posthoc(df: pd.DataFrame, value: str, group: str, adjust: str = "bonferroni"
     rows = []
     for (i, a), (j, b) in itertools.combinations(list(enumerate(levels)), 2):
         ga, gb = groups[i], groups[j]
-        se = math.sqrt(mse * (1 / len(ga) + 1 / len(gb)))
-        t = (ga.mean() - gb.mean()) / se if se else float("nan")
-        p = 2 * (1 - stats.t.cdf(abs(t), n_total - k))
+        if unequal:
+            se = math.sqrt(ga.var(ddof=1) / len(ga) + gb.var(ddof=1) / len(gb))
+            t, p = stats.ttest_ind(ga, gb, equal_var=False)
+        else:
+            se = math.sqrt(mse * (1 / len(ga) + 1 / len(gb)))
+            t = (ga.mean() - gb.mean()) / se if se else float("nan")
+            p = 2 * stats.t.sf(abs(t), n_total - k)
         rows.append({"pair": f"{a} vs {b}", "mean_diff": round(float(ga.mean() - gb.mean()), 4),
                      "se": round(float(se), 4), "t": round(float(t), 4),
                      "p_raw": round(float(p), 6)})
@@ -484,10 +496,11 @@ def posthoc(df: pd.DataFrame, value: str, group: str, adjust: str = "bonferroni"
     sig = out.loc[out["p_adj"] < alpha, "pair"].tolist()
     verdict = [f"事后比较（{adjust}，共 {m} 对）："
                + ("；".join(sig) if sig else "没有任意一对差异显著"),
-               "标准误由合并组内方差（MSE）算出，即 LSD 法；这是最宽松的事后比较。"]
+               ("两两 Welch t 检验，按指定方式校正多重比较。" if unequal else
+                "标准误由合并组内方差（MSE）算出，即 LSD 法；p 值另按指定方式校正。")]
     try:
         lev_p = float(stats.levene(*groups).pvalue)
-        if lev_p < alpha:
+        if lev_p < alpha and not unequal:
             verdict.append(f"注意：Levene {_fmt_p(lev_p)}，各组方差不齐，"
                            f"LSD 的 p 值偏小，应改用 Games-Howell/Tamhane 或直接看 "
                            f"Kruskal-Wallis（m17）。")
@@ -547,7 +560,7 @@ def mannwhitney(df: pd.DataFrame, value: str, group: str, alpha: float = 0.05) -
                f"（{b.quantile(0.25):.2f}–{b.quantile(0.75):.2f}）。"]
     return Result("mannwhitney", [("test", pd.DataFrame([{"U": float(u), "p": float(p),
                                                           "rank_biserial": round(float(rb), 4)}]))],
-                  {"U": float(u), "p": float(p)}, verdict)
+                  {"n": len(sub), "U": float(u), "p": float(p)}, verdict)
 
 
 def wilcoxon(df: pd.DataFrame, before: str, after: str, alpha: float = 0.05) -> Result:
@@ -566,7 +579,7 @@ def wilcoxon(df: pd.DataFrame, before: str, after: str, alpha: float = 0.05) -> 
                        "论文里应说明这一点（否则 n 对不上）。")
     return Result("wilcoxon", [("test", pd.DataFrame([{"W": float(stat), "p": float(p),
                                                        "median_diff": round(float(diff.median()), 4)}]))],
-                  {"W": float(stat), "p": float(p)}, verdict)
+                  {"n": len(both) - zeros, "n_pairs": len(both), "W": float(stat), "p": float(p)}, verdict)
 
 
 # ---------------------------------------------------------------------------
@@ -639,11 +652,14 @@ def _design(df: pd.DataFrame, xs: list) -> tuple[pd.DataFrame, list]:
     for x in xs:
         s = df[x]
         numeric = pd.to_numeric(s, errors="coerce")
-        if numeric.notna().sum() >= 0.9 * s.notna().sum() and numeric.nunique() > 10:
+        declared = df.attrs.get("variable_types", {}).get(x)
+        if declared in {"numeric", "continuous"} or (declared not in {"categorical", "ordinal"}
+                and pd.api.types.is_numeric_dtype(s)):
             frames.append(numeric.rename(x))
             names.append(x)
         else:
             d = pd.get_dummies(s.astype("string"), prefix=x, drop_first=True, dtype=float)
+            d.loc[s.isna(), :] = np.nan
             frames.append(d)
             names.extend(list(d.columns))
     X = pd.concat(frames, axis=1)
@@ -655,7 +671,7 @@ def linear_regression(df: pd.DataFrame, y: str, xs: list,
     """OLS with standardised betas, VIF and residual diagnostics."""
     yv = pd.to_numeric(df[y], errors="coerce")
     X, names = _design(df, xs)
-    data = pd.concat([yv.rename(y), X], axis=1).dropna()
+    data = pd.concat([yv.rename(y), X], axis=1).loc[df[xs].notna().all(axis=1)].dropna()
     if data.shape[0] <= len(names) + 1:
         raise MethodError(f"样本 {data.shape[0]} 行不足以估计 {len(names) + 1} 个参数")
     import statsmodels.api as sm
@@ -736,7 +752,7 @@ def linear_regression(df: pd.DataFrame, y: str, xs: list,
                   [("coefficients", params), ("model", fit_row)],
                   {"r2": float(fit.rsquared), "adj_r2": float(fit.rsquared_adj),
                    "F": float(fit.fvalue), "p": float(fit.f_pvalue),
-                   "max_vif": float(max_vif), "se_type": se_type}, verdict, notes)
+                   "n": int(fit.nobs), "max_vif": float(max_vif), "se_type": se_type}, verdict, notes)
 
 
 # ---------------------------------------------------------------------------
@@ -753,7 +769,7 @@ def logistic(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
     if set(levels) - {0, 1}:
         raise MethodError(f"{y} 的取值是 {levels}，请先编码成 0/1（0=参照）")
     X, names = _design(df, xs)
-    data = pd.concat([yv.rename(y), X], axis=1).dropna()
+    data = pd.concat([yv.rename(y), X], axis=1).loc[df[xs].notna().all(axis=1)].dropna()
     if data.shape[0] <= len(names) + 1:
         raise MethodError(f"样本 {data.shape[0]} 行不足以估计 {len(names) + 1} 个参数")
     import statsmodels.api as sm
@@ -773,7 +789,7 @@ def logistic(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
         "term": fit.params.index,
         "B": fit.params.values.round(4),
         "se": fit.bse.values.round(4),
-        "wald": (fit.params.values / fit.bse.values).round(3),
+        "wald": ((fit.params.values / fit.bse.values) ** 2).round(3),
         "p": fit.pvalues.values.round(6),
         "OR": or_v.round(4),
         "OR_ci_low": or_lo.round(4),
@@ -844,7 +860,9 @@ def logistic(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
 
 
 def _corr_matrix(df: pd.DataFrame, cols: list) -> pd.DataFrame:
-    data = df[cols].apply(pd.to_numeric, errors="coerce")
+    data = df[cols].apply(pd.to_numeric, errors="coerce").dropna()
+    if len(data) <= len(cols) or (data.std() <= 0).any():
+        raise MethodError("完整案例不足或存在常量，无法估计相关矩阵")
     return data.corr()
 
 
@@ -857,7 +875,7 @@ def kmo_bartlett(df: pd.DataFrame, cols: list) -> dict:
     det = np.linalg.det(R)
     if det <= 0:
         raise MethodError("相关矩阵奇异（变量完全共线），无法做因子分析")
-    n = int(df[cols].dropna().shape[0])
+    n = int(df[cols].apply(pd.to_numeric, errors="coerce").dropna().shape[0])
     chi2 = -(n - 1 - (2 * p + 5) / 6) * math.log(det)
     dof = p * (p - 1) // 2
     bartlett_p = float(stats.chi2.sf(chi2, dof))
@@ -985,7 +1003,7 @@ def pca(df: pd.DataFrame, cols: list, n_components: int = 2,
                f"特征值>1 的成分 {int((var > 1).sum())} 个。"]
     return Result("pca", [("loadings", loadings.reset_index().rename(columns={"index": "variable"})),
                           ("variance", var_tab), ("scores", sc)],
-                  {"pc1_pct": float(share[0] * 100), "k": k}, verdict)
+                  {"n": len(data), "pc1_pct": float(share[0] * 100), "k": k}, verdict)
 
 
 def cronbach(df: pd.DataFrame, cols: list, alpha: float = 0.05) -> Result:
@@ -1205,9 +1223,12 @@ def lda(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
     # 三组以上会丢信息：那样的准确率既不是 LDA 的规则，也不能叫"上限"。
     scores = X @ vecs
     centroids = {lv: scores[yv == lv].mean(axis=0) for lv in levels}
-    pred = np.array([
-        min(levels, key=lambda lv: float(np.sum((scores[i] - centroids[lv]) ** 2)))
-        for i in range(len(X))])
+    covariance = Sw / (len(data) - len(levels))
+    inverse = np.linalg.inv(covariance)
+    means = np.array([X[yv == lv].mean(axis=0) for lv in levels])
+    priors = np.array([(yv == lv).mean() for lv in levels])
+    discriminants = X @ inverse @ means.T - .5 * np.einsum("ij,jk,ik->i", means, inverse, means) + np.log(priors)
+    pred = np.asarray(levels)[np.argmax(discriminants, axis=1)]
     acc = float((pred == yv).mean())
     coef = pd.DataFrame({"variable": xs, "LD1": np.round(vecs[:, 0], 3)})
     coef["standardised"] = np.round(vecs[:, 0] * X.std(axis=0), 3)
@@ -1222,7 +1243,7 @@ def lda(df: pd.DataFrame, y: str, xs: list, alpha: float = 0.05) -> Result:
                           ("summary", pd.DataFrame([{"functions": int(vecs.shape[1]),
                                                      "wilks_lambda": round(wilks, 4),
                                                      "resubstitution_accuracy": round(acc, 4)}]))],
-                  {"wilks": wilks, "accuracy": acc}, verdict)
+                  {"n": len(data), "wilks": wilks, "accuracy": acc}, verdict)
 
 
 # ---------------------------------------------------------------------------
@@ -1235,6 +1256,14 @@ def time_series(df: pd.DataFrame, time: str, value: str,
     """ARIMA(p,d,0) chosen by AIC, with a Ljung-Box residual check."""
     data = df[[time, value]].copy()
     data[value] = pd.to_numeric(data[value], errors="coerce")
+    numeric_time = pd.to_numeric(data[time], errors="coerce")
+    if numeric_time.notna().sum() == data[time].notna().sum():
+        data[time] = numeric_time
+    else:
+        parsed = pd.to_datetime(data[time], errors="coerce")
+        if parsed.notna().sum() != data[time].notna().sum():
+            raise MethodError("时间列无法明确解析为数值或日期；请显式规范时间，不能按字符串排序")
+        data[time] = parsed
     data = data.dropna().sort_values(time)
     # 同一时点出现多次（一批问卷、同一天立案）时，按时间取均值再建模：
     # 否则 ARIMA 把 320 行记录当成 320 个时点估计阶数，而图画的是均值序列，
@@ -1245,6 +1274,12 @@ def time_series(df: pd.DataFrame, time: str, value: str,
                     .sort_values(time))
     if data.shape[0] < 8:
         raise MethodError("时间序列至少需要 8 个时点")
+    if pd.api.types.is_numeric_dtype(data[time]):
+        gaps = np.diff(data[time].to_numpy(float))
+        if len(gaps) and not np.allclose(gaps, gaps[0]):
+            raise MethodError("时间间隔不规则/有缺口；ARIMA 前先明确频率与缺失时点处理")
+    elif pd.infer_freq(pd.DatetimeIndex(data[time])) is None:
+        raise MethodError("日期间隔不规则/有缺口；请先明确规则时间轴")
     y = data[value].astype(float).values
     from statsmodels.tsa.arima.model import ARIMA
     from statsmodels.stats.diagnostic import acorr_ljungbox
@@ -1286,7 +1321,7 @@ def time_series(df: pd.DataFrame, time: str, value: str,
     return Result("time_series", [("params", params), ("fitted", fitted),
                                   ("fit", pd.DataFrame([{"p": p, "d": d, "aic": round(aic, 3),
                                                          "ljungbox_p": round(lb_p, 6)}]))],
-                  {"aic": float(aic), "p": p, "d": d}, verdict)
+                  {"n": len(data), "aic": float(aic), "p": p, "d": d}, verdict)
 
 
 # ---------------------------------------------------------------------------
@@ -1350,7 +1385,7 @@ def mediation(df: pd.DataFrame, x: str, m: str, y: str, n_boot: int = 2000,
                                                           "sobel_z": round(float(sobel_z), 3),
                                                           "sobel_p": round(sobel_p, 6),
                                                           "proportion": round(float(share), 4)}]))],
-                  {"indirect": float(indirect), "boot_lo": float(lo), "boot_hi": float(hi)},
+                  {"n": len(data), "indirect": float(indirect), "boot_lo": float(lo), "boot_hi": float(hi)},
                   verdict, notes)
 
 

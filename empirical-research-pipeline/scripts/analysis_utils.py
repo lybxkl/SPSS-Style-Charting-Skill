@@ -348,11 +348,14 @@ def encode_binary(series: pd.Series, mapping: dict | None = None):
         table: dict[str, int] = {}
         for key, value in mapping.items():
             try:
-                code = int(value)
+                number = float(value)
+                if number not in (0.0, 1.0):
+                    return None, {}
+                code = int(number)
             except (TypeError, ValueError):
-                continue  # ignore unusable map entries instead of crashing
+                return None, {}
             if code not in (0, 1):
-                continue
+                return None, {}
             table[str(key).strip()] = code
         if not table:
             return None, {}
@@ -387,6 +390,31 @@ def encode_binary(series: pd.Series, mapping: dict | None = None):
     return mapped.astype(float), table
 
 
+def apply_declared_roles(df, cfg, numeric, categorical, binaries):
+    """Explicit codebook roles override heuristics, including empty selections."""
+    lists = {"numeric": list(numeric), "categorical": list(categorical), "binary": list(binaries)}
+    explicit = {}
+    for role in lists:
+        if role in cfg:
+            lists[role] = list(cfg[role])
+            for col in lists[role]:
+                if col in explicit and explicit[col] != role:
+                    raise ValueError(f"conflicting explicit roles for {col}")
+                explicit[col] = role
+    for col, role in cfg.get("variable_types", {}).items():
+        role = {"continuous": "numeric", "nominal": "categorical", "ordinal": "categorical"}.get(role, role)
+        if role not in lists or (col in explicit and explicit[col] != role):
+            raise ValueError(f"invalid/conflicting codebook type for {col}: {role}")
+        explicit[col] = role
+    for col, role in explicit.items():
+        if col not in df.columns:
+            raise ValueError(f"explicit role column not found: {col}")
+        for key in lists:
+            lists[key] = [c for c in lists[key] if c != col]
+        lists[role].append(col)
+    return lists["numeric"], lists["categorical"], lists["binary"]
+
+
 def is_code_like(series: pd.Series) -> bool:
     """True for an integer code column that must not be treated as continuous.
 
@@ -416,6 +444,7 @@ def outcome_kind(
     max_categories: int = 12,
     mapping: dict | None = None,
     normalize_dtype: bool = False,
+    declared_type: str | None = None,
 ):
     """Return (kind, encoded_series_or_original, mapping, message).
 
@@ -425,10 +454,23 @@ def outcome_kind(
     series = _normalize_missing(series)
     if series.dropna().empty:
         return "unsupported", series, {}, "outcome entirely missing"
+    declared = {"numeric": "continuous", "nominal": "categorical", "ordinal": "categorical"}.get(declared_type, declared_type)
+    if declared in {"continuous", "categorical"}:
+        if declared == "categorical":
+            result = series.astype(str).where(series.notna()) if normalize_dtype else series
+            return "categorical", result, {}, "explicit codebook type"
+        numeric = pd.to_numeric(series, errors="coerce")
+        if numeric.notna().sum() != series.notna().sum():
+            return "unsupported", series, {}, "declared continuous outcome contains nonnumeric values"
+        return "continuous", numeric, {}, "explicit codebook type"
+    if declared not in {None, "binary"}:
+        return "unsupported", series, {}, f"unknown explicit outcome type: {declared_type}"
 
     encoded, used = encode_binary(series, mapping)
     if encoded is not None:
         return "binary", encoded, used, ""
+    if declared == "binary":
+        return "unsupported", series, {}, "declared binary outcome needs an exact 0/1 mapping"
 
     numeric = pd.to_numeric(series, errors="coerce")
     if numeric.notna().sum() == series.notna().sum():

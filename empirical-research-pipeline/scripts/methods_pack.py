@@ -248,7 +248,7 @@ def run_m04(ctx: dict) -> ML.Result:
     res = ML.anova(df, val, grp)
     if res.stats.get("p", 1) < ctx["alpha"]:
         try:
-            extra = ML.posthoc(df, val, grp, alpha=ctx["alpha"])
+            extra = ML.posthoc(df, val, grp, alpha=ctx["alpha"], unequal=res.stats.get("selected_test") == "Welch")
             res.tables.extend(extra.tables)
             res.verdict = res.verdict + extra.verdict
         except ML.MethodError as exc:
@@ -258,6 +258,9 @@ def run_m04(ctx: dict) -> ML.Result:
 
 def run_m17_nonparametric(ctx: dict) -> ML.Result:
     df, cfg = ctx["df"], ctx["cfg"]
+    paired = cfg.get("paired")
+    if paired and len(paired) == 2:
+        return ML.wilcoxon(df, paired[0], paired[1])
     grp = cfg.get("group")
     _need(bool(grp), "config.group 未指定", "")
     val = _col(cfg, "continuous")
@@ -365,11 +368,36 @@ def run_m18_logistic(ctx: dict) -> ML.Result:
 
 def run_m02(ctx: dict) -> ML.Result:
     df, cfg = ctx["df"], ctx["cfg"]
-    cols = cfg.get("cluster_vars") or cfg.get("items")
+    cols = cfg.get("cluster_vars") or _items(cfg)
     _need(bool(cols) and len(cols) >= 3, "主成分分析需要至少三个数值变量（config.cluster_vars）", "m09")
     _need_cols(df, *cols)
     k = int(cfg.get("components", 2))
     return ML.pca(df, cols, n_components=k)
+
+
+def _efa_gate(ctx: dict, cols: list) -> None:
+    """Refuse a factor solution the correlation matrix cannot support.
+
+    KMO < 0.6 or a non-significant Bartlett test means the items do not share
+    enough common variance for factors to be interpretable.  Running EFA
+    anyway and labelling it "完成" is how a table of noise reaches a paper.
+    The diagnostic values go into the skip reason, so the model can choose a
+    different method instead of silently forcing this one.
+    """
+    try:
+        kb = ML.kmo_bartlett(ctx["df"], cols)
+    except ML.MethodError as exc:
+        raise Skip(f"KMO/Bartlett 无法计算：{exc}") from exc
+    if kb["kmo"] < 0.6:
+        raise Skip(
+            f"KMO={kb['kmo']:.3f}（<0.6），Bartlett χ²({kb['bartlett_dof']})="
+            f"{kb['bartlett_chi2']:.1f}，p={kb['bartlett_p']:.3f}；"
+            "题项共同方差不足，因子解不可解释，故不输出因子解；可先用主成分描述，"
+            "或删改题项后重跑")
+    if kb["bartlett_p"] >= ctx["alpha"]:
+        raise Skip(
+            f"Bartlett p={kb['bartlett_p']:.3f}（≥α={ctx['alpha']}），"
+            "相关矩阵与单位阵不可区分；不输出因子解")
 
 
 def run_m09_factor_analysis(ctx: dict) -> ML.Result:
@@ -377,6 +405,7 @@ def run_m09_factor_analysis(ctx: dict) -> ML.Result:
     cols = _items(cfg)
     _need(len(cols) >= 3, "因子分析需要 config.items 中的至少三个题项", "m02")
     _need_cols(df, *cols)
+    _efa_gate(ctx, cols)
     return ML.efa(df, cols, n_factors=cfg.get("n_factors"), alpha=ctx["alpha"])
 
 
@@ -393,6 +422,7 @@ def run_m16(ctx: dict) -> ML.Result:
     items = _items(cfg)
     _need(len(items) >= 3, "效度（结构效度）需要至少三个题项", "m15")
     _need_cols(df, *items)
+    _efa_gate(ctx, items)
     return ML.validity(df, items, n_factors=cfg.get("n_factors"), alpha=ctx["alpha"])
 
 
@@ -464,6 +494,20 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
     """Draw the figure a reader of this method expects, or say why not."""
     res, book = run.result, ctx["book"]
     try:
+        paired = ctx["cfg"].get("paired")
+        if mid in {"m12", "m17"} and paired and len(paired) == 2:
+            values = ctx["df"][paired].apply(pd.to_numeric, errors="coerce").dropna()
+            fig, axes = _fig(h_in=2.8)
+            ax = axes[0][0]
+            for row in values.itertuples(index=False, name=None):
+                ax.plot([0, 1], row, color=PF.GRAY, linewidth=.4, alpha=.35)
+            center = values.mean() if mid == "m12" else values.median()
+            ax.plot([0, 1], center.values, marker="o", color=PF.BLUE)
+            ax.set_xticks([0, 1], [str(c) for c in paired])
+            ax.set_ylabel("配对测量值")
+            PF.style_axis(ax)
+            run.figure = book.save(fig, f"{mid}_paired", f"完整配对 {len(values)}；逐对观测及中心位置")
+            return
         if mid == "m01":
             num = [t for t in res.tables[0][1].itertuples() if t.type == "连续"]
             if not num:
@@ -569,7 +613,8 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m09":
             var = res.tables[1][1]
             fig, axes = _fig(h_in=2.9)
-            PF.scree_plot(axes[0][0], var["eigenvalue"].tolist())
+            PF.scree_plot(axes[0][0], var["variance_pct"].tolist(), values_are_percent=True,
+                          total_variables=len(res.tables[0][1]))
             fig.subplots_adjust(bottom=0.18)
             run.figure = book.save(fig, "m09_efa_scree", "因子特征值（碎石图）")
         elif mid == "m15" and res.tables:
@@ -712,6 +757,7 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
             fig.subplots_adjust(left=0.3, bottom=0.22)
             run.figure = book.save(fig, "m13_mediation", "间接效应")
     except Exception as exc:  # a figure must never kill the battery
+        run.status = "error"
         run.reason = (run.reason + f"；图未生成：{type(exc).__name__}: {exc}").strip("；")
         print(f"warning: {mid} 图未生成：{type(exc).__name__}: {exc}", file=sys.stderr)
 
@@ -745,7 +791,7 @@ def _model_n(run, df) -> int:
                 grouped = any(c in table.columns
                               for c in ("group", "cluster", "level", "组"))
                 return int(vals.sum()) if grouped else int(vals.max())
-    return len(df)
+    return None
 
 
 def write_report(path: str, runs: list, ctx: dict) -> None:
@@ -935,6 +981,7 @@ def main(argv=None) -> int:
     # Without this every CJK glyph falls back to DejaVu Sans and the figure is
     # full of empty boxes while the script still reports success.
     PF.set_style(width_cm=WIDTH_CM, dpi=600)
+    df.attrs["variable_types"] = cfg.get("variable_types", {})
     ctx = {"df": df, "cfg": cfg, "alpha": args.alpha, "seed": args.seed,
            "data_path": args.data, "config_path": args.config or "",
            "book": FigureBook(os.path.join(args.out, "figures"), formats)}

@@ -147,7 +147,7 @@ python scripts/dedupe_corpus.py --audit ... --root ... --apply
 
 - `--apply` 前逐组校验 keeper 仍在盘；缺失说明该副本可能就是唯一副本，整组跳过、不移动任何文件，并在 `move_log.csv` 记 `status=skipped`。
 - 计划里带 `md5` 与 `exists` 列；应用前重新校验源文件 MD5，审计后文件被改过则跳过。
-- 只把副本移动到 `资料目录/_duplicates/<原相对路径>`，不删除。`--copy` 改为复制；目标已存在时自动加 `__dup2` 等后缀，不覆盖。
+- 冻结的原始目录保持不动，按去重计划在分析中排除重复即可；需要 `--apply` 时，`--root` 指向工作副本目录，只把工作副本移到 `_duplicates/<原相对路径>`。`--copy` 改为复制；目标已存在时自动加 `__dup2` 等后缀，不覆盖。
 - 每次应用都写 `move_log.csv`（`group,src,dest,action,status,reason`），dest 是实际落盘的绝对路径。用 `--undo output/audit/move_log.csv` 反做：`action=move` 的行搬回原位（原位已有文件记 `conflict` 拒绝覆盖）；`action=copy` 的行仅在 src 与 dest 的 MD5 仍一致时删除 dest，不一致记 `conflict` 并保留。输出 `undo: restored=…, removed=…, conflict=…, skipped=…`；有 conflict/skipped 或整份日志没有任何 move/copy 条目时返回 2。
 - 有任何 `failed` 或 `skipped` 时脚本返回 2，不会把"部分失败"报成成功。计划文件名带时间戳另存一份，主 `dedupe_plan.csv` 始终是最新版本。
 

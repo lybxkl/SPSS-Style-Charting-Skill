@@ -25,6 +25,12 @@ if SCRIPTS not in sys.path:
 
 PYTHON = sys.executable
 
+# Every script under test prints non-ASCII (ΔE, ΔL*, Chinese messages).  A
+# Chinese Windows console defaults to cp936, so the same assertion would pass or
+# fail depending on which module was imported first; pin the child encoding here
+# so one module runs the same way as the whole suite.
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
 
 def run(script: str, *args, cwd: str | None = None, timeout: int = 300) -> subprocess.CompletedProcess:
     """Run one skill script as a subprocess and return the completed process."""

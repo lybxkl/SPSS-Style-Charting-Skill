@@ -535,15 +535,28 @@ class TestTextExtract(TempCase):
         self.assertEqual(text_extract.extract_text(path).strip(), "hello page")
 
     def test_ext03_partial_pdf_keeps_readable_pages(self):
+        """EXT-03: the readable pages survive, but only for a caller that opted in.
+
+        A default partial read would quietly code a document that is missing a
+        page, so ``extract_text`` refuses unless ``allow_partial=True``; the
+        unreadable pages are never silently replaced by an empty string.
+        """
         path = os.path.join(self.tmp, "partial.pdf")
         make_text_pdf(path, "page one")
         with mock.patch.object(text_extract, "_pdf_pages_text",
                                return_value=(["page one", ""], 1)):
-            self.assertEqual(text_extract.extract_text(path).strip(), "page one")
+            with self.assertRaises(ValueError) as raised:
+                text_extract.extract_text(path)
+            self.assertIn("partial PDF extraction", str(raised.exception))
+            self.assertEqual(
+                text_extract.extract_text(path, allow_partial=True).strip(),
+                "page one")
         with mock.patch.object(text_extract, "_pdf_pages_text",
                                return_value=([""], 1)):
             with self.assertRaises(ValueError):
                 text_extract.extract_text(path)
+            with self.assertRaises(ValueError):
+                text_extract.extract_text(path, allow_partial=True)
 
     def test_ext04_permission_encrypted_pdf_with_text_is_readable(self):
         try:

@@ -1,266 +1,250 @@
 # SPSS-Style-Charting-Skill
 
-通用实证研究流水线：把 PDF、Word、Excel、CSV、文本、网页、访谈稿、图片等资料，整理成可审计的数据集、统计模型、SPSS 风格图表和论文成稿。
+将混合研究资料整理成可追溯的数据集，由 Agent 选择数学与统计模型，产出论文级图集、分析报告和 DOCX。
 
-这个仓库提供一个可复用的 Agent Skill：`empirical-research-pipeline`。它不限定学科、语言或文件格式；中文裁判文书只是“文本编码”的一个可选示例，问卷、访谈、新闻、政策文件、实验记录、开放数据和数据库导出同样适用。
+本仓库交付可复用的 Agent Skill：[`empirical-research-pipeline`](empirical-research-pipeline/SKILL.md)。名称保留了早期“SPSS 风格制图”的来源；实际范围已覆盖资料发现、审计、抽取、数据整合、逐格复核、模型补数、分析、制图、文稿与终检。
 
-> **数据隐私**：本仓库只包含方法、脚本和模板，不包含任何真实资料、编码数据、SPSS 数据、论文成稿或个人信息。文档和配置中的样本量、文件名、路径、变量值均为虚构占位，不对应任何真实数据。
+> 仓库只包含工具、规范和明确标注的合成示例，不含真实研究资料。示例数字、字段、路径和哈希占位符不能作为真实证据使用。
 
-## 功能
+## 目标与原则
 
-- **多格式资料审计**：逐文件建立状态机，区分 `valid / metadata / hidden / unsupported / quarantined / zero_byte / corrupt / encrypted / textless / image_only / media / unreadable`，并对账“原始文件 → 可读 → 唯一样本 → 分析样本”；单个文件读不出不会让整次扫描崩溃，会记 `unreadable` 并在末行汇总。
-- **内容去重**：MD5 分组，`--content-dedupe` 另按正文归一化指纹分组（同一判决的不同导出版本）；先生成计划，`--apply` 移动到 `_duplicates/` 并写 `move_log.csv`，`--undo` 可回滚，不删除原件。
-- **通用编码工作表**：从 PDF、DOCX、ODT、PPTX、HTML、TXT/MD/RTF 等抽取全文、标题、年份和关键词证据句；默认 `generic`，`--profile legal` 才抽取法院/案号/省份/案由。被审计/去重排除的文件逐条落 `skipped_documents.csv`，样本漏斗写 `sample_flow.csv`。
-- **字段抽取（一行一个观测）**：`--extract profiles/<x>.json` 把材料取成结构化字段，产出 `dataset.csv`（每字段带 `<字段>_src` 来源列）、`evidence.jsonl`（带可回验的字符偏移）、`run.json`（profile 哈希 + 每字段命中/缺失数）。**领域写在 JSON 里**：换一份 profile 就换领域，`scripts/extract_lib.py` 里没有任何学科词。缺失一律落 `na` 短语，`False`/`0` 与"没提到"分开。规范见 `references/09-field-extraction.md`。
-- **表格数据质量**：行/列、主键、缺失、分类编码、异常值、日期范围；CSV/Excel 直接进入统计流程，不混入文本编码。
-- **SPSS 数据**：输出 CSV/JSONL；生成 `.sps` 读入语法、变量标签、值标签、`MISSING VALUES` 与 `VARIABLE LEVEL`（NA 不再与 0 混同），并自动把“是/否、有/无、支持/不支持”等二值文本 `RECODE` 为 `*_num`。
-- **自动统计筛查**：描述统计、组间检验、相关、单变量 OLS/Logit；多分类自变量自动哑变量化，完全分离/不可估计模型写入跳过清单。`--spec` 提供**多变量模型入口**（logit/ols、聚类稳健、HC0/HC1/HC3、显式参照组、空单元分离检测），输出可直接喂图表的 `coef_<id>.csv`。
-- **十六种经典方法**：`scripts/methods_pack.py` 按 `methods.json` 一次跑完教材里那 16 种方法（描述统计、PCA、相关、ANOVA、卡方、SEM、判别、时序、因子、聚类、回归、T 检验、中介、卡诺、信度、效度），另加非参数检验族与二元 Logistic 两节。**每个方法先自检前置条件**（两组才做 t、0/1 才做 Logit、KMO≥0.6 才做因子、n>参数数才做回归…），不满足就 `skipped` 并指出替代方法，绝不硬算；产出 `methods_report.md`（含可直接改写的报告句式）、`methods_manifest.csv`、每法一张 600 dpi 配图。SEM 因为没有引擎而**明确拒绝**，不给假模型。用法与判据见 `references/11-methods-catalog.md`。
-- **全景图表包**：默认覆盖 A 数据质量、B 单变量、C 双变量、D 多变量、E 时间、F 模型诊断、G 附录，实测 15–44 张（`--max-charts` 默认上限 60，0 = 不限；`--only`/`--sections` 只跑需要的）；含 PCA、Ward 聚类、MDS、对应分析、控制图、ROC/PR/校准/混淆矩阵/Lift、Kaplan–Meier 等。
-- **出版级输出**：15 cm 版心、宋体 + Times New Roman、600 dpi PNG、矢量 PDF、LZW 无损 TIFF（默认三格式；`--no-tiff` 可关）。log 轴次刻度标注已关闭，不再出现 `4×10⁻¹` 混排。
-- **多面板正文图**：`scripts/paper_figures.py --paper paper.json` 按 GridSpec 组装 (a)(b)(c)，支持 `bar/bar_with_ci/stacked_bar/line/scatter/hist/pie/forest`，返回每格实际厘米与**实测最小字号**，产出 `FigureN.*` + 与图包同构的 manifest；森林图直接吃 `coef_all.csv`。
-- **Word → PDF 高清回填**：定位 Word 导出 PDF 中被压缩的图，替换回 600 dpi 原图，回填后清理页面内容树（`clean_contents` + `garbage=4`）以免旧的低分辨率副本残留在成品里，并按版面尺寸校验有效 dpi。
-- **成稿组装**：`scripts/assemble_manuscript.py --spec manuscript.json` 直接产出 `.docx`——三线表（1.5/0.75/1.5 pt、无竖线）、行不跨页、表头重复、图按正文栏宽嵌入、图题与图同页、中西文字体分别设置、首行缩进按字符、页脚页码；表格与图**引用 CSV/PNG 而非手抄数值**，同时写出本文档实际印出的每个 N（`manuscript_numbers.csv`）与回填用的 `figure_map.json`。取不到的占位符直接报错，不会印出半个 `N=`。
-- **终检**：核对样本流程、N、图注、图表清单、PDF/图片的**有效 dpi**（不是像素宽）、**最小字号**（按实际安置宽度折算）、**分类色灰度/色盲可分性**；`chart_manifest.csv` 支持图号唯一性、N 合理性（允许 `3111→2713` 这类区间与 `n_scope`）和相对路径检查；有 error 退出码 2。
-- **数字溯源**：`scripts/verify_numbers.py` 查表内合计、表图同值、正文每个 `N=/OR=/p<` 能否找回表、图号连续且被引用、样本 N 跨表一致、漏斗单调不增；产物 `number_issues.csv` + `number_trace.csv`。
-- **可测试**：`tests/` 下 378 个 `unittest` 用例，全部使用运行时生成的最小 fixture，不依赖网络、真实资料或 SPSS/Word。
+- **尽可能全面**：数据集数量和原生形态不封顶。按材料发现个人、事件、题项、长表、面板、配对、层级、节点/边、矩阵等形式，用户可以继续补充。
+- **由 Agent 选模型和实现**：内置方法是工具库，模型族、规格、语言和引擎开放。逐一评估所有有合理数据联系的候选，保留不显著、失败、不适用和暂不可估计项目。
+- **缺数回材料找**：现成 CSV 缺列不能直接结束。查正文、工作表、脚注、附件，必要时换解析器、转换、OCR 或转写；取得真实值后重整合、重新复核和重算。
+- **每格有来处**：观测值保留原始文件 SHA256、精确位置与原值；派生值指向输入单元格并独立复算。键、空值、编码和标记列同样覆盖。
+- **整合后再核对一遍**：机器检查通过只是 prepared。Agent 或人工必须逐格重新阅读原材料及上下文，完成版本绑定的复核，才能进入 final。
+- **原件冻结**：原始目录与项目产出分开；按去重计划排除重复，需要隔离时只操作工作副本。模型运行保护整个原始目录，包括未参与分析和被排除的文件。
 
-## 支持的资料
+**可追溯不等于语义必然正确。** 哈希、数值匹配和复核声明不能证明模型真的理解了实体、时间、单位、否定、指代或研究设计。必须实际执行复读、方法诊断和结果审查；不得批量伪造“已核对”，也不能声称有限工具已经证明所有可能的数据集和模型都被穷尽。
 
-| 资料 | 原生处理 | 说明 |
-|---|---|---|
-| PDF | 文字层、页数、字符数、图片数、加密状态 | 扫描件先 OCR |
-| DOCX / ODT / PPTX | 段落、表格、幻灯片文字 | `.doc/.ppt` 先转换 |
-| XLSX / XLSM | 工作表、单元格文本 | `.xls` 先转换；建议安装 `openpyxl` |
-| CSV / TSV / JSON / JSONL | 字段、行数、编码、缺失 | 走统计流程，不进入逐份文本编码 |
-| TXT / MD / HTML / XML / YAML / RTF | 纯文本抽取；HTML 去标签 | 网页脚本/样式会被去掉 |
-| 图片 | 文件清单、尺寸/页数 | 先 OCR；本 skill 不自带 OCR |
-| 音频/视频 | 文件清单 | 先转写/抽帧；本 skill 不自带 ASR |
-| 压缩包、旧版 Office、未知格式 | 文件清单 | 先解压/转换；审计会标 `unsupported` |
+完整契约见 [全资料发现、开放模型与逐格复核](empirical-research-pipeline/references/12-exhaustive-research.md)。
 
-“任何资料”不等于“任何二进制都能直接解析”：所有文件都会进入审计和样本对账，不能直接读的格式会明确标记并给出转换路径。
+## 工作流程
 
-## 目录
-
-```text
-SPSS-Style-Charting-Skill/
-├── README.md
-├── CHANGELOG.md                            # 版本变更记录
-├── requirements.txt
-├── .gitignore
-├── dist/
-│   └── empirical-research-pipeline.skill   # 可直接导入的打包版（含 sha256 校验文件）
-├── docs/
-│   └── ISSUES-FIXED.md                     # 审计发现的缺陷索引与修复状态
-├── tests/                                  # unittest 用例，fixture 运行时生成
-│   ├── _helpers.py
-│   ├── test_audit_layer.py
-│   ├── test_coding_layer.py
-│   ├── test_extract_lib.py
-│   ├── test_stats_charts.py
-│   ├── test_chart_pack.py
-│   ├── test_methods_pack.py
-│   ├── test_figures_paper.py
-│   ├── test_verify_numbers.py
-│   ├── test_output_layer.py
-│   ├── test_docs_contract.py
-│   └── test_assemble_manuscript.py
-├── tools/
-│   └── build_skill.py                      # 可复现打包 + --check
-└── empirical-research-pipeline/
-    ├── SKILL.md
-    ├── assets/                             # 配置、codebook、图注、示例图表规格模板
-    ├── profiles/                           # 字段抽取 profile 示例（裁判文书 / 访谈）与词表
-    ├── references/                         # 01–10：审计、编码、字段抽取、SPSS、制图、排稿、QA、跨脚本契约
-    ├── scripts/                            # 可执行流水线（13 个）
-    └── evals/                              # 行为测试提示词（不随 skill 打包）
+```mermaid
+flowchart LR
+    A[冻结原始资料] --> B[全文件审计与数据发现]
+    B --> C[多个数据集与各自 codebook]
+    C --> D[逐格来源与派生复算]
+    D --> E[prepare]
+    E --> F[整合后实际逐格复读]
+    F --> G[final 版本校验]
+    G --> H[开放模型清单与前置诊断]
+    H -->|缺字段或设计信息| B
+    H --> I[自选引擎执行与运行回执]
+    I --> J[全图集、结果表、分析报告与 DOCX]
+    J --> K[资料与模型覆盖、数字溯源、版面终检]
 ```
 
-## 测试
+这是一套 **Agent 主导、脚本检查事实** 的工作方式。脚本不会自动发明研究问题、选择全部合适模型或写出可靠理论论证；Agent 根据当前资料生成和维护配置、代码、证据与报告。
 
-```bash
-# 全部
-python -m unittest discover -s tests -p "test_*.py" -v
+## 安装与环境
 
-# 只跑某一层
-python -m unittest discover -s tests -p "test_output_layer*.py" -v
-```
+### 导入技能
 
-用例不需要网络、真实资料、SPSS 或 Word；`export_pdf_hires.py` 的用例在检测不到 Word COM 时自动 skip。
-
-## 环境要求
-
-- Python 3.9+
-- 审计/文本抽取：`PyMuPDF`、`pandas`、`numpy`
-- 统计：`scipy`、`statsmodels`
-- 图表：`matplotlib`、`Pillow`
-- Excel：`openpyxl`（建议；未安装时会尝试直接解析 XLSX XML）
-- Word → PDF 回填：Windows + Microsoft Word + `pywin32`
-- SPSS 语法：由 SPSS 打开运行
-- 可选：`lifelines`（Cox 模型；Kaplan–Meier 图本身不依赖它）
-
-```bash
-pip install -r requirements.txt
-```
-
-## 安装
-
-### 方式一：复制目录
-
-Qoder / 通用 Agent Skills：
-
-```bash
-mkdir -p ~/.agents/skills
-cp -r empirical-research-pipeline ~/.agents/skills/
-```
-
-Claude Code：
-
-```bash
-mkdir -p ~/.claude/skills
-cp -r empirical-research-pipeline ~/.claude/skills/
-```
-
-Windows PowerShell：
+支持 `.skill` 导入的客户端可导入 [打包文件](dist/empirical-research-pipeline.skill)。它是普通 ZIP，目录根为 `empirical-research-pipeline/`。也可以将该目录完整复制到客户端的技能目录；具体发现路径由客户端决定，例如支持 `.agents/skills` 的环境：
 
 ```powershell
-Copy-Item -Recurse .\empirical-research-pipeline "$HOME\.agents\skills\"
+New-Item -ItemType Directory -Force "$HOME/.agents/skills" | Out-Null
+Copy-Item -LiteralPath ./empirical-research-pipeline -Destination "$HOME/.agents/skills/" -Recurse
 ```
 
-### 方式二：导入 `.skill`
+更新现有安装前保留本地定制；本仓库更新与用户机器上的已安装副本是两件事。项目数据和输出应放在独立研究目录中。
 
-在支持 Skill 导入的客户端中选择 `dist/empirical-research-pipeline.skill`；也可以把 `.skill` 当作 zip 解压后放入上述 skills 目录。
+### Python 依赖
 
-## 快速开始
-
-以下命令在 `empirical-research-pipeline/` 目录下执行；把 `资料目录`、`data/analysis.csv` 换成本项目的实际路径。
-
-```bash
-# 1. 多格式资料审计（先审计，再编码/建模）
-#    --content-dedupe 额外按正文指纹找“同一文书的不同导出版本”
-python scripts/audit_corpus.py --root "资料目录" --out-dir output/audit --min-chars 100 --content-dedupe
-
-# 2. 去重计划；确认后加 --apply 移动到 _duplicates/（写 move_log.csv，可用 --undo 回滚）
-python scripts/dedupe_corpus.py --audit output/audit/corpus_files.csv --root "资料目录" --out-dir output/audit
-python scripts/dedupe_corpus.py --audit output/audit/corpus_files.csv --root "资料目录" --out-dir output/audit --apply
-
-# 3. 生成通用编码工作表（访谈/报告/网页/文档）
-python scripts/make_coding_sheet.py --root "资料目录" --out output/coding --keywords assets/coding-keywords.json
-
-#    如资料是中国裁判文书，可加：
-#    --profile legal --doc-type judgment
-#    被 --audit/--dedupe-plan 排除的文件会逐条写进 output/coding/skipped_documents.csv
-#    只读文件时不必带 --audit；要沿审计/去重结论走漏斗时必须带（否则被排除的文件会重新进表）
-
-# 3b. 字段抽取：换一份 profile 就换领域（示例：裁判文书 / 访谈）
-python scripts/make_coding_sheet.py --root "资料目录" --out output/coding \
-  --profile legal --doc-type all --extract profiles/legal-judgment.json
-#    产出 dataset.csv（一行一个观测，每字段带 _src）、evidence.jsonl（可回验偏移）、run.json
-#    和 missing_by_source.csv（每个字段的缺失按 not_found/negated/redacted/na_phrase/unparsed 分开计数）
-
-# 4. 人工/LLM 按 codebook 编码，形成 data/analysis.csv 和 data/coded.jsonl
-#    编码规则、证据句、信度检验见 references/02-coding-protocol.md
-#    注意：信度检验（Cohen's κ）是人工协议，本 skill 没有脚本代做
-
-# 5. 表格数据：生成 SPSS 读入语法与 SAV
-python scripts/csv_to_spss_syntax.py --csv data/analysis.csv --out-sps syntax/import.sps --sav-out data/analysis.sav
-#    本 skill 不调用 SPSS：用 SPSS 打开 syntax/import.sps 运行（或用 R/Stata 直接读 data/analysis.csv）
-
-# 6. 自动统计筛查
-python scripts/auto_stats.py --data data/analysis.csv --config assets/chart_config.example.json --out output/analysis_pack
-
-#    多变量主模型：先在 spec 里显式写清因变量、预测变量与参照组，再估计
-python scripts/auto_stats.py --data data/analysis.csv --spec model_spec.json \
-  --out output/models --separation drop --vif --roc
-
-# 6b. 十六种经典方法一次跑完（前置条件不满足就 skipped 并给替代，不硬算）
-python scripts/methods_pack.py --list
-python scripts/methods_pack.py --data data/analysis.csv --config methods.json \
-  --out output/methods --methods all
-#    只跑部分：--methods m04,m05 或 --only m14；方法说明见 references/11-methods-catalog.md
-
-# 7. 生成全景图表包（PNG + PDF + TIFF 三格式；试跑可加 --no-tiff 提速约 30%）
-python scripts/auto_chart_pack.py --data data/analysis.csv --config assets/chart_config.example.json --out output/chart_pack
-#    只跑部分图：--only F01,F02 或 --sections A,B；先看清单：--list-charts
-
-# 7b. 排正文主图：多面板 + 面板字母 + 图注 N 自动替换
-python scripts/paper_figures.py --paper paper.json --out output/figures
-#    示例：--paper assets/paper_figures.example.json（合成数据，3 图 0 error）
-#    n 写数字或 "auto"：写 "auto" 时必须同时给 --data，否则报错而不是猜
-
-# 7c. 组装 Word 成稿：表格/图引用文件，不手抄数字；顺带写出 numbers.csv 与 figure_map.json
-python scripts/assemble_manuscript.py --spec manuscript.json --out output/manuscript.docx
-#    {key} 取不到值会退出码 2 并告诉你是哪个键；图默认按正文栏宽（A4-3.17cm=14.66cm）放置
-
-# 7d. Word → PDF，再回填 600 dpi 原图（依赖 Windows + Word）
-python scripts/export_pdf_hires.py --docx output/manuscript.docx \
-  --out-pdf output/manuscript.pdf --figure-map output/figure_map.json
-
-# 8. 终检（docx/pdf 为成稿；尚未排稿时可先只用 --data/--figures/--manifest）
-#    有 error 退出码 2；--min-dpi 600 按版面折算有效 dpi（15 cm 宽 = 3543 px）
-#    --min-fontsize 7.2 按实际安置宽度查字号；灰度/色盲检查默认开
-#    路径指到"图"那一层，不是它爹：
-#      --figures  → 图表包的 output/chart_pack/figures/（内含 *.png/*.pdf），或排稿图的 output/figures/
-#      --manifest → output/chart_pack/chart_manifest.csv 或 output/figures/paper_figures_manifest.csv
-#    指到父目录 chart_pack/ 会找不到图片（脚本会报 "no image files" 并退出码 2）。
-python scripts/qa_outputs.py --docx output/manuscript.docx --pdf output/manuscript.pdf \
-  --figures output/chart_pack/figures --data data/analysis.csv \
-  --audit output/audit/corpus_files.csv \
-  --manifest output/chart_pack/chart_manifest.csv --min-dpi 600 --min-fontsize 7.2
-
-# 9. 数字溯源：正文每个 N/OR/p 能不能找回表
-#    --tables            放表格 CSV 的目录（每张表一个 *.csv，首行表头；模型表用 coef_*.csv / fit.csv）
-#    --figures-manifest  图的 manifest（paper_figures_manifest.csv 或 chart_manifest.csv，二选一给一份即可）
-#    --sample-flow       漏斗文件；由 make_coding_sheet.py 写在它自己的 --out 下（output/coding/sample_flow.csv），
-#                        不是 output/tables/
-python scripts/verify_numbers.py --out output/verify --tables output/tables \
-  --figures-manifest output/figures/paper_figures_manifest.csv \
-  --docx output/manuscript.docx --sample-flow output/coding/sample_flow.csv
+```powershell
+python -m pip install -r requirements.txt
 ```
 
-## 配置
-
-`assets/chart_config.example.json` 是列角色模板：`treatment`、`outcome`、`group`、`time`、`region`、`trial`、`filter_query`、`variable_labels`、`value_labels`、`term_labels`，以及双比例哑铃图所需的 `dumbbell`（两个 0/1 列）。示例列名和值标签均为虚构占位，使用时按自己的 codebook 替换。
-
-文本结果是“是/否”时，用 `outcome_map` 明确正类；不要依赖脚本猜方向。多分类自变量会以 `变量_水平` 进入单变量模型，参照组为省略的水平；**用 `--spec` 跑多变量模型时参照组必须显式声明**（写成 `C(变量, Treatment('水平'))` 或在 spec 的 `ref` 里给出），未声明会直接退出码 2 并列出可选水平——脚本不替你猜参照组。
-
-## 图表覆盖
-
-| 组 | 内容 |
+| 环节 | 依赖与条件 |
 |---|---|
-| A 数据质量 | 缺失率、样本类别/年份/地区构成、二元变量发生率 |
-| B 单变量 | 结果分布、Q-Q、处理构成（条形/环形）、数值分布、类别构成 |
-| C 双变量 | 类别×结果、阶段×结果、交叉热图/堆叠、地区/审级差异、相关热图、散点拟合、气泡图 |
-| D 多变量 | 提琴/箱线、散点矩阵、哑铃图、PCA 碎石/双标图/载荷、Ward 树状图、经典 MDS |
-| E 时间 | 结果率/均值趋势、3σ 控制图、样本量、阶段构成堆叠柱/面积 |
-| F 模型诊断 | 森林图、ROC、PR、校准、预测分布、混淆矩阵、十分位 Lift、Kaplan–Meier |
-| G 附录 | 对应分析、Pareto |
+| 基础执行 | Python 3.9+；Windows 终端建议设置 `$env:PYTHONUTF8 = '1'` |
+| 统计与数据 | pandas、NumPy、SciPy、statsmodels |
+| 图表 | matplotlib、Pillow；需要包含实际文字的中文字体，默认优先宋体，西文字体 Times New Roman |
+| PDF | PyMuPDF |
+| XLSX 单元格校验 | openpyxl；审计层有 XML 回退，不代表全部 Excel 分析无需 openpyxl |
+| Word 组装 | python-docx；生成 DOCX 不需要安装 Word |
+| Word → PDF | 当前导出实现需要 Windows、Microsoft Word、pywin32 |
+| SPSS | 生成 `.sps` 不需要 SPSS；生成 SAV 需另外在 SPSS 中执行该语法 |
+| 扩展模型 | Agent 按方法选择 R、Julia、SPSS/Stata 或专用 Python 引擎，记录依赖版本、种子和规格 |
 
-图数不是越少越“精炼”：正文放主图，诊断、异质性和稳健性图放附录；每张图先在 `chart_manifest.csv` 里写清“回答什么问题”，没有问题就不画。
+原件保护会在项目 `.research-source-backups/` 中保留按内容哈希复用的恢复副本，并尝试执行期只读保护和改动检测/恢复。这会占用本地磁盘，包含原始资料，应采用与原件相同的访问控制。它用于防止可信分析代码的意外改写，**不是运行恶意代码的沙箱**。
 
-## 文档
+## 资料支持范围
 
-- `SKILL.md`：完整流程、阶段闸门、脚本清单、常见翻车点
-- `references/01-corpus-audit.md`：文件状态机、多格式处理、三层去重、表格数据质量
-- `references/02-coding-protocol.md`：codebook、证据句、有序层级、问卷/量表、信度
-- `references/03-analysis-spss.md`：模型设定、SPSS 语法、结果表、诊断
-- `references/04-figures-publication.md`：物理规格、颜色语义、导出检查
-- `references/05-manuscript-assembly.md`：Word 排版、图表同页、PDF 回填
-- `references/06-qa-checklist.md`：交付前 A–G 清单
-- `references/07-chart-atlas.md`：SPSS 高级图形对照与选图策略
-- `references/08-analysis-expansion.md`：主模型之外的扩展分析与记录方式
-- `references/10-contracts.md`：跨脚本契约（主键 `rel_path`、`sample_flow.csv`、manifest 的 N 与 `n_scope`、缺失值语义、`<字段>_src`、证据句偏移、图与 PDF 规格、退出码）
-- `docs/ISSUES-FIXED.md`：逐条审计缺陷索引与修复/未修复状态
-- `CHANGELOG.md`：变更记录
+| 资料 | 内置能力 | 需要另行完成的工作 |
+|---|---|---|
+| PDF | 文字层、逐页检查、文字定位、图片与加密检查 | 扫描件 OCR；部分页损坏要修复/恢复，不能默默当全文完整 |
+| DOCX / DOCM | 正文、表格文本、页眉页脚、脚注尾注、批注文字 | 图片、嵌入对象、修订语义等仍需专门读取与上下文判断 |
+| ODT / PPTX / PPTM | 文档文字；幻灯片及讲者备注文字 | 图中数值、嵌入工作簿和其他非文字对象按需要额外提取 |
+| XLSX / XLSM | 文件/工作表审计、精确工作表单元格定位 | 转为分析数据；公式格需独立复算，不能仅信可能过期的缓存 |
+| CSV / TSV | 编码读取、严格行列检查、原始行/列定位 | 分析入口主要读取 CSV；非 CSV 表格先做可追溯转换 |
+| JSON / JSONL | 指针/记录定位、重复键检查 | 按实际嵌套结构生成审计视图；高精度数值须保留精度 |
+| TXT / MD / HTML / XML / YAML / RTF | 文本抽取与字符位置；HTML 去除脚本/样式 | 网页存档不等于自动联网采集；RTF、表格和正文结构要复核 |
+| 图片、音视频 | 文件清单与状态 | 外部 OCR、转写或逐图读取；技能不自带 OCR/ASR 引擎 |
+| 压缩包、旧版 Office、未知格式 | 纳入清单并记录不可直接解析的原因 | 解压、转换、专用读取；恢复产物继续保留到原件的映射 |
 
-## 说明
+文件审计证明“看见并检查了哪些文件”，不自动证明“所有字段、表格和附件均已完整抽取”。原生数据可以是任何形态；CSV 审计视图是验证接口，不能为了符合接口而丢字段、丢关系或强行变成唯一宽表。
 
-- 本 skill 面向实证研究，不替代研究设计、人工编码判断或因果识别。
-- 样本 N、模型 N、图注 N 必须同源；去重、改 codebook、换筛选条件后要重跑模型和图表。
-- 资料中“提到某种情况”不等于“实际发生了某种结果”，结论使用“关联/对应/更可能”，不写因果。
-- 公开资料存在选择偏差、未记载不等于未发生、编码单位差异等限制，需在论文中说明。
-- 语料通常是**按关键词检索来的目的性抽样**，不是全样本；若某个关键词近乎全覆盖（例如按“生态修复”检索到的案件里 99% 提到“修复”），必须在方法部分写清抽样框，不能把占比当成总体发生率。
-- 脚本之间对列名、N、缺失值的约定以 `references/10-contracts.md` 为准；出现不一致时先查契约，不要在单个脚本里就地打补丁。
+## 使用方式
 
+### 交给 Agent 的任务示例
 
+> 使用 empirical-research-pipeline，读取本项目 materials/ 的全部资料，尽可能发现和整合有用数据集。按实际单位定义主键与关联，保留原生文件、codebook 和全格证据。数据整合后逐格回原材料重新核对。为每个数据集广泛提出合理数学/统计模型，逐项检查条件，缺数时继续回正文、表格和附件补取。自行选择或编写实现，交付完整图集、结果表、分析报告、最终 DOCX、复现代码与所有校验记录；不显著、失败和无法估计的项目也保留说明。
 
+### 推荐项目结构
+
+```text
+research-project/
+  materials/                    # 冻结原件，不放产出
+  research_registry.json        # 数据集、来源覆盖和模型清单入口
+  data/                         # 任意数量原生数据/CSV审计视图/codebook/证据/逐格复核
+  analysis/                     # Agent选择或编写的实现、模型规格、环境版本
+  output/
+    audit/                      # 原始清单、重复组、样本流程
+    data_verification/          # prepare快照、待复核任务、final报告
+    model_plan.jsonl            # 开放候选及每个缺口的实际回查
+    source_coverage.jsonl        # 每份原件的使用/排除/恢复情况
+    discovery_report.md         # 数据发现与未利用项说明
+    models/                     # 各模型实际输出、诊断、样本键、执行回执
+    figures/                    # PNG/PDF/TIFF及图表清单
+    tables/                     # 可直接组稿的CSV表格
+    manuscript.docx
+    research_gate.json
+    qa_report.json
+```
+
+### 命令链路
+
+以下在**独立研究项目目录**运行；先把 `$SkillRoot` 设为实际技能路径。JSON、代码和台账由 Agent 按当前资料生成，示例命令不代替这些工作。
+
+```powershell
+$SkillRoot = 'F:/path/to/empirical-research-pipeline'
+$env:PYTHONUTF8 = '1'
+
+# 1. 全文件审计；阈值按材料选择，短表格不应按长文阈值误排除
+python "$SkillRoot/scripts/audit_corpus.py" --root materials --out-dir output/audit --content-dedupe
+python "$SkillRoot/scripts/dedupe_corpus.py" --root materials --audit output/audit/corpus_files.csv --out-dir output/audit
+
+# 2. 可选的文档抽取入口。审计/去重结论要真正传给下游
+python "$SkillRoot/scripts/make_coding_sheet.py" --root materials --out output/coding --audit output/audit/corpus_files.csv --extract "$SkillRoot/profiles/eldercare-interview.json" --require-review
+```
+
+抽取 profile 只是示例，必须按当前 codebook 改写；表格数据走结构化处理。对歧义写实际 `decisions.jsonl`，经 `check_decisions.py` 检查后重跑抽取。`--require-review` 只针对抽取歧义，**不能替代下面的全格复核**。
+
+Agent 完成全资料发现、数据集、各自 codebook、provenance、来源覆盖与模型清单后，再执行：
+
+```powershell
+# 3. 对每一格重新打开原件、核对位置/raw，并独立复算派生值
+python "$SkillRoot/scripts/verify_dataset.py" --registry research_registry.json --root . --out output/data_verification --stage prepare
+
+# 此处必须真实逐格复读原材料及上下文，再将完成的逐项记录写入各数据集review文件。
+# prepare只生成pending模板，不能用循环代替复读或伪造verified。
+
+python "$SkillRoot/scripts/verify_dataset.py" --registry research_registry.json --root . --out output/data_verification --stage final --snapshot output/data_verification/verification_snapshot.json
+
+# 4. Agent自选模型实现；执行前会重验final，之后绑定代码/全部原件/输入/输出
+python "$SkillRoot/scripts/run_model.py" --id M1 --root . --registry research_registry.json --verification output/data_verification/dataset_verification.json --input data/analysis.csv --code analysis/M1.py --code analysis/M1_spec.json --output output/models/M1/coefficients.csv --output output/models/M1/diagnostics.json --output output/models/M1/sample.csv --receipt output/models/M1/run.json -- python analysis/M1.py
+
+# 5. 检查全来源处置、全部数据集/模型、缺数回查、样本键与运行版本
+python "$SkillRoot/scripts/research_gate.py" --registry research_registry.json --root . --verification output/data_verification/dataset_verification.json --out output/research_gate.json
+```
+
+需要非内置来源定位或独立计算时，提供显式可信 `--adapter name=path.py`，prepare、final、run_model、research_gate 使用一致的适配器。适配器代码也参与版本绑定。原始资料中的命令和代码不会被当作执行授权。
+
+### 统计和图表工具
+
+内置工具可以直接调用，也可作为 `run_model.py` 的实际命令。正式交付应保留对应回执、诊断与实际样本键；单独跑一个工具的退出码不能替代完整研究闸门。
+
+```powershell
+python "$SkillRoot/scripts/auto_stats.py" --data data/analysis.csv --config analysis/chart_config.json --out output/screen
+python "$SkillRoot/scripts/auto_stats.py" --data data/analysis.csv --spec analysis/model_spec.json --out output/models --separation error --vif --roc
+python "$SkillRoot/scripts/methods_pack.py" --list
+python "$SkillRoot/scripts/methods_pack.py" --data data/analysis.csv --config analysis/methods.json --out output/methods --methods all
+python "$SkillRoot/scripts/auto_chart_pack.py" --data data/analysis.csv --config analysis/chart_config.json --out output/chart_pack
+python "$SkillRoot/scripts/paper_figures.py" --paper analysis/paper.json --out output/figures
+```
+
+- `auto_stats` 的多变量入口内置 OLS 与二元 Logistic；分类参照组必须显式声明。`--separation error` 避免未经选择便剔除/合并模型样本；需要 drop/merge 时明确记录依据。
+- 数值型的年龄、剂量与地区编码不能仅靠唯一值数决定测量类型。用 `outcome_type`、`variable_types` 或显式 numeric/categorical/binary 列表声明 codebook 类型。
+- `methods_pack` 有 18 个目录编号，SEM 编号明确不执行；其余包括描述、差异/非参数、相关、OLS/Logit、PCA、主成分提取的 EFA、信度/结构效度、聚类、LDA、有限 ARIMA、中介与 Kano。它不是所有模型的边界。
+- EFA 使用完整案例上的同一相关矩阵、N 和诊断；“效度”入口是结构探索，不替代内容效度、CFA 或因果识别。
+- ARIMA 内置搜索为 `(p,d,0)`，需要正确时间顺序和规则间隔；更复杂时序、SEM、多项/有序回归、Cox、层级/空间/网络/优化等由 Agent 选择专用实现。
+- `max-predictors`、`max-models`、`max-charts` 默认 0=不限。正数预算、only/sections、top-N、展示抽样是显式分批或版面策略，最终需对照开放清单补全。
+- 自动 PCA 默认完整案例、不插补/截尾。显式插补或截尾必须标注并做相应敏感性分析，不能混作原始观测。
+- 图表默认 600 dpi PNG、矢量 PDF、LZW TIFF。正文/附录/全图集张数由发现决定，复杂结果通过分面和分页保持可读。
+
+### DOCX、PDF 和终检
+
+```powershell
+python "$SkillRoot/scripts/assemble_manuscript.py" --spec analysis/manuscript.json --numbers output/numbers.csv --out output/manuscript.docx
+python "$SkillRoot/scripts/export_pdf_hires.py" --docx output/manuscript.docx --out-pdf output/manuscript.pdf --figure-map output/figure_map.json
+python "$SkillRoot/scripts/verify_numbers.py" --out output/number_verification --tables output/tables --figures-manifest output/figures/paper_figures_manifest.csv --docx output/manuscript.docx --sample-flow output/coding/sample_flow.csv --fail-on-warn
+python "$SkillRoot/scripts/qa_outputs.py" --docx output/manuscript.docx --pdf output/manuscript.pdf --figures output/figures --manifest output/figures/paper_figures_manifest.csv --min-dpi 600 --min-fontsize 7.2 --colorblind --out output/qa_report.json
+python "$SkillRoot/scripts/review_pack.py" --research-gate output/research_gate.json --verify output/number_verification/number_issues.csv --qa output/qa_report.json --out output/review_pack.md
+```
+
+- 组稿器接受已写好的段落和文件引用，生成三线表、重复表头、同页图题与分别设置的中西文字体。它不会自行产生研究论证；表格引用 CSV，段落中的 `{key}` 引用真实数字，空值/未知键或损坏表格报错。
+- Word 导出可能压缩图片；回填后按实际图幅检查**横向和纵向**有效 dpi。像素宽不代表分辨率，合法窄图不需要硬凑 3000 px。
+- 字号必须按 DOCX 中每张图的实际宽高折算。严格字号检查需要可对应的原始 PNG 与同名矢量 PDF；仅看原图或位图元数据不能证明缩小后的字仍可读。
+- 灰度区分检查默认开启；色觉模拟需显式 `--colorblind`。`--allow-raster-text` / `--exit-zero` 等放宽选项只用于明确说明的中间检查，不能冒充严格终检通过。
+- 数字检查覆盖已识别的 N/统计量/p/百分比及表图/漏斗，p 与系数按正文打印精度匹配，不能以叙述数字或模型编号证明 p 值；它仍不能理解所有自然语言指代，正文、表注、模型与证据的语义对应需要逐项审查。
+- 最后渲染 Word/PDF 逐页检查表格、分页、裁切、字体、图表与引用。没有真实资料时不产出貌似真实实证的结果或论文。
+
+## 脚本索引
+
+路径均在 `empirical-research-pipeline/scripts/` 下。
+
+| 工具 | 职责 |
+|---|---|
+| `audit_corpus.py` / `dedupe_corpus.py` | 全文件状态、保守文本/字节重复组、统一去重计划与工作副本回滚 |
+| `text_extract.py` | 多格式文字/结构检查；严格处理部分读取失败 |
+| `make_coding_sheet.py` / `extract_lib.py` | 文档工作表、配置化字段候选、证据和歧义 |
+| `check_decisions.py` | 判断台账、证据与候选、有效改判链和未决项 |
+| `verify_dataset.py` | 全格来源重读、精确派生复算、prepare/final与版本绑定 |
+| `run_model.py` / `source_guard.py` | 任意可信实现执行、全原件保护与恢复、输入/代码/输出回执 |
+| `research_gate.py` | 来源、数据集、模型、补数、样本键与实际运行绑定的一致性 |
+| `analysis_utils.py` | 编码、CSV读取、样本过滤、显式类型与角色 |
+| `auto_stats.py` | 描述/关联/单变量筛查、OLS/Logit规格与诊断 |
+| `methods_lib.py` / `methods_pack.py` | 内置方法内核、运行编排、实际N、方法图与报告 |
+| `csv_to_spss_syntax.py` | CSV导入语法、变量名称/标签/缺失声明；不执行SPSS |
+| `pubfig.py` / `auto_chart_pack.py` | 统一图形样式、常见研究图型与自动初始图包 |
+| `paper_figures.py` | 多面板正文图与图表清单 |
+| `assemble_manuscript.py` | 按配置与CSV/PNG组装DOCX及数字/回填映射 |
+| `export_pdf_hires.py` | Word导PDF、严格图题定位、高清回填与有效dpi |
+| `verify_numbers.py` / `qa_outputs.py` | 正文表图数字、样本流程、文件完整性与实际版面质量 |
+| `review_pack.py` | 汇总已有证据和未解决问题供实际审稿，不代替研究判断 |
+
+## 测试、审计与打包
+
+所有测试资料运行时构造并明确作为合成 fixture；不依赖真实研究数据、网络或 SPSS。可用时测试真实 Word COM/PDF；环境不具备时相应测试跳过，不能据此声称已验证该链路。
+
+```powershell
+$env:PYTHONUTF8 = '1'
+python -m unittest discover -s tests -p 'test_*.py' -v
+python tools/build_skill.py
+python tools/build_skill.py --check
+```
+
+测试含已知答案、独立公式、故障反例、跨脚本契约和实际 CLI 行为。源码审计、隔离行为验证、数值校核和真实 Word/PDF 验证的具体范围见 [本轮审计报告](docs/AUDIT-2026-11-13.md)，历史变化见 [CHANGELOG](CHANGELOG.md)。测试通过不等于验证所有领域、所有引擎或所有语义。
+
+`build_skill.py` 将 SKILL、scripts、references、assets、profiles 打入安装包，排除 evals、测试、字节码与真实项目数据。构建采用固定 ZIP 元数据，可重复产出相同字节。`.skill.sha256` 记录**整个安装包文件的标准 SHA256**；构建输出另列内部内容摘要，两者用途不同。
+
+```powershell
+Get-FileHash -LiteralPath ./dist/empirical-research-pipeline.skill -Algorithm SHA256
+Get-Content -LiteralPath ./dist/empirical-research-pipeline.skill.sha256
+```
+
+升级代码、修改原件、数据、codebook、证据或适配器后，必须重新生成快照、实际复核并重跑受影响产物；不能复用旧“已通过”的文件。
+
+## 进一步阅读
+
+- [技能入口](empirical-research-pipeline/SKILL.md)
+- [开放研究与全格复核契约](empirical-research-pipeline/references/12-exhaustive-research.md)
+- [跨脚本数据契约](empirical-research-pipeline/references/10-contracts.md)
+- [字段抽取与证据](empirical-research-pipeline/references/09-field-extraction.md)
+- [编码协议](empirical-research-pipeline/references/02-coding-protocol.md)
+- [模型扩展](empirical-research-pipeline/references/08-analysis-expansion.md) / [内置方法说明](empirical-research-pipeline/references/11-methods-catalog.md)
+- [出版图形](empirical-research-pipeline/references/04-figures-publication.md) / [图形图谱](empirical-research-pipeline/references/07-chart-atlas.md)
+- [组稿规范](empirical-research-pipeline/references/05-manuscript-assembly.md) / [交付终检](empirical-research-pipeline/references/06-qa-checklist.md)

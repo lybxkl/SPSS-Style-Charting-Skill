@@ -1,12 +1,14 @@
 # 跨脚本契约（v1.1）
 
-这 11 个脚本是一条流水线，不是一个库。过去它们各自选列名、各自理解 N、各自处理缺失，
-结果是「接上一个真实项目就得重写中间层」。下面六条是硬契约：**生成方必须写、消费方必须认、缺了必须报错**。
+内置脚本与 Agent 自选实现通过文件契约衔接。数据集形态、数量、模型与引擎开放；来源、版本、逐格复核和样本口径必须统一。
+下面是硬契约：**生成方必须写、消费方必须认、缺了必须报错**。
 所有实现与测试都以本文件为准；修改本文件需要同步 `SKILL.md` 与相应脚本。
 
 ---
 
 ## 1. 键列（key）
+
+以下 `rel_path` 约定用于文件审计/旧编码管线。一般数据集使用 registry 各自声明的 `key`（字符串或复合键列表），无需强制每个个人、事件或图边都以文件路径作为主键；各自的单位和关联基数必须明确。
 
 - **规范名**：`rel_path`。
 - **生成方**（`audit_corpus.py`、`make_coding_sheet.py`、`dedupe_corpus.py`）必须**同时**写出
@@ -101,16 +103,46 @@
 - `0` 成功；`2` 参数错误或校验失败。
 - `qa_outputs.py` 发现 error 时**默认返回 2**；`--exit-zero` 可显式降级（CI 里不要用）。
 - 任何脚本「产出 0 行」都不得视为成功：必须有非零退出或显式 `--allow-empty`。
+- `check_decisions.py` 有任何 error 返回 2；`make_coding_sheet.py --require-review` 在仍有未复审字段时返回 2（即使 dataset 已写出，也明确告知不是成品）。
 
 ## 9. 成稿（manuscript）
 
-- 成稿由 ssemble_manuscript.py 生成，**不手打表格**。规格文件 manuscript.json 的 locks 引用 CSV 与 PNG；{key} 占位符只从 --numbers 取，取不到即 xit 2（禁止印出不完整数字）。
-- 组装器必须同时产出三件：<name>.docx、<name>_numbers.csv（列 key,value,source，键名 	able<N>_n / ig<N>_n）、igure_map.json（列 [{tag,title,image}]，image 为绝对路径）。erify_numbers.py --numbers 直接吃 _numbers.csv，xport_pdf_hires.py --figure-map 吃 igure_map.json。
-- 表：三线（顶 1.5 pt、表头下 0.75 pt、底 1.5 pt），无竖线；每行 cantSplit；首行 	blHeader；数字右对齐、首列左对齐。
-- 图：按**正文栏宽**放置（默认 min(15, 页宽-左右边距)），显式宽度超过栏宽是 xit 2 而不是静默压缩；图题与图同页（keepNext）；Word 不能嵌 PDF，给 PDF 是 xit 2。
-- 字体：每个 run 同时写 w:rFonts/@w:ascii|@w:hAnsi|@w:eastAsia，只写 ascii 会让中文回落主题字体；首行缩进用 w:ind/@w:firstLineChars（按字符），不要只写厘米。
+- 成稿由 `assemble_manuscript.py` 生成，**不手打表格**。规格文件 `manuscript.json` 的 `blocks` 引用 CSV 与 PNG；`{key}` 占位符只从 `--numbers` 取，取不到即 exit 2（禁止印出不完整数字）。
+- 组装器必须同时产出三件：`<name>.docx`、`<name>_numbers.csv`（列 `key,value,source`，键名 `table<N>_n` / `figure<N>_n`）、`figure_map.json`（列 `[{tag,title,image}]`，image 为绝对路径）。`verify_numbers.py --numbers` 直接吃 `_numbers.csv`，`export_pdf_hires.py --figure-map` 吃 `figure_map.json`。
+- 表：三线（顶 1.5 pt、表头下 0.75 pt、底 1.5 pt），无竖线；每行 `cantSplit`；首行 `tblHeader`；数字右对齐、首列左对齐。
+- 图：按**正文栏宽**放置（默认 `min(15, 页宽-左右边距)`），显式宽度超过栏宽是 exit 2 而不是静默压缩；图题与图同页（`keepNext`）；Word 不能嵌 PDF，给 PDF 是 exit 2。
+- 字体：每个 run 同时写 `w:rFonts/@w:ascii|@w:hAnsi|@w:eastAsia`，只写 ascii 会让中文回落主题字体；首行缩进用 `w:ind/@w:firstLineChars`（按字符），不要只写厘米。
 
+## 10. 判断台账（`decisions.jsonl`）
+
+- 一行一个判断；读取按 `utf-8-sig`，允许 `#` 注释行与空行。
+- 必填：`id, stage, target, decision, reason, evidence, confidence`。
+- `stage ∈ audit|extract|dataset|stats|figures|manuscript|qa`。
+- `decision ∈ keep|drop|exclude|include|na|value|method|skip|accept|reject|note`。
+- `target`：`<rel_path>#<field>` / 整份文档的 `<rel_path>` / `model:<id>` / `table:<n>` / `figure:<n>`。
+- `evidence`：`<path>@<start>-<end>`（可选 `quote` 必须与片段一致）、`<path>`、`<path>::<locator>`。
+- `confidence ∈ [0,1]`；`needs_human=true` 在交付闸门报错，只有草稿可 `--allow-unresolved`。
+- 同一 target 的第二条必须带 `supersedes`，否则 `check_decisions.py` 报 `duplicate`。
+- `extract` 阶段的 `value` 必须是 `extraction_review.csv` 的当前值或 `alternatives`；`na` 不要求候选，但必须给 span。
+- 产物：`decision_issues.csv`（`severity,check,id,target,detail`）；有 error 退出 2。
+- `make_coding_sheet.py --decisions` 把 `value` 写进 `dataset.csv` 并把 `<field>_src` 记为 `decision`，`na` 记为 `decision:na`；`exclude` 的 target 是整份文档的 `rel_path`，该行从 `dataset.csv` 移除，并在 `run.json.review.documents_excluded_by_decision` 计数。
+
+## 11. 全资料、全数据集与整合后的逐格复核
+
+- 完整 schema 与例子见 `references/12-exhaustive-research.md`；入口 `assets/research_registry.example.json`。registry 不限制数据集数量，`unit/key/codebook/path/provenance/review` 各自声明；原生格式自由，为每个经验字段提供无损 CSV 审计视图。
+- `source_inventory` 的每份文件都有 `source_coverage` 记录；来源必须真的参与声明的数据集，遗漏、新文件和 excluded 仍供值均报错。原件与产出分目录，原件不移动。
+- `provenance.jsonl` 一格一条，含 `key,column,value,kind`；实测/缺失/结构标识都有 `sources`（path/sha256/locator/raw），派生值有精确 `inputs` 和独立复算 `rule`。键、标记和空格同样覆盖，漏格、重复格、伪值、错位置、错哈希或循环依赖 exit 2。
+- prepare 只能生成 pending 模板和快照；final 必须在整合后逐格重新读原材料/上下文，再校验 `record_sha256/status/source_reread/reviewer/method/checked_at/note`。禁止抽样代替全检、自动批量盖章；原件/数据/codebook/证据/适配器变更使旧复核失效。
+- `dataset_verification.json` 中 stage=final、status=verified、error_count=0 是数据进入正式计算的必要条件。数字溯源 `verify_numbers` 是不同层的检查，不能替代本层。哈希与声明不能证明语义真实，Agent 仍必须执行并如实记录复读。
+
+## 12. 开放模型、缺数回查与实际执行
+
+- `model_plan.jsonl` 的 family 自由文本，数据集/模型数量均不封顶；内置方法不是候选清单上限。每候选明确问题、数据/设计要求、诊断、选择理由与状态。
+- 数据不足必须回查原始清单；每个 gap 的 searches 覆盖所有来源，逐份记录 found/not_found/unreadable/not_relevant、哈希与依据，found 写 resolution；补取后重建数据与全格复核。无实际回查不能只写 skipped。
+- completed 模型绑定 `run_model.py` 的成功回执、诊断文件、样本键 CSV 与实际 N；回执记录任意引擎的命令及所有输入/代码/输出完整 SHA256。输入、代码或结果变化不能沿用旧回执。
+- `research_gate.py` 对资料覆盖、模型终态、补数过程、复核版本、运行回执和样本键作统一检查，有 error exit 2。它检查注册覆盖，不能证明所有潜在变量/模型已经被穷尽。
+- `auto_stats` 的 max-predictors/max-models 默认 0=不限；`auto_chart_pack` 的 max-charts 默认 0=不限。正数预算须显式给出，试跑/图内展示取舍不能冒充完整交付；图表 data_hash 绑定全表顺序和值，文件字节另由执行回执绑定。
 
 ---
 
-本文件随 skill 一起打包（`references/10-contracts.md`）。此前它在仓库根 `docs/CONTRACTS.md`，安装包里看不到，等于没有契约。
+本文件随 skill 一起打包（`references/10-contracts.md`）。

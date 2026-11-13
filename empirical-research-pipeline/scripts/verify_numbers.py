@@ -70,7 +70,7 @@ TABLE_FILE_RE = re.compile(r"^table(a?)0*(\d+)", re.I)
 # statistics; letting them into the index makes V-03 trace anything to a path.
 ID_COLUMN_RE = re.compile(
     r"^(?:id|doc_?id|file|filename|file_?name|path|rel_?path|case_?no|"
-    r"文件|文件名|路径|相对路径|编号|图号|案号)$", re.I)
+    r"model|model_id|term|variable|label|文件|文件名|路径|相对路径|编号|图号|案号)$", re.I)
 P_COLUMN_RE = re.compile(r"^(?:p|p_?value|p_?val|p值|显著性|sig)$", re.I)
 
 # V-03 semantic classes (R3-01).  A number in the prose may only be evidenced by
@@ -83,7 +83,7 @@ EST_COLUMN_RE = re.compile(
     r"t值|z值|f值|r)$", re.I)
 PCT_COLUMN_RE = re.compile(r"(?:%|占比|比例|百分比|率|percent|pct|rate)", re.I)
 SEMANTIC_POOLS = ("count", "estimate", "p", "pct", "raw")
-TEXT_SEMANTICS = {"N": "count", "stat": "estimate", "p<": "p", "p=": "p", "pct": "pct"}
+TEXT_SEMANTICS = {"N": "count", "stat": "estimate", "p<": "p", "p<=": "p", "p=": "p", "pct": "pct"}
 SEVERITIES = ("error", "warning", "info")
 # A p-value cell may carry its comparison operator ("<0.001"); the operator is
 # part of the evidence (R3-02).
@@ -96,9 +96,10 @@ OP_TOKEN_RE = re.compile(
 THOUSAND_GAP_RE = re.compile(r"(?<=\d)[ \u00a0](?=\d)")
 
 TEXT_PATTERNS = (
-    ("N", re.compile(r"[NＮ]\s*[=＝]\s*([0-9][0-9,，\u00a0 ]*)")),
+    ("N", re.compile(r"[NＮnｎ]\s*[=＝]\s*([0-9][0-9,，\u00a0 ]*)")),
     ("N", re.compile(r"([0-9][0-9,，\u00a0 ]*)\s*(?:份|个|件|人|条)")),
-    ("stat", re.compile(r"(?<![A-Za-z])(?:OR|HR|RR|β|B|r)\s*[=＝]\s*(-?\d+(?:\.\d+)?)", re.I)),
+    ("stat", re.compile(r"(?<![A-Za-z0-9_])(?:OR|HR|RR|β|B|r|t|z|F)\s*[=＝]\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)", re.I)),
+    ("p<=", re.compile(r"[pP]\s*(?:<=|≤|≦)\s*(\d*\.?\d+)")),
     ("p<", re.compile(r"[pP]\s*[<＜]\s*(\d*\.?\d+)")),
     ("p=", re.compile(r"[pP]\s*[=＝]\s*(\d*\.?\d+)")),
     ("pct", re.compile(r"(\d+(?:\.\d+)?)\s*[%％]")),
@@ -773,6 +774,7 @@ def build_table_index(tables):
     name so that a p-value cell can never stand in for a percentage (R3-01).
     """
     index = {key: [] for key in SEMANTIC_POOLS}
+    index["_contexts"] = {}
     for table in tables:
         for row_no, row in enumerate(table.rows, start=2):
             for col, value in row.items():
@@ -782,24 +784,35 @@ def build_table_index(tables):
                 for op, number in cell_tokens_ops(value):
                     where = f"tables/{table.name}:{row_no}:{col}"
                     index[semantic].append((op, number, where))
+                    metric = {"OR":"OR", "HR":"HR", "RR":"RR", "B":"BETA", "Β":"BETA", "BETA":"BETA"}.get(str(col).upper())
+                    index["_contexts"][where] = {"model": str(row.get("model") or row.get("model_id") or ""),
+                                                  "metric": metric or str(row.get("metric") or "").upper()}
     return index
 
 
-def find_evidence(index, semantic, kind, value, tolerance) -> str:
+def find_evidence(index, semantic, kind, value, tolerance, model=None, metric=None) -> str:
     """Where a same-semantic cell proves `value`, or "" when there is none.
 
     "raw" columns (descriptive 取值/备注 style) are the last resort: they carry
     no declared measure, so they may back any prose number, but only after the
     typed pools failed.
     """
-    for pool in (semantic, "raw"):
+    for pool in ((semantic, "raw") if semantic in {"count", "pct"} else (semantic,)):
         for op, candidate, where in index.get(pool, ()):
+            context = index.get("_contexts", {}).get(where, {})
+            if model and context.get("model") != model:
+                continue
+            if semantic == "estimate" and metric and context.get("metric") and context["metric"] != metric:
+                continue
             if kind == "p<":
                 # The table's own "<0.001" matches "<.001"; a concrete p passes
                 # only when it is really smaller than the prose bound (R3-02).
-                if op == "<" and abs(candidate - value) <= tolerance:
+                if op == "<" and candidate <= value + tolerance_slack(value):
                     return where
                 if op == "=" and candidate < value:
+                    return where
+            elif kind == "p<=":
+                if candidate <= value and op in {"=", "<", "<="}:
                     return where
             elif kind == "p=":
                 if op == "=" and abs(candidate - value) <= tolerance:
@@ -902,7 +915,18 @@ def matches_value(kind: str, value: float, candidate: float, tolerance: float) -
 def check_text_numbers(text: str, source: str, tables, numbers_csv, report: Report,
                        tolerance: float, ignore_patterns=(), figure_data=()):
     index = build_table_index(tables)
+    model_ids = {c["model"] for c in index["_contexts"].values() if c["model"]}
     for start, _end, kind, value, raw in extract_text_numbers(text):
+        local_tolerance = tolerance
+        if kind in {"stat", "p=", "p<", "p<="}:
+            token = re.search(r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)\s*$", raw)
+            digits = token.group(1).lower() if token else str(value)
+            mantissa, _, exponent = digits.partition("e")
+            places = len(mantissa.split(".", 1)[1]) if "." in mantissa else 0
+            local_tolerance = 0.5 * 10 ** ((int(exponent) if exponent else 0) - places) + 1e-12
+            if kind == "p=" and value == 0:
+                report.error("V-03", source, "p 的确定非零值或显式上界", raw, "p 不应印成零；请报告实际精度或 p<阈值")
+                continue
         line = text.count("\n", 0, start) + 1
         ignored = next((pattern for pattern in ignore_patterns if pattern.search(raw)), None)
         if ignored is not None:
@@ -911,6 +935,13 @@ def check_text_numbers(text: str, source: str, tables, numbers_csv, report: Repo
                         f"命中 --ignore {ignored.pattern}，跳过溯源")
             continue
         semantic = token_semantics(kind)
+        paragraph = text[text.rfind("\n", 0, start)+1:text.find("\n", start) if "\n" in text[start:] else len(text)]
+        mentioned = [m for m in model_ids if re.search(r"(?<![A-Za-z0-9_])"+re.escape(m)+r"(?![A-Za-z0-9_])", paragraph)]
+        claim_model = mentioned[0] if len(mentioned) == 1 else None
+        claim_metric_match = re.match(r"(OR|HR|RR|β|B)\s*[=＝]", raw, re.I)
+        claim_metric = claim_metric_match.group(1).upper() if claim_metric_match else None
+        if claim_metric in {"Β", "B"}:
+            claim_metric = "BETA"
         where = f"{source}:{line}: {raw}"
         matched_by = ""
         trace = {
@@ -920,7 +951,7 @@ def check_text_numbers(text: str, source: str, tables, numbers_csv, report: Repo
             "source_col": kind,
             "matched_by": "none",
         }
-        figure_hit = find_figure_data(figure_data, semantic, kind, value, tolerance)
+        figure_hit = find_figure_data(figure_data, semantic, kind, value, local_tolerance)
         if figure_hit is not None:
             # A declared figure number is a real source, but it is weaker than a
             # table cell, so the hit is recorded as info rather than passing mute.
@@ -934,7 +965,7 @@ def check_text_numbers(text: str, source: str, tables, numbers_csv, report: Repo
                         f"由 {figure_hit['figure'] or '未命名图'}（{figure_hit['label']}）提供，"
                         f"见 {figure_hit['where']}（--figure-data）")
         else:
-            numbers_hit = find_numbers_entry(numbers_csv, kind, value, tolerance)
+            numbers_hit = find_numbers_entry(numbers_csv, kind, value, local_tolerance)
             if numbers_hit is not None:
                 matched_by = "numbers"
                 trace.update({"source_file": "numbers.csv", "source_row": str(numbers_hit["row"]),
@@ -943,7 +974,7 @@ def check_text_numbers(text: str, source: str, tables, numbers_csv, report: Repo
                             f"由 --numbers 提供（{numbers_hit['label'] or '未命名'}，"
                             f"见 {numbers_hit['path']}:{numbers_hit['row']}）")
             else:
-                matched_by = find_evidence(index, semantic, kind, value, tolerance)
+                matched_by = find_evidence(index, semantic, kind, value, local_tolerance, claim_model, claim_metric)
                 if not matched_by:
                     _report_untraced(source, line, kind, value, raw, semantic, index, tables, report)
         trace["matched_by"] = matched_by or "none"
@@ -959,6 +990,8 @@ def find_numbers_entry(entries, kind, value, tolerance):
     numbers.csv is the declared home for narrative counts that never appear in a
     table (3 107 份, 5 750 个 ...), so a hit is recorded as info, not silently.
     """
+    if token_semantics(kind) not in {"count", "pct"}:
+        return None
     for entry in entries or ():
         if matches_value(kind, value, entry["value"], tolerance):
             return entry
@@ -1022,6 +1055,11 @@ def check_figure_numbering(figures, text, report: Report):
                          f"{series}号不连续，缺 {len(missing)} 个")
     if not text:
         return
+    # Captions cannot cite themselves. Remove exact declared captions before
+    # checking references, preserving ordinary prose such as "图1 与 图2".
+    caption_texts = {re.sub(r"\s+", "", f.caption) for f in figures if f.caption}
+    text = "\n".join(line for line in text.splitlines()
+                     if re.sub(r"\s+", "", line) not in caption_texts)
     for figure in figures:
         if figure.series == "附图":
             pattern = rf"(?:附图|附录|Appendix)\s*0*{figure.number}(?!\d)"

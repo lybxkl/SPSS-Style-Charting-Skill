@@ -218,7 +218,12 @@ def num(s: str):
         if value is not None:
             return int(value) if float(value).is_integer() else value
     if chinese is not None:
-        cn = _cn_decimal(chinese.group(0))
+        token = chinese.group(0)
+        # A lone decimal point ("地点", "网点") is punctuation, not zero.
+        # Reading it as 0 is how a missing age became a numeric 0.
+        if not any(ch not in "点點" for ch in token):
+            return None
+        cn = _cn_decimal(token)
         if cn is None:
             cn = _cn_integer(chinese.group(0))
         if cn is not None:
@@ -241,7 +246,12 @@ def num_find(s: str):
             value = int(value) if float(value).is_integer() else value
             return (value, (arabic.start(), end))
     if chinese is not None:
-        cn = _cn_decimal(chinese.group(0))
+        token = chinese.group(0)
+        # A lone decimal point ("地点", "网点") is punctuation, not zero.
+        # Reading it as 0 is how a missing age became a numeric 0.
+        if not any(ch not in "点點" for ch in token):
+            return None
+        cn = _cn_decimal(token)
         if cn is None:
             cn = _cn_integer(chinese.group(0))
         if cn is not None:
@@ -1103,16 +1113,8 @@ def _hint_of(field: dict):
     return "|".join(names) or None
 
 
-def _hinted(finder, scope_text: str, hint: str, *args, anchor: bool = False):
-    """Run a span-aware finder inside the windows that match *hint*.
-
-    A document carries many numbers; ``hint`` says which sentence the field is
-    about, so ``wait_minutes`` does not pick up the interview duration and
-    ``fine_yuan`` does not pick up the amount of the loss. The returned span
-    stays absolute inside *scope_text*.
-    """
-    if not hint:
-        return finder(scope_text, *args)
+def _hint_regex(hint: str) -> str:
+    """Compile an ``a|b`` hint into one regex, tolerating per-character lines."""
     alt = []
     for part in str(hint).split("|"):
         part = part.strip()
@@ -1122,14 +1124,43 @@ def _hinted(finder, scope_text: str, hint: str, *args, anchor: bool = False):
             alt.append(_label_pattern(part))     # tolerant of per-char lines
         else:
             alt.append(part)
-    pattern = "|".join(alt) or re.escape(str(hint))
+    return "|".join(alt) or re.escape(str(hint))
+
+
+def _line_bounds(text: str, pos: int) -> tuple[int, int]:
+    """Start/end offsets of the line containing *pos* (end excludes newline)."""
+    start = text.rfind("\n", 0, pos) + 1
+    end = text.find("\n", pos)
+    return start, (end if end >= 0 else len(text))
+
+
+def _hinted(finder, scope_text: str, hint: str, *args, anchor: bool = False,
+            line_only: bool = False):
+    """Run a span-aware finder inside the windows that match *hint*.
+
+    A document carries many numbers; ``hint`` says which sentence the field is
+    about, so ``wait_minutes`` does not pick up the interview duration and
+    ``fine_yuan`` does not pick up the amount of the loss. The returned span
+    stays absolute inside *scope_text*.
+
+    ``line_only`` keeps the search on the line that carries the label.  A
+    header value never lives on the next line; letting it cross that boundary
+    is how a missing age picked up the interview date.
+    """
+    if not hint:
+        return finder(scope_text, *args)
+    pattern = _hint_regex(hint)
     n = len(scope_text)
     for m in re.finditer(pattern, scope_text):
         # Forward first: the number normally follows the noun ("修复费1250元").
         # Reaching backwards first would grab the amount of the preceding
         # item — in a structured order that is often the unpaid balance.
-        for lo, hi in ((m.start(), min(n, m.end() + 160)),
-                       (max(0, m.start() - 160), m.end())):
+        if line_only:
+            windows = (_line_bounds(scope_text, m.start()),)
+        else:
+            windows = ((m.start(), min(n, m.end() + 160)),
+                       (max(0, m.start() - 160), m.end()))
+        for lo, hi in windows:
             if anchor:
                 # The hint position *is* the anchor the finder needs: a header
                 # line 裁判日期：2021.03**** must win over a full date far away.
@@ -1142,6 +1173,98 @@ def _hinted(finder, scope_text: str, hint: str, *args, anchor: bool = False):
                 shifted = list(hit[:-1]) + [(lo + span[0], lo + span[1])]
                 return tuple(shifted)
     return None
+
+
+def _hinted_all(finder, scope_text: str, hint: str, *args, anchor: bool = False,
+                limit: int = 8):
+    """Distinct finder hits near every hint occurrence, line hits first.
+
+    Returns ``value..., (start, end), same_line`` tuples.  A caller uses this
+    to keep the primary hit and to hand every other plausible reading to the
+    review file, instead of silently choosing one.
+    """
+    if not hint:
+        hit = finder(scope_text, *args)
+        return [tuple(hit) + (True,)] if hit else []
+    pattern = _hint_regex(hint)
+    n = len(scope_text)
+    out, seen = [], set()
+    # Line first, then forward, then backward.  A header value follows its
+    # label; a number *before* the label is usually another field (a case
+    # number's digits, the previous line's amount), so it is the last resort.
+    for mode in ("line", "forward", "backward"):
+        for m in re.finditer(pattern, scope_text):
+            if mode == "line":
+                windows = (_line_bounds(scope_text, m.start()),)
+            elif mode == "forward":
+                windows = ((m.start(), min(n, m.end() + 160)),)
+            else:
+                windows = ((max(0, m.start() - 160), m.end()),)
+            for lo, hi in windows:
+                if anchor:
+                    hit = finder(scope_text[lo:hi], *args,
+                                 anchor=max(0, m.start() - lo))
+                else:
+                    hit = finder(scope_text[lo:hi], *args)
+                if not hit:
+                    continue
+                span = hit[-1]
+                absolute = (lo + span[0], lo + span[1])
+                key = (absolute, repr(hit[:-1]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(tuple(list(hit[:-1]) + [absolute, mode == "line"]))
+        if out:
+            break       # a nearer pass found readings: farther ones are noise
+    return out[:limit]
+
+
+def _na_on_anchor(scope_text: str, field: dict):
+    """First NA phrase on a line that carries one of the field's labels."""
+    phrases = _na_phrases(field.get("na"))
+    if not phrases:
+        return None
+    hint = _hint_of(field)
+    if not hint:
+        return _na_in_scope(scope_text, field)
+    pattern = _hint_regex(hint)
+    for m in re.finditer(pattern, scope_text):
+        lo, hi = _line_bounds(scope_text, m.start())
+        line = scope_text[lo:hi]
+        for phrase in phrases:
+            k = line.find(phrase)
+            if k >= 0:
+                return phrase, (lo + k, lo + k + len(phrase))
+    return None
+
+
+def _na_in_scope(scope_text: str, field: dict):
+    """First NA phrase anywhere in the scope (for body-text fields)."""
+    for phrase in _na_phrases(field.get("na")):
+        k = scope_text.find(phrase)
+        if k >= 0:
+            return phrase, (k, k + len(phrase))
+    return None
+
+
+def _na_for_field(scope_text: str, field: dict):
+    """NA phrase anchored to the label when there is one, else in the scope."""
+    if _hint_of(field):
+        return _na_on_anchor(scope_text, field)
+    return _na_in_scope(scope_text, field)
+
+
+def _value_key(value):
+    """Identity of a candidate value: 67 and 67.0 are the same reading."""
+    if isinstance(value, bool):
+        return ("bool", value)
+    if isinstance(value, (int, float)):
+        try:
+            return ("num", round(float(value), 10))
+        except (TypeError, ValueError):
+            pass
+    return ("text", str(value))
 
 
 # How many months one `unit` is worth, for the public `duration` wrapper.
@@ -1202,26 +1325,45 @@ def duration(s: str, unit: str = "月"):
     return round(months / per_unit, 4)
 
 
-def _apply_one(field: dict, text: str, scope_text: str, offset: int,
-               base_dir: str):
-    """Run one field against the scoped text. Returns a result dict."""
+def _apply_one_raw(field: dict, text: str, scope_text: str, offset: int,
+                   base_dir: str):
+    """Run one field against the scoped text. Returns an un-finalised result."""
     func = field["func"]
     na = field.get("na")
     ftype = field.get("type")
     win_before, win_after = (field.get("window") or [80, 120])[:2]
     result = {"value": None, "raw": None, "span": None,
               "source": "none", "na": na, "negated": False,
-              "fallback_used": 0, "truncated": False}
+              "fallback_used": 0, "truncated": False,
+              "candidates": [], "flags": [], "needs_review": False,
+              "cross_line": False, "na_hit": False}
 
-    def finish(value, raw, span, source):
+    def candidate(value, raw, span, source, note="", same_line=None):
+        """Record one plausible reading.  Never overwrites the chosen value."""
+        span_abs = None if span is None else [offset + max(0, span[0]),
+                                              offset + max(0, span[1])]
+        key = (_value_key(value), tuple(span_abs) if span_abs else None)
+        for item in result["candidates"]:
+            old_key = (_value_key(item["value"]),
+                       tuple(item["span"]) if item["span"] else None)
+            if old_key == key:
+                return item
+        item = {"value": value, "raw": raw, "span": span_abs,
+                "source": source, "note": note, "same_line": same_line}
+        result["candidates"].append(item)
+        return item
+
+    def finish(value, raw, span, source, same_line=None):
         result["raw"] = raw
         if span is None:
             result["span"] = None
             result["source"] = source
             if isinstance(value, str) and not value:
                 result["value"] = None
+                candidate(None, raw, None, source, same_line=same_line)
                 return result
             result["value"] = _coerce(value, ftype)
+            candidate(result["value"], raw, None, source, same_line=same_line)
             return result
         local = (max(0, span[0]), max(0, span[1]))
         result["span"] = (offset + local[0], offset + local[1])
@@ -1234,6 +1376,7 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
             result["value"] = None
             result["na"] = field.get("na_negated") or na
             result["na_hit"] = True
+            candidate(None, raw, span, "na", "negated", same_line=same_line)
             return result
         if isinstance(value, str):
             for phrase in _na_phrases(na):
@@ -1241,10 +1384,13 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
                     result["value"] = None
                     result["na"] = phrase
                     result["na_hit"] = True
+                    candidate(None, raw, span, "na", "na_phrase",
+                              same_line=same_line)
                     return result
         result["value"] = _coerce(value, ftype)
         result["truncated"] = bool(span) and (
             result["span"][1] - result["span"][0]) > (win_before + win_after)
+        candidate(result["value"], raw, span, source, same_line=same_line)
         return result
 
     if func == "kv_block":
@@ -1255,14 +1401,33 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
                 result["source"] = "kv_block"
                 result["span"] = (offset + span[0], offset + span[1])
                 result["na"] = field.get("na_redacted") or na
+                result["na_hit"] = True
+                candidate(None, value, span, "kv_block", "redacted")
                 return result
             return finish(value, value, span, "kv_block")
         return result
 
     if func == "pattern":
-        hit = pattern(scope_text, field["pattern"], int(field.get("group") or 0))
+        group = int(field.get("group") or 0)
+        hit = pattern(scope_text, field["pattern"], group)
         if hit:
-            return finish(hit[0], hit[0], hit[1], "pattern")
+            out = finish(hit[0], hit[0], hit[1], "pattern")
+            seen = 0
+            for m in re.finditer(field["pattern"], scope_text):
+                if seen >= 5:
+                    break
+                span_group = group if group <= (m.lastindex or 0) else 0
+                value = m.group(span_group)
+                if value is None:
+                    continue
+                seen += 1
+                candidate(value, value, m.span(span_group),
+                          "pattern", "alternative")
+            return out
+        na_hit = _na_for_field(scope_text, field)
+        if na_hit:
+            result["na_hit"] = True
+            return finish(None, na_hit[0], na_hit[1], "na")
         return result
 
     if func == "contains":
@@ -1271,6 +1436,12 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
         if hit:
             return finish(hit[0], needle, hit[1], "contains")
         if scope_text:
+            # A declared NA phrase outranks "absent": "未提及" is a missing
+            # answer, not a measured False.  Only a real hit outranks NA.
+            na_hit = _na_for_field(scope_text, field)
+            if na_hit:
+                result["na_hit"] = True
+                return finish(None, na_hit[0], na_hit[1], "na")
             # The section exists and the phrase is absent: that is a measured
             # False, not a missing value. Returning None here would erase the
             # difference between "no complaint" and "section not found".
@@ -1278,42 +1449,144 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
         return result
 
     if func == "num":
-        hit = _hinted(num_find, scope_text, _hint_of(field))
+        hint = _hint_of(field)
+        hit = _hinted(num_find, scope_text, hint, line_only=True)
+        same = True
+        if not hit:
+            na_hit = _na_for_field(scope_text, field)
+            if na_hit:
+                result["na_hit"] = True
+                out = finish(None, na_hit[0], na_hit[1], "na")
+                for alt in _hinted_all(num_find, scope_text, hint):
+                    if len(alt) == 3:
+                        value, span, line_hit = alt
+                        candidate(value, scope_text[span[0]:span[1]], span,
+                                  "num", "rejected_by_na", line_hit)
+                return out
+            hit = _hinted(num_find, scope_text, hint)
+            same = False
         if hit:
-            return finish(hit[0], scope_text[hit[1][0]:hit[1][1]], hit[1],
-                          "pattern")
+            result["cross_line"] = (not same) and bool(hint)
+            out = finish(hit[0], scope_text[hit[1][0]:hit[1][1]], hit[1],
+                         "pattern", same_line=same if hint else None)
+            for alt in _hinted_all(num_find, scope_text, hint):
+                if len(alt) == 3:
+                    value, span, line_hit = alt
+                    candidate(value, scope_text[span[0]:span[1]], span,
+                              "num", "alternative", line_hit)
+            return out
         return result
 
     if func == "quantity":
         hint = _hint_of(field)
-        hit = _hinted(quantity_find, scope_text, hint,
-                      field.get("unit_table"), field.get("unit"))
-        if hit:
-            return finish(hit[0], scope_text[hit[2][0]:hit[2][1]], hit[2],
-                          "pattern")
-        # `受访者年龄：62` — a label-anchored value with no unit printed. The
-        # unit comes from the profile, so the value stays comparable.
-        if hint:
-            bare = _hinted(num_find, scope_text, hint)
+        qargs = (field.get("unit_table"), field.get("unit"))
+        hit = _hinted(quantity_find, scope_text, hint, *qargs, line_only=True)
+        kind = "quantity"
+        same = True
+        if not hit:
+            bare = _hinted(num_find, scope_text, hint, line_only=True)
             if bare:
+                hit, kind = bare, "num"
                 result["unit_inferred"] = True
-                return finish(bare[0], scope_text[bare[1][0]:bare[1][1]],
-                              bare[1], "label")
+        if not hit:
+            na_hit = _na_for_field(scope_text, field)
+            if na_hit:
+                result["na_hit"] = True
+                out = finish(None, na_hit[0], na_hit[1], "na")
+                for alt in _hinted_all(quantity_find, scope_text, hint, *qargs):
+                    if len(alt) == 4:
+                        value, unit, sp, line_hit = alt
+                        candidate(value, scope_text[sp[0]:sp[1]], sp,
+                                  "quantity", "rejected_by_na", line_hit)
+                for alt in _hinted_all(num_find, scope_text, hint):
+                    if len(alt) == 3:
+                        value, sp, line_hit = alt
+                        candidate(value, scope_text[sp[0]:sp[1]], sp,
+                                  "num", "rejected_by_na", line_hit)
+                return out
+            hit = _hinted(quantity_find, scope_text, hint, *qargs)
+            kind, same = "quantity", False
+            if not hit:
+                bare = _hinted(num_find, scope_text, hint)
+                if bare:
+                    hit, kind, same = bare, "num", False
+                    result["unit_inferred"] = True
+        if hit:
+            span = hit[2] if kind == "quantity" else hit[1]
+            result["cross_line"] = (not same) and bool(hint)
+            out = finish(hit[0], scope_text[span[0]:span[1]], span,
+                         "pattern" if kind == "quantity" else "label",
+                         same_line=same if hint else None)
+            for alt in _hinted_all(quantity_find, scope_text, hint, *qargs):
+                if len(alt) == 4:
+                    value, unit, sp, line_hit = alt
+                    candidate(value, scope_text[sp[0]:sp[1]], sp, "quantity",
+                              "alternative", line_hit)
+            for alt in _hinted_all(num_find, scope_text, hint):
+                if len(alt) == 3:
+                    value, sp, line_hit = alt
+                    candidate(value, scope_text[sp[0]:sp[1]], sp, "num",
+                              "alternative", line_hit)
+            return out
         return result
 
     if func == "date":
-        hit = _hinted(date_find, scope_text, _hint_of(field), anchor=True)
+        hint = _hint_of(field)
+        hit = _hinted(date_find, scope_text, hint, anchor=True, line_only=True)
+        same = True
+        if not hit:
+            na_hit = _na_for_field(scope_text, field)
+            if na_hit:
+                result["na_hit"] = True
+                out = finish(None, na_hit[0], na_hit[1], "na")
+                for alt in _hinted_all(date_find, scope_text, hint, anchor=True):
+                    if len(alt) == 3:
+                        value, span, line_hit = alt
+                        candidate(value, scope_text[span[0]:span[1]], span,
+                                  "date", "rejected_by_na", line_hit)
+                return out
+            hit = _hinted(date_find, scope_text, hint, anchor=True)
+            same = False
         if hit:
-            return finish(hit[0], scope_text[hit[1][0]:hit[1][1]], hit[1],
-                          "pattern")
+            result["cross_line"] = (not same) and bool(hint)
+            out = finish(hit[0], scope_text[hit[1][0]:hit[1][1]], hit[1],
+                         "pattern", same_line=same if hint else None)
+            for alt in _hinted_all(date_find, scope_text, hint, anchor=True):
+                if len(alt) == 3:
+                    value, span, line_hit = alt
+                    candidate(value, scope_text[span[0]:span[1]], span,
+                              "date", "alternative", line_hit)
+            return out
         return result
 
     if func == "duration":
-        hit = _hinted(duration_find, scope_text, _hint_of(field),
-                      field.get("unit") or "月")
+        hint = _hint_of(field)
+        unit = field.get("unit") or "月"
+        hit = _hinted(duration_find, scope_text, hint, unit, line_only=True)
+        same = True
+        if not hit:
+            na_hit = _na_for_field(scope_text, field)
+            if na_hit:
+                result["na_hit"] = True
+                out = finish(None, na_hit[0], na_hit[1], "na")
+                for alt in _hinted_all(duration_find, scope_text, hint, unit):
+                    if len(alt) == 3:
+                        value, span, line_hit = alt
+                        candidate(value, scope_text[span[0]:span[1]], span,
+                                  "duration", "rejected_by_na", line_hit)
+                return out
+            hit = _hinted(duration_find, scope_text, hint, unit)
+            same = False
         if hit:
-            return finish(hit[0], scope_text[hit[1][0]:hit[1][1]], hit[1],
-                          "pattern")
+            result["cross_line"] = (not same) and bool(hint)
+            out = finish(hit[0], scope_text[hit[1][0]:hit[1][1]], hit[1],
+                         "pattern", same_line=same if hint else None)
+            for alt in _hinted_all(duration_find, scope_text, hint, unit):
+                if len(alt) == 3:
+                    value, span, line_hit = alt
+                    candidate(value, scope_text[span[0]:span[1]], span,
+                              "duration", "alternative", line_hit)
+            return out
         return result
 
     if func == "count_unique":
@@ -1338,10 +1611,28 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
                     # respondent.
                     continue
                 hits.append((alias, m.span()))
-        found = canon(hits, vocab)
+        # "不满意" contains "满意": the longer span is the reading, the
+        # substring is not a second opinion.  Without this filter every
+        # negated answer looked like an ambiguity between two categories.
+        hits.sort(key=lambda item: (item[1][0], -(item[1][1] - item[1][0])))
+        kept_hits = []
+        for alias, span in hits:
+            if any(start <= span[0] and span[1] <= end
+                   for _alias, (start, end) in kept_hits):
+                continue
+            kept_hits.append((alias, span))
+        found = canon(kept_hits, vocab)
         if found:
             label, raw, span = found[0]
-            return finish(label, raw, span, "vocab")
+            out = finish(label, raw, span, "vocab")
+            for other_label, other_raw, other_span in found[1:]:
+                candidate(other_label, other_raw, other_span, "vocab",
+                          "alternative")
+            return out
+        na_hit = _na_for_field(scope_text, field)
+        if na_hit:
+            result["na_hit"] = True
+            return finish(None, na_hit[0], na_hit[1], "na")
         return result
 
     if func == "items":
@@ -1373,6 +1664,37 @@ def _apply_one(field: dict, text: str, scope_text: str, offset: int,
 
 
 #: Parameters a func cannot run without; used to reject impossible fallbacks.
+def _finalize(result: dict) -> dict:
+    """Derive review flags from the candidate set.  Never changes the value."""
+    values = []
+    for item in result.get("candidates") or []:
+        value = item.get("value")
+        if value is None:
+            continue
+        key = _value_key(value)
+        if key not in values:
+            values.append(key)
+    flags = result.setdefault("flags", [])
+    if result.get("cross_line") and (result.get("scope") or "full") == "header":
+        flags.append("cross_line_header")
+    if result.get("na_hit") and values:
+        flags.append("na_conflict")
+    if len(values) > 1:
+        flags.append("multiple_values")
+    if result.get("value") is None and values:
+        flags.append("value_withheld")
+    result["needs_review"] = bool(flags)
+    return result
+
+
+def _apply_one(field: dict, text: str, scope_text: str, offset: int,
+               base_dir: str):
+    """Run one field and attach the review flags derived from its candidates."""
+    result = _apply_one_raw(field, text, scope_text, offset, base_dir)
+    result["scope"] = field.get("scope", "full")
+    return _finalize(result)
+
+
 _REQUIRED_ARGS = {
     "kv_block": ("labels",),
     "pattern": ("pattern",),

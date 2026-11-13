@@ -1,14 +1,23 @@
 ---
 name: empirical-research-pipeline
-description: 将任意研究资料（PDF、Word、Excel、CSV、文本、网页、访谈稿、图片、数据库导出等）转化为可审计的数据集、统计模型、SPSS 风格图表与论文成稿：先做资料完整性、去重与字段质量审计，再按 codebook 编码或抽取，生成 CSV/SAV、跑描述统计与回归、制作 600 dpi 出版级图表，最后组装 Word/PDF 并做数字一致性质检。只要用户提到资料整理、文本编码、问卷/访谈分析、数据清洗、SPSS/Logistic/OLS、实证论文图表、投稿排版，或要在既有数据上追加新材料，就使用本 skill。
-compatibility: Python 3.9+；PDF 需 PyMuPDF；表格/统计需 pandas、numpy、scipy、statsmodels；图表需 matplotlib；Excel 建议 openpyxl；Word→PDF 需 Windows + Microsoft Word + pywin32；SPSS 语法可由 SPSS 打开运行。
+description: 从混合研究资料中尽可能完整地发现、整合任意数量和形态的数据集，由 Agent 自选数学/统计模型与实现，回原材料补齐模型所需数据，逐格回源复核后产出论文级图集、分析报告和 DOCX。适用于资料整理、编码抽取、问卷/访谈/实证分析、统计建模制图、论文组稿及追加材料；每个值保留来源、位置、变换与版本绑定的复核记录。
 ---
 
 # 实证研究数据流水线
 
 把“一堆杂乱资料”变成“可复核的样本流程 + 可追溯的编码/字段数据 + 可复现的模型 + 可投稿的图表与文稿”。本 skill 不限定学科、语言或文件格式；法律裁判文书只是“文本编码”的一个示例，问卷、访谈、新闻、政策文件、实验记录、开放数据、网页和数据库导出同样适用。
 
+运行环境：Python 3.9+；PDF 需 PyMuPDF；表格/统计需 pandas、numpy、scipy、statsmodels；图表需 matplotlib；Excel 建议 openpyxl；Word→PDF 需 Windows + Microsoft Word + pywin32；SPSS 语法由 SPSS 打开运行。其他模型可由 Agent 选择相应语言与引擎。
+
 本仓库/包内的示例数字、文件名、路径与变量值均为虚构占位，不含任何真实资料、编码数据、SPSS 数据或论文成稿。
+
+## 核心目标与自由度
+
+**尽可能完整地开发现有资料的研究价值，同时让每一个数据值都能重新回到原始资料核对。** 数据集数、数据形态、处理脚本、引擎、模型族、规格数、图数及正文/附录篇幅均不预设。用户后补的数据集形式与资料继续纳入，不替代已经发现的有用数据。
+
+Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出所有有合理数据联系的数学与统计模型；内置的十八个方法编号和自动图包只是可复用工具。每个候选逐一检查变量、有效样本、事件/配对/时点、设计/识别及假设；不足时必须回原材料、表格、脚注和附件继续补取，发现新单位则追加数据集。能取得就补齐并重新复核；确实不能取得才留缺失与完整回查记录，保留不可估计/不适用/失败项目供用户查看。不得靠虚构值、编造时间或对照组让模型成立。
+
+**使用本 skill 时先读 [references/12-exhaustive-research.md](references/12-exhaustive-research.md)**：开放数据集注册表、全资料覆盖、逐格证据、整合后的第二遍复读、缺数回查、任意引擎回执和交付闸门的具体契约都在这里。统计与图表的数字一致，不等于原始数据正确；两层都必须通过。
 
 ## 何时使用
 
@@ -34,14 +43,55 @@ compatibility: Python 3.9+；PDF 需 PyMuPDF；表格/统计需 pandas、numpy�
 
 “任何资料”不等于“任何二进制都能直接解析”。本 skill 会先把所有文件纳入审计和样本对账；不能直接读的格式会明确标记并给出转换路径，不会静默漏掉。
 
-## 六条硬规则
+## 硬规则
 
 1. **先审计，再编码/建模。** 没弄清文件数、可读文本数、重复数、字段缺失和排除原因之前，不要开始统计。
 2. **按内容去重，不按文件名。** 同名不同文、同文不同名都很常见；至少用 MD5，再用标题/关键字段/正文抽样复核。
-3. **一行 = 一个分析单位。** 文书、受访者、案件、机构、地区-年份或问卷答卷，必须在项目开始时写死；多单位混合时在局限中说明。
+3. **每个数据集各有明确单位和主键。** 文书、个人、事件、个人-时期、题项、节点/边或其他形态按资料决定；新增形态就新增数据集和关联规则，禁止把不同单位混成无法对账的一张表。
 4. **每个编码/抽取值要有证据。** 原文没有记载就记 `NA/未记载`，不要默认记 0；否定表述、他人建议、转述不能当作最终事实。
 5. **描述样本 N ≠ 模型样本 N。** 每个模型单独报告 N 和筛选条件；正文、表、图、摘要必须用同一套口径。
 6. **关联 ≠ 因果。** 写“关联/对应/更可能”，不写“导致/使得/证明有效”。
+7. **整合后全格回源再核对一遍。** 主键、空值、标记、编码和派生值全部覆盖；每格有来源哈希/位置/原值，派生值有可复算输入。prepare 之后逐格重新读原材料与上下文，完成版本绑定复核再跑 final；禁止抽查十行代替全检、只检查 flags、自动批量盖 verified 或沿用旧复核。只有 `verify_dataset.py --stage final` 和资料/模型覆盖闸门通过的版本才可用于正式结果。脚本不可能证明所有语义正确，必须如实完成复读。
+
+## 判断权：谁决定，谁举证
+
+这个 skill 不把研究判断写成 if/else。代码负责**可验证的事实**，模型负责**语义与取舍**，作者负责**不可逆的决定**。
+
+| 事项 | 谁决定 | 必须留下的证据 |
+|---|---|---|
+| 文件取舍、去重、异常件 | LLM | `decisions.jsonl` + 文件清单 |
+| 变量定义、编码规则 | LLM | codebook + 正例/反例 + 双编码 |
+| 缺失值处理 | LLM | 每字段策略 + `missing_by_source.csv` |
+| 方法选择、参照组、稳健性 | LLM | `assumption_report` + 替代方案 |
+| 图表取舍与叙事 | LLM | 图号 → 研究问题映射 |
+| 数字、单位、格式、dpi、N | 脚本 | 可机器复算 |
+| 删除、覆盖、外发、定稿 | 作者 | 明确同意 |
+
+**代码越权的三种表现**（本项目已修）：用正则猜语义、用阈值替研究者拒绝方法、用 `skip` 代替诊断。遇到这类情况，脚本应输出 `candidates` / `diagnostics`，把判断交回模型，而不是替它下结论。
+
+### 模型工作准则
+
+1. **先读后写**：初读代表资料探索形态、字段位置、歧义与缺失写法，写 `corpus_memo.md`/`discovery_report.md`；试读数量不限制最终覆盖，最终逐份完成发现与处置。
+2. **先定义后测量**：codebook 每个变量都要有 operational definition、正例、反例、缺失规则；先在小样本试编码，再全量。
+3. **先诊断后建模**：每个模型前看 `assumption_report` / `missing_by_source.csv`；写清“如果假设不成立，结论会怎么变”。
+4. **先自审后交付**：跑 `review_pack.py`，回答“审稿人最可能先问的五个问题”；答不上就补分析或降结论。
+5. **不确定性显式化**：`confidence`、`ambiguity`、`needs_human` 写进 `decisions.jsonl`，不要只留在聊天里。
+6. **广泛候选、逐项补数**：每个数据集都进入开放模型清单；不能因包里没有某模型就停止。未满足的数据条件触发原材料回查和重整合，记录实际搜索与结果；探索结果、失败、不显著和不适用项目均保留。广泛尝试时报告多重比较与预测泄漏控制。
+
+### 判断台账 `decisions.jsonl`
+
+一行一个判断。字段：`id, stage, target, decision, value, reason, evidence, quote, confidence, alternatives, needs_human, supersedes`。
+
+- `target`：`<rel_path>#<field>`（抽取）、`model:<id>`（模型）、`table:<n>`（表）、`figure:<n>`（图）。
+- `evidence`：`<path>@<start>-<end>`、`<path>` 或 `<path>::<locator>`；`quote` 必须与 span 对得上。
+- `decision`：`value` / `na` / `exclude` / `keep` / `method` / `skip` / `accept` / `reject` / `note`。
+- 同一 target 只能有一条；改判用 `supersedes`，不要追加第二条。
+- `needs_human=true` 会在交付闸门报错，直到作者拍板或显式 `--allow-unresolved`（只用于草稿）。
+
+```bash
+python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目录" \
+  --review output/coding/extraction_review.csv --out output/qa/decision_issues.csv
+```
 
 ## 流程总览
 
@@ -52,6 +102,8 @@ compatibility: Python 3.9+；PDF 需 PyMuPDF；表格/统计需 pandas、numpy�
 ```
 
 每个阶段都有“闸门”。闸门不过，不进入下一阶段。
+
+这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段，补数后全格重核；用户补充资料/数据形态时重算受影响的模型、图表、报告和 DOCX。内置脚本可被等价、自选实现替换，但来源、复核、样本与运行回执契约不能省略。
 
 ---
 
@@ -117,7 +169,7 @@ python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --
 - 隐藏文件/目录记为 `hidden`；扩展名不在支持列表的记为 `unsupported`；`_duplicates` 等跳过目录记为 `quarantined`。三者都不进样本，但必须出现在总数和报告里。
 - 0 字节、打不开、加密、文本不足：分别记录为 `zero_byte` / `corrupt` / `encrypted` / `textless`；图片型 PDF 记为 `image_only`。
 - 顶层/年份分布只统计唯一样本（`valid` 且非副本）；不要把元数据、损坏文件或重复副本算进样本结构。
-- 重复副本：按 MD5 分组；保留“文件名含标识/年份、路径更短、文本完整”的那一份，其余移动到 `_duplicates/`，不要直接删除。
+- 重复副本：按 MD5/正文分组并复核保留件，分析按去重计划排除副本；冻结的原始目录保留全部文件。需要隔离时只在工作副本移动到 `_duplicates/`，不搬动或删除原件。
 - 文件名截断、尾随点、超长路径：Windows 下常见；用 Python 读取并在报告中记录，不要靠资源管理器手工数。
 - 同名不同文、正文相同但元数据/导出设置不同（MD5 不同）：必须按标题/关键字段/正文抽样人工复核，不能只靠 MD5 自动去重。需要自动查这一层时加 `--content-dedupe`：它把 valid 文件抽出的正文归一化后取 sha1，另写 `dup_content_group` / `dup_role_content`。默认关闭是因为要真正打开每个文件（大语料上很慢），而字节级分组已经够用；报告里会同时给出字节组与内容组的数字和口径关系。
 - 单个文件打不开时不会中断整次扫描：该文件记 `status="unreadable"` 并在 `error` 列写异常，末行打印 `unreadable: N`；需要严判时加 `--fail-on-issues` 返回 2。
@@ -128,8 +180,8 @@ python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --
 ```bash
 # 先生成计划并查看（不移动任何文件）
 python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit"
-# 确认后执行
-python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "资料目录" --out-dir "output/audit" --apply
+# 需要隔离时仅对工作副本执行；原始目录保持不动
+python scripts/dedupe_corpus.py --audit "output/audit/corpus_files.csv" --root "工作副本目录" --out-dir "output/audit" --apply
 # 反悔：把 move 的移回、把 copy 的删掉（仅当副本 MD5 仍与原件一致）
 # 注意 --undo 后面必须跟 move_log.csv 的路径（--apply 才会生成它），不能只写 --undo
 python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
@@ -196,13 +248,18 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
     --extract profiles/legal-judgment.json
 ```
 
-产出三件套（与 `coding_sheet.*` 并列，不替代）：
+产出六件套（三件数据 + 三件复审；与 `coding_sheet.*` 并列，不替代）：
 
 | 文件 | 内容 |
 |---|---|
 | `dataset.csv` | 一行一个观测；列由 profile 决定，每个字段后面跟一列 `<字段>_src` |
 | `evidence.jsonl` | 每行一份材料的字段取值 + 证据 `<字段>=<片段>@<start>-<end>` + `na`/`negated`/`fallback_used` |
-| `run.json` | profile 名与 `profile_sha256`、每字段 `hit`/`na`、`documents`/`errors` |
+| `run.json` | profile 名与 `profile_sha256`、每字段 `hit`/`na`、`documents`/`errors`、`final_hits`、`review` |
+| `extraction_review.csv` | 一行一个文档×字段：当前值、候选值、`flags`、`needs_review` |
+| `extraction_candidates.jsonl` | 每个候选的 `value/raw/span/source/note`，被否决的读数留在这里 |
+| `decisions_todo.csv` | 只列需复审字段，`target` 已拼成 `<rel_path>#<field>`，供模型写 decisions |
+
+后三件是复审层：`--require-review` 用它们卡住交付，`--decisions` 用它们闭环。
 
 要点（完整规范见 `references/09-field-extraction.md`，实现与本文件冲突时以它为准）：
 
@@ -225,7 +282,20 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 - 开放式题项可先主题编码，再转成计数/类别变量；不要直接把词频当主题。
 - 表格数据的主键、单位、时间字段必须能回溯到原始文件。
 
-**闸门**：随机抽 10 条，能从 `编码值 → 证据句/原始字段 → 原文/原始行` 完整回溯；否则回到编码表修规则。若用了 `--extract`，追加一条：`dataset.csv` 里任取 10 行，其 `evidence.jsonl` 的每条偏移都能在原文里逐字命中，且 `source=none` 的行确实是因为原文没写（而不是抽取器没找到）。
+**抽取结果先复审，再落库。** 加 `--require-review` 时，任何被标记的字段都会让退出码为 2；`extraction_review.csv` 给出当前值、候选值、flag（`cross_line_header` / `na_conflict` / `multiple_values` / `value_withheld`），`extraction_candidates.jsonl` 保留每个候选的 span：
+
+```bash
+python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
+  --extract profiles/eldercare-interview.json --require-review
+python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目录" \
+  --review output/coding/extraction_review.csv --out output/qa/decision_issues.csv
+python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
+  --extract profiles/eldercare-interview.json --decisions decisions.jsonl --require-review
+```
+
+模型读 `extraction_review.csv` 与原文，逐条写 `decisions.jsonl`；`value` 必须是 `alternatives` 或当前值里出现过的候选，否则 `check_decisions.py` 直接拒绝——这是“不许凭空取值”的机器闸门。`na` 判断不需要候选，但必须给出原文 span。
+
+**闸门**：全部编码/抽取值能从 `值 → 证据句/原始字段 → 原文/原始行` 完整回溯，整合后逐格重新核对；每个 `needs_review=true` 字段的歧义都有记录且已解决。现有 `evidence.jsonl` 与 `decisions.jsonl` 是输入证据，不自动等于全格复核；按 references/12 导出 provenance，运行 prepare、实际逐格复读、再运行 final。
 
 详见 `references/02-coding-protocol.md`。
 
@@ -233,11 +303,13 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 ## 阶段 3：数据集
 
-推荐三件套：
+数据集由资料决定，可为任意数量和形态，逐一写入 `research_registry.json`。以下是单个文本编码数据集的常见产物示例，不是固定三件套或唯一宽表：
 
 - `data/coded.jsonl`：逐份资料编码明细 + 证据片段，便于回溯。
 - `data/analysis.csv`：分析用宽表，一行一个分析单位。
-- `data/analysis.sav`：SPSS 直接打开，带变量标签/值标签。
+- `data/analysis.sav`：需要 SPSS 时执行生成的 `.sps` 得到，带变量标签/值标签；不需要 SPSS 时不强制。
+
+每个数据集另有独立 codebook、逐格 provenance 和整合完成后的全格复核记录；长表/面板用复合键，网络/矩阵等保留原生文件并提供无损审计视图。具体契约见 references/12。
 
 主键与标记列（`references/10-contracts.md` §1、§5）：
 
@@ -255,13 +327,13 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 用 `scripts/csv_to_spss_syntax.py` 生成 `.sps`，避免手写 `GET DATA` 时列类型错位。CSV 里若是“是/否、有/无、支持/不支持”等二值文本，脚本会自动追加 `RECODE ... ('是'=1) ('否'=0) INTO *_num`，Logistic 直接用数值列；不需要时加 `--no-recode`。
 
-**闸门**：CSV 行数、JSONL 行数、SAV 行数、`sample_flow.md` 的唯一样本数四者能对上；每个模型 N 能从筛选条件重算。
+**闸门**：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释。先运行 `verify_dataset.py --stage prepare`，逐格复读后再跑 final；数据不变而复核完整通过才可建模。每个模型 N 从实际样本键与筛选条件重算。
 
 ---
 
 ## 阶段 4：统计分析与扩展
 
-先写分析计划，再看结果。默认做“主分析 + 描述 + 双变量 + 多变量 + 诊断 + 异质性 + 稳健性”的组合，而不是只跑一个主模型。
+先按资料与问题写开放 `model_plan.jsonl`，再看结果；清单可随新数据和问题扩充并记版本。逐项考虑主分析、描述、关联、多变量、诊断、异质性、稳健性、预测及其他有依据的数学模型，适用与否逐项说明，不能按显著性只留一小部分。
 
 先用自动筛查脚本把描述统计、组间检验、相关和单变量模型跑一遍：
 
@@ -271,12 +343,12 @@ python scripts/auto_stats.py --data data/analysis.csv --config assets/chart_conf
 
 它输出 `descriptives.csv`、`group_tests.csv`、`binary_rates.csv`、`correlations.csv`、`univariate_models.csv`、`univariate_skipped.csv` 和 `analysis_pack.md`，用于发现值得进一步建模的变量；**不要用自动筛查的 p 值筛变量**。
 
-多变量主模型有两条路，选一条并全程一致：
+按模型需要选择实现，可以混用内置工具、自写脚本和专用引擎；统一的是输入版本、变量定义和结果契约：
 
 ```bash
 # A. 用 spec 显式声明后由本脚本估计（写清参照组、聚类、稳健标准误）
 python scripts/auto_stats.py --data data/analysis.csv --spec model_spec.json \
-  --out output/models --separation drop --vif --roc
+  --out output/models --separation error --vif --roc
 ```
 
 `model_spec.json` 形如：
@@ -301,7 +373,7 @@ B. 或在 SPSS/R/Stata 中按同一份预设规格估计，把系数导出成同
 - 完全分离、估计不稳定的单变量模型会写入 `univariate_skipped.csv`，不会给出虚假的巨大 OR。
 - 结果列全缺失、过滤后 0 行、`filter_query` 拼错时直接报错退出。
 
-最少包含：
+按数据可支持性逐项评估，支持的尽量做全，不支持的回查并留原因：
 
 - 描述统计：每个分组的 N、占比/均值、结果率、95% Wilson CI。
 - 主模型：二元 Logistic / OLS / 多项 Logit，写清因变量、参照组、核心自变量、控制变量。
@@ -355,7 +427,7 @@ SPSS 语法模板与解释规范见 `references/03-analysis-spss.md`；扩展分
 
 ## 阶段 5：出版级图表（默认做全景，不是只画 8 张）
 
-先跑 `scripts/auto_chart_pack.py` 生成全景图表包，再从中挑正文主图、附录图和需要补画的模型图：
+可用 `scripts/auto_chart_pack.py` 生成初始图表包，再按全部数据集与模型清单补齐、自写需要的图，选择正文与附录：
 
 ```bash
 python scripts/auto_chart_pack.py \
@@ -366,8 +438,8 @@ python scripts/auto_chart_pack.py \
 
 连续/多分类结果不需要改脚本：结果变量会自动切换为“结果分布 + 分组均值/构成”图；文本结果同样可用 `outcome_map` 指定编码。`--coef` 支持 `metric`（OR/HR/RR/beta）与 `n` 列，森林图会按模型样本量写 N；`--pred` 支持 0/1 或“是/否”标签，常数预测/单一类别会跳过 ROC/PR/校准并写明原因。`term_labels` 可把 `lv3` 这类模型项名映射为中文。双比例哑铃图需在 config 里用 `dumbbell` 指定两个 0/1 列。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可加 `--survival-group`）生成 Kaplan–Meier 曲线。
 
-- 默认覆盖 7 组；实测张数随列角色与跳过项浮动（本仓库回归：小样本语料 15–21 张，2878 行真实语料 44 张并跳过 3 张）。`--max-charts` 默认上限 60，0 = 不限；实际数量以 `chart_manifest.csv` 为准。
-- 产出上限默认 `--max-charts 60`（试跑时调小，`0` 或负数 = 不限制）；只想跑某几张/某几段用 `--only`（图号、slug 或片段，可重复）与 `--sections A,B`（字母或中文段名，可重复）。`--list-charts` 先列清单再决定。
+- 自动图包覆盖 7 组，默认 `--max-charts 0` 不封顶；图数随数据、问题和模型而变，实际数量以 `chart_manifest.csv` 为准。自动图包不代表已覆盖全部模型。
+- 正数 `--max-charts`、`--only`、`--sections` 只用于显式选择的分批/试跑。分批结果最终合并并对照清单补全。宽表热图、类别 top-N、矩阵和树图仍有展示策略，必须另保留全量统计/明细并按需分页，不能让展示抽样变成分析遗漏。
 
 - **A 数据质量**：缺失率、样本类别/年份/地区、二元变量发生率。
 - **B 单变量**：结果分布（二分类/连续/多分类分别处理，连续结果加 Q-Q）、处理构成（条形+环形）、数值分布、类别构成。
@@ -380,7 +452,7 @@ python scripts/auto_chart_pack.py \
 出图策略：
 
 - **每个主发现至少 2 张图**：主结果图 + 稳健性/诊断/异质性图。
-- **正文 7–10 张，附录 20–50 张**；自动包默认上限 60 张（`--max-charts 0` 解除），正文要多少张由你挑，不由上限决定。
+- **正文、附录和全图集数量按发现决定**，不预设张数；所有有意义结果与诊断都有可查看位置，复杂内容分面/分页，保持实际安置字号可读。
 - 每张图先写“回答什么问题”；没有问题就不画。
 - 用 `references/07-chart-atlas.md` 选型，覆盖 SPSS 常用高级图形：簇状/堆叠/100% 堆叠条形、线/面积、直方图、箱线/提琴、误差条、散点/气泡、散点矩阵、Pareto、ROC、校准、Kaplan-Meier（有生存数据时）、碎石图、因子载荷、聚类树状图、对应分析、MDS、控制图等。
 - 每张图写入 `chart_manifest.csv`：图号、问题、类型、变量、N、图注、文件路径。
@@ -463,6 +535,8 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 
 ## 阶段 7：终检
 
+先按 references/12 完成全格数据 final 复核和 `research_gate.py` 的资料/模型覆盖检查；正文与图表核查不能替代回源核查。交付包含全部数据集、codebook、证据与复核、模型/回查清单、代码环境/运行回执、完整图集、分析报告与最终 DOCX，不以图数或模型数够了作为结束条件。
+
 运行：
 
 ```bash
@@ -480,6 +554,19 @@ python scripts/verify_numbers.py --out output/verify \
 ```
 
 它查六件事：表内合计、表与图注同值、正文里每个 `N=/OR=/p</β=` 能否在表里找到、图号连续且被正文引用、样本 N 跨表一致、漏斗单调不增。产物是 `number_issues.csv`（`severity,check,where,expected,actual,detail`）与 `number_trace.csv`（每个数字追到哪张表哪一格）。有 error 就 exit 2。叙述性数字用 `--numbers numbers.csv`（`value` 列，承接正文里确实没有对应表格的数，如扫描文件总数）或 `--ignore REGEX` 显式豁免，被豁免的数字会在 `number_issues.csv` 里以 `severity=info` 留痕，不会静默消失。
+
+交付前先生成审稿包，让模型自审一遍：
+
+```bash
+python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/stats \
+  --figures output/chart_pack/chart_manifest.csv --verify output/verify/number_issues.csv \
+  --qa output/qa/qa_report.json --decisions decisions.jsonl \
+  --research-gate output/research_gate.json \
+  --sample-flow output/coding/sample_flow.csv \
+  --missing output/coding/missing_by_source.csv --out output/review/review_pack.md
+```
+
+`review_pack.md` 只汇总已有产物：样本与缺失、模型 N、图表状态、数字溯源 error、未决 decisions，再给出“审稿人最可能先问的五个问题”。它不替你回答，只确保你不会在没看见这些问题时交付。
 
 再按 `references/06-qa-checklist.md` 人工过一遍。重点不是格式，而是：
 
@@ -512,10 +599,15 @@ python scripts/verify_numbers.py --out output/verify \
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
 | `scripts/methods_lib.py` | 十六种方法的统计内核（描述/正态性/卡方/t/ANOVA/事后/相关/OLS/Logit/PCA/EFA/信度/效度/聚类/判别/时序/中介/Kano/非参数）；SEM 显式拒绝 |
 | `scripts/methods_pack.py` | 按 `methods.json` 跑 1–16 号方法（另加非参数与二元 Logit）：前置条件不满足即 `skipped` 并给替代，产出 `methods_report.md`/`methods_manifest.csv`/每法一图 |
-| `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest（实测 15–44 张，上限 60） |
+| `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest；默认不设总图数上限 |
 | `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型；`compose_figure()` 组装多面板并回读 PNG 校验 dpi |
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
 | `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |
+| `scripts/check_decisions.py` | 校验 `decisions.jsonl`：schema、证据 span/引文、候选值是否真的出现过、重复 target、`needs_human` 未决；有 error 退出 2 |
+| `scripts/review_pack.py` | 交付前审稿包：样本/缺失、模型 N、图表状态、数字溯源、未决 decisions、五个审稿人问题；Markdown + JSON 双出 |
+| `scripts/verify_dataset.py` | 对任意数量 CSV 审计视图逐格回读原始来源/哈希/位置、复算派生值；prepare 生成待复核任务，final 要求整合后的逐格复读且版本一致；支持显式自定义适配器 |
+| `scripts/run_model.py` | 执行 Agent 自选的任意分析命令，记录实际输入、代码、输出的 SHA256、退出码与日志；不限制引擎或模型族 |
+| `scripts/research_gate.py` | 检查原始文件全覆盖、数据复核版本、开放模型清单、缺数回查、样本键与实际运行回执 |
 
 ## 参考文档
 
@@ -532,6 +624,7 @@ python scripts/verify_numbers.py --out output/verify \
 | `references/09-field-extraction.md` | 要把材料取成一行一个观测的结构化数据（写 profile、查证据、判 NA）时 |
 | `references/10-contracts.md` | 查脚本之间的键列/漏斗/N/缺失值/退出码约定时 |
 | `references/11-methods-catalog.md` | 选方法、查变量要求与前置判据、写结果句式、避开常见误用时 |
+| `references/12-exhaustive-research.md` | 使用本 skill 时先读：全资料发现、开放数据集/模型、全格回源复核、补数闭环与交付契约 |
 
 ## 模板
 
@@ -543,6 +636,7 @@ python scripts/verify_numbers.py --out output/verify \
 - `assets/coding-keywords.json`：可替换的关键词词典（通用占位示例）。
 - `assets/chart_config.example.json`：列角色、标签、分析样本筛选（`filter_query`）示例。
 - `assets/analysis-manifest-template.md`：主分析/扩展分析/跳过项清单。
+- `assets/research_registry.example.json`：开放数据集、原始材料覆盖与模型清单的项目注册表示例。
 
 ## 最常见的翻车点
 

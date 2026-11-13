@@ -40,7 +40,7 @@ if HERE not in sys.path:
 # Reuse the authoritative parsers instead of growing a second, drifting copy.
 from qa_outputs import N_RE, parse_n, read_rows
 
-SCRIPT_VERSION = "1.0.0"
+SCRIPT_VERSION = "1.0.1"
 
 TOTAL_LABELS = ("合计", "总计", "小计", "总和", "total", "sum")
 # A column literally named "n"/"N" is a sample size, not a category count:
@@ -1098,18 +1098,23 @@ def check_model_n(tables, report: Report):
         is_model = bool(MODEL_FILE_RE.match(table.name))
         if not is_model:
             continue
-        # Prefer the estimated N: fit.csv carries both the rows that entered the
-        # model and the rows left after dropping missing values, and comparing a
-        # coefficient table (post-drop) against the pre-drop count reports a
-        # mismatch that the data does not have.
-        n_col = lowered.get("n_dropna") or lowered.get("n")
+        # auto_stats writes the ACTUAL estimation sample in n. n_dropna is the
+        # number of rows EXCLUDED for missing data (possibly zero), not the
+        # retained sample size. Never use it as N or subtract it from n again.
+        n_col = lowered.get("n")
         if n_col is None:
+            if "n_dropna" in lowered:
+                report.warning("V-05", table.name, "实际估计样本量 n", "只有剔除数 n_dropna",
+                               "无法核对模型 N；n_dropna 是因缺失剔除的行数，不能代替 n")
             continue
         scope_col = next((lowered[key] for key in SCOPE_HEADERS if key in lowered), None)
         sample_col = next((lowered[key] for key in SAMPLE_HEADERS if key in lowered), None)
         for index, row in enumerate(table.rows, start=2):
             n, _ = parse_n(row.get(n_col))
             if n is None:
+                if "n_dropna" in lowered:
+                    report.warning("V-05", f"{table.name}:{index}", "可解析的实际估计样本量 n", row.get(n_col),
+                                   "无法核对模型 N；不能回退使用剔除数 n_dropna")
                 continue
             declared_scope = normalize_scope(row.get(scope_col)) if scope_col else ""
             scope = declared_scope or "sample"

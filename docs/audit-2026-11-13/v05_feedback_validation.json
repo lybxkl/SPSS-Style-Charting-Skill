@@ -1,0 +1,44 @@
+{
+  "purpose": "V-05 external feedback follow-up; synthetic test data only",
+  "validated_at_utc": "2026-11-13T10:10:54.913977+00:00",
+  "verify_numbers_version": "1.0.1",
+  "before": {
+    "actual_model_n": 5,
+    "n_dropna_excluded_rows": 0,
+    "exit_code": 2,
+    "false_V05": "5 vs 0"
+  },
+  "after": {
+    "actual_model_n": 5,
+    "n_dropna_excluded_rows": 0,
+    "exit_code": 0,
+    "issues": []
+  },
+  "tests": {
+    "command": "python -m unittest discover -s tests -p 'test_verify_numbers.py' -v",
+    "count": 63,
+    "seconds": 40.13,
+    "status": "passed",
+    "log": "v05_feedback_unittest.log",
+    "log_sha256": "ac688130da9e20b2454eea53f479c70665912c9d8f25cc275149f8feba35c389"
+  },
+  "other_checks": [
+    "compileall passed",
+    "skill quick_validate passed",
+    "build_skill --check passed",
+    "standard archive SHA256 passed"
+  ],
+  "coverage_limit": "Targeted V-05 suite only; prior full-suite validation is a historical snapshot, not a fresh all-suite result for this patch.",
+  "source_sha256": {
+    "empirical-research-pipeline/scripts/verify_numbers.py": "2167a25cfb01fa991034d065de1a856815232b525f90bca22034592df91e89f4",
+    "empirical-research-pipeline/scripts/auto_stats.py": "aa089524bc92c4a260ebdd370ace04598b32747b02a8e4c6b50c8b846ebdc139",
+    "tests/test_verify_numbers.py": "70ee43acd7df24f5a161cda9c6fc0804bba761ae05387c8223769d46aff1498e",
+    "empirical-research-pipeline/references/10-contracts.md": "526daef09242a2f707b86d815b91215590e3e4e87e028b62f4ed63394308012c",
+    "empirical-research-pipeline/SKILL.md": "5daa919b0e340a3c5b70ca4cdb979c0a4f706f1a586e379f80d3f91cb329879c",
+    "README.md": "03006e09325731807950fd015e35d516b73a6eeceaf564c8a2edc97f29324691",
+    "CHANGELOG.md": "7684fd1c1b3fc27da7b6c2ca7c57dc4b75ee50338a4a918d2aebcef68bb43640",
+    "docs/AUDIT-2026-11-13.md": "cd55aa16f13fd3b0d61cf9a65e5e40e122e58e1fe85d37abb3c20e9b1e4ba1cd"
+  },
+  "package_sha256": "272c8951dbdb412d33a3a24d6c160cc81d9e1579ad08aca5ed80447a65244c86",
+  "plugin_changes": "External plugin source is not in this repository; integration wording supplied in contracts section 13."
+}

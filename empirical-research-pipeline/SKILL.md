@@ -553,7 +553,7 @@ python scripts/verify_numbers.py --out output/verify \
   --docx manuscript.docx --sample-flow output/coding/sample_flow.csv
 ```
 
-它查六件事：表内合计、表与图注同值、正文里每个 `N=/OR=/p</β=` 能否在表里找到、图号连续且被正文引用、样本 N 跨表一致、漏斗单调不增。产物是 `number_issues.csv`（`severity,check,where,expected,actual,detail`）与 `number_trace.csv`（每个数字追到哪张表哪一格）。有 error 就 exit 2。叙述性数字用 `--numbers numbers.csv`（`value` 列，承接正文里确实没有对应表格的数，如扫描文件总数）或 `--ignore REGEX` 显式豁免，被豁免的数字会在 `number_issues.csv` 里以 `severity=info` 留痕，不会静默消失。
+它查六件事：表内合计、表与图注同值、正文里每个 `N=/OR=/p</β=` 能否在表里找到、图号连续且被正文引用、样本 N 跨表一致、漏斗单调不增。V-05 使用模型表的 `n`；`n_dropna` 是因缺失剔除的行数，不能替代 N。差异或缺少可用 N 时回查实际样本与处理记录，不能直接判定数据错误；插件文案与状态契约见 [references/10-contracts.md §13](references/10-contracts.md#13-模型样本量与-v-05插件接入语义)。产物是 `number_issues.csv`（`severity,check,where,expected,actual,detail`）与 `number_trace.csv`（每个数字追到哪张表哪一格）。有 error 就 exit 2。叙述性数字用 `--numbers numbers.csv`（`value` 列，承接正文里确实没有对应表格的数，如扫描文件总数）或 `--ignore REGEX` 显式豁免，被豁免的数字会在 `number_issues.csv` 里以 `severity=info` 留痕，不会静默消失。
 
 交付前先生成审稿包，让模型自审一遍：
 

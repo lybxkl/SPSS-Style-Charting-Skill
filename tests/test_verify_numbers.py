@@ -276,6 +276,61 @@ class TestFigureNumbering(VerifyCase):
 class TestModelN(VerifyCase):
     """V-05 样本 N 跨表一致."""
 
+    def test_fitted_n_is_used_instead_of_missing_row_exclusion_count(self):
+        write_csv(os.path.join(self.tables, "coef_M1.csv"),
+                  ["model", "term", "n", "sample"], [["M1", "x", 5, "full"]])
+        for dropped in (0, 2, ""):
+            with self.subTest(n_dropna=dropped):
+                write_csv(os.path.join(self.tables, "fit.csv"),
+                          ["model", "n", "n_dropna", "subset"], [["M1", 5, dropped, "full"]])
+                proc = self.verify("--tables", self.tables, "--check", "cross", "--fail-on-warn")
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertFalse([r for r in self.issues() if r["check"] == "V-05"])
+
+    def test_real_estimation_n_mismatch_is_still_an_error(self):
+        write_csv(os.path.join(self.tables, "coef_M1.csv"),
+                  ["model", "term", "n"], [["M1", "x", 5]])
+        write_csv(os.path.join(self.tables, "fit.csv"),
+                  ["model", "n", "n_dropna"], [["M1", 4, 0]])
+        proc = self.verify("--tables", self.tables, "--check", "cross")
+        self.assertEqual(proc.returncode, 2)
+        issue = next(r for r in self.issues() if r["check"] == "V-05")
+        self.assertEqual(issue["actual"], "4")
+
+    def test_missing_estimation_n_cannot_fall_back_to_exclusion_count(self):
+        write_csv(os.path.join(self.tables, "coef_M1.csv"),
+                  ["model", "term", "n"], [["M1", "x", 5]])
+        for header, row in [(["model", "n_dropna"], ["M1", 0]),
+                            (["model", "n", "n_dropna"], ["M1", "", 0])]:
+            with self.subTest(header=header):
+                write_csv(os.path.join(self.tables, "fit.csv"), header, [row])
+                proc = self.verify("--tables", self.tables, "--check", "cross", "--fail-on-warn")
+                self.assertEqual(proc.returncode, 2)
+                issues = [r for r in self.issues() if r["check"] == "V-05"]
+                self.assertEqual(len(issues), 1)
+                self.assertEqual(issues[0]["severity"], "warning")
+                self.assertIn("无法核对", issues[0]["detail"])
+
+    def test_real_ols_outputs_pass_cross_check_with_and_without_missing_rows(self):
+        spec = self.p("ols_spec.json")
+        with open(spec, "w", encoding="utf-8") as stream:
+            json.dump({"models": [{"id": "M1", "type": "ols", "outcome": "y",
+                                   "predictors": ["x"], "dropna": True}]}, stream)
+        complete = [[0, 1], [1, 2], [2, 1], [3, 4], [4, 3]]
+        for missing in ([], [[5, ""], ["", 6]]):
+            with self.subTest(excluded=len(missing)):
+                data = self.p("ols_data.csv")
+                write_csv(data, ["x", "y"], complete + missing)
+                model = run("auto_stats.py", "--data", data, "--spec", spec,
+                            "--out", self.tables, "--only", "models")
+                self.assertEqual(model.returncode, 0, model.stdout + model.stderr)
+                fit = read_csv(os.path.join(self.tables, "fit.csv"))[0]
+                self.assertEqual(int(fit["n"]), 5)
+                self.assertEqual(int(fit["n_dropna"]), len(missing))
+                proc = self.verify("--tables", self.tables, "--check", "cross", "--fail-on-warn")
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertFalse([r for r in self.issues() if r["check"] == "V-05"])
+
     def test_two_models_with_different_n_is_an_error(self):
         write_csv(os.path.join(self.tables, "coef_a.csv"),
                   ["term", "n", "n_scope"], [["x", "1358", "sample"]])
@@ -450,7 +505,7 @@ class TestContract(VerifyCase):
         with open(os.path.join(self.out, "run.json"), encoding="utf-8") as handle:
             payload = json.load(handle)
         self.assertEqual(payload["script"], "verify_numbers.py")
-        self.assertEqual(payload["version"], "1.0.0")
+        self.assertEqual(payload["version"], "1.0.1")
 
     def test_stdout_summary_reports_both_counts(self):
         write_csv(os.path.join(self.tables, "table1_bad.csv"),

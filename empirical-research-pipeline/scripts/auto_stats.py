@@ -1051,6 +1051,9 @@ def load_sample_flow(path: str) -> dict[str, int]:
 
 
 def _fit_row(info: dict) -> dict:
+    # Contract: n is the actual fitted sample; n_dropna is the count EXCLUDED
+    # for missing values before fitting. Keep the legacy column name for
+    # consumers, but never interpret it as the retained N.
     """One machine-readable fitting record for ``fit.csv``."""
     return {"model": info["mid"], "type": info["mtype"], "n": info["n"],
             "k": info.get("k", np.nan), "n_events": info.get("n_events", np.nan),

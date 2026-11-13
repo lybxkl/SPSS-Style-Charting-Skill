@@ -1,0 +1,142 @@
+{
+  "synthetic": true,
+  "geometry": {
+    "title_legend_gap_pt": 3.0483444407849585,
+    "title_inside_canvas": true,
+    "legend_entries": 9
+  },
+  "checks": {
+    "manifest": {
+      "path": "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\audit-2026-11-14-palette\\synthetic\\chart_manifest.csv",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "F01: grayscale: #0072B2 vs #D55E00 ΔL*=8.22123680341 < 10",
+        "F01: grayscale: #D55E00 vs #009E73 ΔL*=3.54912546215 < 10",
+        "F01: grayscale: #D55E00 vs #CC79A7 ΔL*=6.85758422203 < 10",
+        "F01: grayscale: #D55E00 vs #999999 ΔL*=9.03061514804 < 10",
+        "F01: grayscale: #009E73 vs #CC79A7 ΔL*=3.30845875987 < 10",
+        "F01: grayscale: #009E73 vs #999999 ΔL*=5.48148968588 < 10",
+        "F01: grayscale: #CC79A7 vs #56B4E9 ΔL*=8.77503902485 < 10",
+        "F01: grayscale: #CC79A7 vs #E69F00 ΔL*=9.56091182847 < 10",
+        "F01: grayscale: #CC79A7 vs #999999 ΔL*=2.17303092601 < 10",
+        "F01: grayscale: #56B4E9 vs #E69F00 ΔL*=0.78587280362 < 10",
+        "F01: grayscale: #56B4E9 vs #999999 ΔL*=6.60200809884 < 10",
+        "F01: grayscale: #E69F00 vs #999999 ΔL*=7.38788090246 < 10",
+        "F01: colour blind (deuteranopia): #CC79A7 vs #999999 ΔE=7.05399314353 < 8: the colours may look similar; review lightness, markers, line styles and labels in the rendered figure"
+      ],
+      "charts": 2,
+      "graycheck": true,
+      "colorblind": true,
+      "strict_palette": false,
+      "palettes": [
+        {
+          "id": "F01",
+          "declared": true,
+          "colors": [
+            "#0072B2",
+            "#FFFFFF",
+            "#D55E00",
+            "#009E73",
+            "#CC79A7",
+            "#F0E442",
+            "#56B4E9",
+            "#E69F00",
+            "#111111",
+            "#999999"
+          ],
+          "kind": "categorical",
+          "source": "artists; kind=inferred",
+          "colormaps": "",
+          "pairwise_checked": true,
+          "complete": true,
+          "parsed_count": 10,
+          "unparsed": [],
+          "alpha_unassessed": [],
+          "strict": false,
+          "note": "Discrete palette heuristics only; opacity and rendered encodings need review; an assumed cycle is not evidence of actual colours.",
+          "min_delta_l": 0.785873,
+          "min_delta_e": 7.05
+        },
+        {
+          "id": "F02",
+          "declared": true,
+          "colors": [
+            "#333333"
+          ],
+          "kind": "continuous",
+          "source": "artists; kind=inferred",
+          "colormaps": "viridis",
+          "pairwise_checked": false,
+          "complete": false,
+          "parsed_count": 1,
+          "unparsed": [],
+          "alpha_unassessed": [],
+          "strict": false,
+          "note": "Pairwise categorical distances do not assess this mapping; review its data semantics, scale and rendered accessibility.",
+          "min_delta_l": null,
+          "min_delta_e": null
+        }
+      ],
+      "palette_eligible": 2,
+      "palette_unchecked": 1,
+      "palette_note": "1/2 eligible manifest row(s) have no declared discrete-palette complete diagnostics (single/unrecorded/continuous/custom/invalid/transparent mapping); inspect actual colours, encodings and scales in the rendered figure",
+      "n_na_count": 0,
+      "n_total": 2
+    },
+    "figures": {
+      "dir": "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\audit-2026-11-14-palette\\synthetic\\figures",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "files": [
+        {
+          "file": "fig01_nine_classes.png",
+          "bytes": 86651,
+          "px_width": 3543,
+          "px_height": 2040,
+          "dpi_meta": 600.0,
+          "dpi_at_width": 599.9,
+          "placed_width_cm": 15
+        },
+        {
+          "file": "fig02_continuous.png",
+          "bytes": 248291,
+          "px_width": 3543,
+          "px_height": 2280,
+          "dpi_meta": 600.0,
+          "dpi_at_width": 599.9,
+          "placed_width_cm": 15
+        }
+      ],
+      "count": 2,
+      "min_dpi": 600,
+      "width_cm": 15,
+      "pdfs": [
+        {
+          "file": "fig01_nine_classes.pdf",
+          "pages": 1,
+          "placed_width_cm": 15,
+          "min_fontsize": 7.4,
+          "min_fontsize_effective": 7.4,
+          "low_font_count": 0
+        },
+        {
+          "file": "fig02_continuous.pdf",
+          "pages": 1,
+          "placed_width_cm": 15,
+          "min_fontsize": 8.0,
+          "min_fontsize_effective": 8.0,
+          "low_font_count": 0
+        }
+      ],
+      "min_fontsize": 7.4,
+      "min_fontsize_limit": 7.2,
+      "low_font": [],
+      "low_font_count": 0,
+      "font_verified_image_hashes": []
+    }
+  },
+  "error_count": 0,
+  "warning_count": 13
+}

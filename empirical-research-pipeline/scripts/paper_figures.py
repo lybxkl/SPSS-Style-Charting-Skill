@@ -41,7 +41,7 @@ WIDTH_CM = 15.0
 # Same order as ``auto_chart_pack.MANIFEST_COLUMNS``: qa_outputs.py reads both.
 MANIFEST_COLUMNS = ["id", "question", "chart_type", "variables", "n", "n_scope",
                     "png", "pdf", "caption", "dpi", "px_width", "model_id",
-                    "data_hash", "tiff", "note", "section", "status", "palette"]
+                    "data_hash", "tiff", "note", "section", "status", "palette", "palette_kind", "palette_source", "colormaps"]
 
 #: Digits with thousands separators.  A space belongs to the number only
 #: when another digit follows it, so "N=2,713 份" keeps its space.
@@ -435,7 +435,10 @@ def build_figure(spec: dict, out_dir: str, formats, dpi: int,
         "status": status,
         # What the panels actually painted, so the grayscale gate has something
         # real to check (a declared-but-unused cycle would pass vacuously).
-        "palette": "|".join(result.get("colors") or CATEGORICAL),
+        "palette": "|".join(result.get("colors") or []),
+        "palette_kind": str(spec.get("palette_kind") or result["color_metadata"]["kind"]),
+        "palette_source": "artists; kind=" + ("declared" if spec.get("palette_kind") else "inferred"),
+        "colormaps": "|".join(result["color_metadata"]["colormaps"]),
     }
 
 

@@ -456,7 +456,7 @@ python scripts/auto_chart_pack.py \
 - 每张图先写“回答什么问题”；没有问题就不画。
 - 用 `references/07-chart-atlas.md` 选型，覆盖 SPSS 常用高级图形：簇状/堆叠/100% 堆叠条形、线/面积、直方图、箱线/提琴、误差条、散点/气泡、散点矩阵、Pareto、ROC、校准、Kaplan-Meier（有生存数据时）、碎石图、因子载荷、聚类树状图、对应分析、MDS、控制图等。
 - 每张图写入 `chart_manifest.csv`：图号、问题、类型、变量、N、图注、文件路径。
-- 颜色语义全稿统一：同一阶段/同一类别在每张图里用同一颜色。
+- 配色推荐见 [references/04-figures-publication.md](references/04-figures-publication.md#科研配色推荐可调整不是强制模板)：按数据含义、领域/期刊要求和用户偏好自选；可用单色、分类、顺序、发散、循环或其他合理方案，保持跨图语义清楚。色号、8 色默认值、类别数和内部色差阈值都不是强制；可结合线型/点形/纹理/标签表达。
 - 图注写清 N、数据来源、模型设定、参照组；探索性图（PCA/CA/聚类）在图注标明“探索性”。
 
 用 `scripts/pubfig.py` 统一风格：
@@ -486,7 +486,7 @@ python scripts/paper_figures.py --paper assets/paper_figures.example.json --out 
 - 产出 `FigureN.png|pdf|tiff` + `paper_figures_manifest.csv`（与 `chart_manifest.csv` 同构，`n_scope`/`dpi`/`px_width`/`palette` 齐全），可直接喂 `qa_outputs.py`。
 - 图注里的 `N=` 会被全局替换成该图真实 N（多图共用一段图注模板也不会串号）。
 
-**闸门**：`chart_manifest.csv` 中每张图都有问题、N、图注、文件；正文主图与附录图不重复；PDF 内嵌图按版面尺寸折算的**有效 dpi ≥ 600**（15 cm 宽 = 3543 px；3000 px 只有 508 dpi）；**最小字号 ≥ 7.2 pt（按实际安置宽度折算，不是按原始 15 cm）**；**分类色两两灰度 ΔL\* ≥ 10**（黑白打印还能数得清系列）；图注、图、正文引用三者齐全。`qa_outputs.py --min-dpi 600 --min-fontsize 7.2` 一条命令查前三条。
+**闸门**：`chart_manifest.csv` 中每张图都有问题、N、图注、文件；正文主图与附录图不重复；PDF 内嵌图按版面尺寸折算的**有效 dpi ≥ 600**（15 cm 宽 = 3543 px；3000 px 只有 508 dpi）；**最小字号 ≥ 7.2 pt（按实际安置宽度折算，不是按原始 15 cm）**；配色按用途复核（灰度/色觉/色差为建议性诊断，不能把内部阈值当强制色卡）；图注、图、正文引用三者齐全。`qa_outputs.py --min-dpi 600 --min-fontsize 7.2` 一条命令查前三条。
 
 详见 `references/04-figures-publication.md` 和 `references/07-chart-atlas.md`。
 
@@ -550,7 +550,7 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --min-dpi 600
 ```
 
-退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）查分类色灰度可分性，`--colorblind` 另查红绿/蓝黄色觉模拟。
+退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）给分类色板灰度建议，`--colorblind` 另加protanopia/deuteranopia 色觉模拟提示；这些默认不拦截配色选择，只有显式 `--strict-palette` 才将声明的分类色板低灰度间隔作为错误。
 
 **数字溯源另跑一条** `scripts/verify_numbers.py`：
 
@@ -597,7 +597,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
 | `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段；`--extract profile.json` 走字段抽取层，产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
-| `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` + 17 列 manifest |
+| `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |
 | `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |
 | `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗单调 |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |

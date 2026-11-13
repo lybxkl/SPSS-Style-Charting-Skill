@@ -1,0 +1,168 @@
+{
+  "recorded_at": "2026-11-13T16:57:52.163912+00:00",
+  "scope": "Synthetic software audit only; no empirical source data or new manuscript.",
+  "environment": {
+    "python": "3.12.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "packages": {
+      "numpy": "2.3.5",
+      "pandas": "2.3.3",
+      "matplotlib": "3.11.2",
+      "scipy": "1.18.1",
+      "statsmodels": "0.15.0",
+      "PyMuPDF": "1.26.6",
+      "python-docx": "1.2.0",
+      "Pillow": "13.0.0",
+      "pywin32": "312"
+    }
+  },
+  "test_suites": [
+    {
+      "command": "python -m unittest discover -s tests -p test_*.py -v",
+      "tests": 585,
+      "seconds": 281.922,
+      "result": "OK",
+      "skipped": 0,
+      "log": "full-unittest.log",
+      "log_sha256": "f63e472a51f75b0fdb53a88cee2d2dfc65c5a65b53feb491ec50f52a29fa10d0"
+    },
+    {
+      "command": "python -m unittest discover -s tests -p test_palette_audit.py -v",
+      "tests": 24,
+      "seconds": 7.055,
+      "result": "OK",
+      "skipped": 0,
+      "log": "palette-counterexamples.log",
+      "log_sha256": "9a133192f5daae55f66a1bc653331f02878b26c23b72b47a0f3c02edc027df04"
+    },
+    {
+      "command": "python -m unittest discover -s tests -p test_stats_charts.py -v",
+      "tests": 38,
+      "seconds": 23.19,
+      "result": "OK",
+      "skipped": 0,
+      "log": "stats-font-regression.log",
+      "log_sha256": "202b87cdd72cd9ad76d39b044509e216bcafe0db62741fb867287260167b0926"
+    }
+  ],
+  "checks": [
+    {
+      "name": "skill_structure",
+      "exit_code": 0,
+      "stdout": "Skill is valid!",
+      "stderr": ""
+    },
+    {
+      "name": "python_compilation",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "name": "diff_whitespace",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "warning: in the working copy of 'empirical-research-pipeline/scripts/auto_chart_pack.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'empirical-research-pipeline/scripts/paper_figures.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'empirical-research-pipeline/scripts/qa_outputs.py', LF will be replaced by CRLF the next time Git touches it\nwarning: in the working copy of 'tests/test_figures_paper.py', LF will be replaced by CRLF the next time Git touches it"
+    },
+    {
+      "name": "package_source_match",
+      "exit_code": 0,
+      "stdout": "OK: empirical-research-pipeline.skill matches the source tree (49 files)",
+      "stderr": ""
+    }
+  ],
+  "render": {
+    "script": "render_synthetic.py",
+    "script_sha256": "37c66a521212e94efd86d5b3b28ba2d3b84e9e32bde8f9e28c9193d0cd4f2dd6",
+    "synthetic": true,
+    "errors": 0,
+    "warnings": 13,
+    "geometry": {
+      "title_legend_gap_pt": 3.0483444407849585,
+      "title_inside_canvas": true,
+      "legend_entries": 9
+    },
+    "min_fontsize_pt": 7.4,
+    "manifest_palette_unchecked": 1,
+    "visual_review": "Both final PNGs inspected; title and nine-entry legend separated; continuous scale visible."
+  },
+  "package": {
+    "file": "dist/empirical-research-pipeline.skill",
+    "bytes": 427974,
+    "sha256": "c2c74c9a8275a99e3052aa78c8908124b71a4ed49ca427ce1631228d18405a57",
+    "sidecar_match": true,
+    "source_files": 49
+  },
+  "skill_source_sha256": {
+    "empirical-research-pipeline/SKILL.md": "82a347378e3184645c9407640e60d47e1064c956790a59c64e38f836e6b2fe27",
+    "empirical-research-pipeline/assets/analysis-manifest-template.md": "232a536589c6ed4a69573c7999f17e9d53e3b1f633f3aa31e4e610e73d5f3d6c",
+    "empirical-research-pipeline/assets/chart_config.example.json": "abbd700012722783d8fc7386a0caba71010459b3f3ab471588c1e6cf67c5ee32",
+    "empirical-research-pipeline/assets/codebook-template.md": "893a31be43309af9e907ed7bba7c63b1581334ae9ef8d3b98b6570f57f6b8b01",
+    "empirical-research-pipeline/assets/coding-keywords.json": "fc7022c151ee8e658b1c490c5b92617e1bb4de66caf760d44cc9587ccd8e54e2",
+    "empirical-research-pipeline/assets/delivery-checklist.md": "63c4e1738b723e31a718e380341497f8d372143912fbe95355f5f696427ae1c8",
+    "empirical-research-pipeline/assets/figure-spec-template.md": "9667a2a176afdc08d32f259e1ce44665a8da2ea944b19a9d97c4c0a3ba122ab9",
+    "empirical-research-pipeline/assets/figure_map.example.json": "1f15069eb3f44925161ed2023e3f2ec4883cb4e3b959e85302bb030f799d08c5",
+    "empirical-research-pipeline/assets/paper_figures.example.json": "3fe1171617493e9e7d42c8b7d041cc4a3bda99c9a635b993a82edcbc9d7b717a",
+    "empirical-research-pipeline/assets/research_registry.example.json": "7ef4140eae7f4be72546c60cb7af706467161e4c670859a41e51814d33843b0d",
+    "empirical-research-pipeline/assets/scope-template.md": "20f1d216e9a65686025da3c972e1b172ef4a4ede2cb37ecbd9f8a8392f3268d0",
+    "empirical-research-pipeline/profiles/eldercare-interview.json": "18f5681db9eeb3b8e12f2c0cc6be4168110c1f0ea82e43b39db8daa3a08e51e9",
+    "empirical-research-pipeline/profiles/legal-judgment.json": "3ddef0843104a87eace252950ddca5cc7783177d24adcb7fde4543620ce7809c",
+    "empirical-research-pipeline/profiles/vocab-satisfaction.json": "21e9c81e4ba53eab65382aebbc13ee2239e8cfc89ef0f84ae2ed964597b7904f",
+    "empirical-research-pipeline/references/01-corpus-audit.md": "657bd41f7465ede5415213769387a022fed78a3e268a1d4a8a6c39e8b8538049",
+    "empirical-research-pipeline/references/02-coding-protocol.md": "bdb7d56117f7c60d572122acbae5e9cef00950e35fa3a6e2b483cd939e1910c7",
+    "empirical-research-pipeline/references/03-analysis-spss.md": "42423e90ea6f6af279a65f8cdded7fbca1e1b7c70e42366a1882e6563504b678",
+    "empirical-research-pipeline/references/04-figures-publication.md": "317145597702af7793ac38e4e991f510545c96c4aac7f4c095d0bb4f8410720c",
+    "empirical-research-pipeline/references/05-manuscript-assembly.md": "c1acf2bec69d1d11a9419a7c908e9dac7c0b0caa8eaf09b991be0461ca475681",
+    "empirical-research-pipeline/references/06-qa-checklist.md": "614e7b89c0898b5a098466a303a2d6ddef13dc4c954e228e9be98a6a2e683dc5",
+    "empirical-research-pipeline/references/07-chart-atlas.md": "d2c540b1274ac64e98f8ceea59a9435839beb913c963a1cd1f39ab82ade3540f",
+    "empirical-research-pipeline/references/08-analysis-expansion.md": "a4c30b3fd9f70109512757628eee2a4a09f55ee083e07a49be75c349a933f39b",
+    "empirical-research-pipeline/references/09-field-extraction.md": "b33829d58da9057150c7eaf4056cd2c01e02ced78fe47fae99aad415ce578787",
+    "empirical-research-pipeline/references/10-contracts.md": "630405eba2bb7b065512e6ed7cc7a39d91308c1406a08604455dc97b1338719c",
+    "empirical-research-pipeline/references/11-methods-catalog.md": "24f0fae11b95faa494c41987519946b6a27f671af53fe2dfe1b151c6129c6768",
+    "empirical-research-pipeline/references/12-exhaustive-research.md": "4e93d95eaad64ad63eafee0146449589ebecd26aab88a076efa640c23046a3f5",
+    "empirical-research-pipeline/scripts/analysis_utils.py": "a10531bc4646188058350311b3a85c8746dcf73cdd0031c3a4a012c3929fc4a2",
+    "empirical-research-pipeline/scripts/assemble_manuscript.py": "ff01177d152f7d1f7a7ac1ac7b839aa6c2aaf27daba9f9f03b39febcfcf8d48e",
+    "empirical-research-pipeline/scripts/audit_corpus.py": "8a76aa18a6209ec37ef25aa7da378a35dcfca5b6cfde707a109437934208318a",
+    "empirical-research-pipeline/scripts/auto_chart_pack.py": "6f960bad78c265493d01785ade3c4ff2e7026085f3f04668a665cb2c9fc9edd9",
+    "empirical-research-pipeline/scripts/auto_stats.py": "aa089524bc92c4a260ebdd370ace04598b32747b02a8e4c6b50c8b846ebdc139",
+    "empirical-research-pipeline/scripts/check_decisions.py": "73e9516d958ca9d92da0df580ccafe416dc784fbe0ece2cf2916dc0d1681c976",
+    "empirical-research-pipeline/scripts/csv_to_spss_syntax.py": "3421c4a7c189da46085d703b805b98f8c1597d22af58b278a26342ae48d3b01b",
+    "empirical-research-pipeline/scripts/dedupe_corpus.py": "36285002b8c04df8e84de026c411ba3e79b121da00de2424f527c66e861b44a7",
+    "empirical-research-pipeline/scripts/export_pdf_hires.py": "5a1f1b4a42ef9d380dcd3198a27be3e41257991ee5f4f72dc1b6f04a05a03559",
+    "empirical-research-pipeline/scripts/extract_lib.py": "6d18c66bb83d0d57957cb985bd490455f48e435ab0a4992883c7142346d52d51",
+    "empirical-research-pipeline/scripts/make_coding_sheet.py": "47af4c5fb481fc370be215dff173d0cd279b3d36905ae3c479bfc71a25ce3001",
+    "empirical-research-pipeline/scripts/methods_lib.py": "4fbeceba67a6d8035004f9c51b4940c769290502a96700f7c4c79847210a26e9",
+    "empirical-research-pipeline/scripts/methods_pack.py": "046f9ade8eafc14d9deb76ce9c18c0a80b7026825d789fcd4983a909dda1c86d",
+    "empirical-research-pipeline/scripts/paper_figures.py": "f0269f59a888fa9e0abf68c1859f09031052957366dddbf641a20ad4b16cb75e",
+    "empirical-research-pipeline/scripts/pubfig.py": "4bf5204cce4b2767a52a046f15153ba0e5d9dc10d0cda72bf79a9d0ac5938a31",
+    "empirical-research-pipeline/scripts/qa_outputs.py": "78d2562707b7296a6434e3edae2d7107212ff43cf531377cf0e21798542a0e8e",
+    "empirical-research-pipeline/scripts/research_gate.py": "4115e84b00efd03c6693b282aff9845aca58c9ec5572a176c67716bd3d585d6a",
+    "empirical-research-pipeline/scripts/review_pack.py": "30d5dd1f56e06d09ad02be4abdae1072675d625c72901003b6231e5e19b4b1c3",
+    "empirical-research-pipeline/scripts/run_model.py": "1ce56e3f7cbf937f6a794c7b10ce7fae20b40c880bab7617770aedef8931b43b",
+    "empirical-research-pipeline/scripts/source_guard.py": "da2e05a851642dd7cfbfca894ecaa4b5ea002616c35486fc6d08bdbe9ec16156",
+    "empirical-research-pipeline/scripts/text_extract.py": "b83654a7db2d1eb7a36bbe61eca1e7fd6c029344d460b2b92886b9344d35c103",
+    "empirical-research-pipeline/scripts/verify_dataset.py": "2b77bb44bb6e5849820a35b373a649bb4941343231f319a9f7bbc7ac80cfeefc",
+    "empirical-research-pipeline/scripts/verify_numbers.py": "2167a25cfb01fa991034d065de1a856815232b525f90bca22034592df91e89f4"
+  },
+  "tests_tree_sha256": "c3d9ae5613788c7a907371fbcaa747352c9b06e663d2a50a430b272a02843cc5",
+  "audit_files_sha256": {
+    "full-unittest.log": "f63e472a51f75b0fdb53a88cee2d2dfc65c5a65b53feb491ec50f52a29fa10d0",
+    "palette-counterexamples.log": "9a133192f5daae55f66a1bc653331f02878b26c23b72b47a0f3c02edc027df04",
+    "render_synthetic.py": "37c66a521212e94efd86d5b3b28ba2d3b84e9e32bde8f9e28c9193d0cd4f2dd6",
+    "stats-font-regression.log": "202b87cdd72cd9ad76d39b044509e216bcafe0db62741fb867287260167b0926",
+    "synthetic/chart_manifest.csv": "1162970d0d785683f2b6faeff8fe7bf852a76b95a01d7a8f69cd6d6d77f92aa4",
+    "synthetic/chart_pack.json": "ea515dd7f2ca37e1be0e4c266ba196722ac0d910e1851d9114c747cda082a997",
+    "synthetic/chart_pack.md": "0d1c8f2f81d7254ee9d7646ee4fd243ac5b026f382c528fa0974b0579023f692",
+    "synthetic/figures/fig01_nine_classes.pdf": "d2fe229c5316a2f992d30088e6cadc1e84227b746bb5bb04a3ac166def344084",
+    "synthetic/figures/fig01_nine_classes.png": "68f34a3ec2d1c3e5a52a9a31b096156d38491706a3300999a96838f8c0272cce",
+    "synthetic/figures/fig02_continuous.pdf": "05f095275af141c7795f44c4e42d343e07fd878cafe9f35fb9fd1c9b2e10f04d",
+    "synthetic/figures/fig02_continuous.png": "a80f8bc3c327be22e9db482f2140fae588b7124a896f2f700420e365fea383d5",
+    "synthetic/qa.json": "d4ea4392922abcbd22633d2cbb1720b2fd915c722ac14eafb14f78a401b19efa"
+  },
+  "limitations": [
+    "Tests are finite counterexamples, not proof for every future input or research meaning.",
+    "Two fixed-matrix CVD simulations and discrete palette distances do not prove whole-figure accessibility.",
+    "Transparency, backgrounds, continuous scales, image semantics and publication placement still need actual review.",
+    "Installed skill copies and third-party plugin code were not modified."
+  ]
+}

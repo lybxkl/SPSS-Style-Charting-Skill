@@ -36,7 +36,7 @@ from scipy import stats
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pubfig import (  # noqa: E402
-    set_style, ensure_style, save_fig, wilson_ci, style_axis,
+    set_style, ensure_style, save_fig, wilson_ci, style_axis, figure_color_metadata,
     bar_counts, plot_distribution, plot_violin, stacked_bar, line_ci,
     heatmap, corr_heatmap, scatter_fit, roc_curve, calibration_plot,
     pareto, scree_plot, forest_plot, dumbbell,
@@ -63,7 +63,7 @@ N_SCOPES = ("sample", "corpus", "subgroup")
 MANIFEST_COLUMNS = [
     "id", "question", "chart_type", "variables", "n", "n_scope",
     "png", "pdf", "caption", "dpi", "px_width", "model_id", "data_hash",
-    "tiff", "note", "section", "status", "palette",
+    "tiff", "note", "section", "status", "palette", "palette_kind", "palette_source", "colormaps",
 ]
 
 # Sections as they are written into the manifest; the CLI accepts the letter.
@@ -356,6 +356,7 @@ class ChartPack:
 
     def __init__(self, df: pd.DataFrame, out_dir: str, cfg: dict, formats: list[str],
                  top_n: int, min_n: int, key_cols: list[str] | None = None):
+        ensure_style()  # initialise fonts before any axes/text are created
         self.df = df
         self.out_dir = out_dir
         self.fig_dir = os.path.join(out_dir, "figures")
@@ -382,10 +383,13 @@ class ChartPack:
             (cfg or {}).get("n_scope") or type(self).n_scope_default)
         self.model_id_default = str((cfg or {}).get("model_id")
                                     or type(self).model_id_default or "")
-        # The categorical cycle the figures draw from, recorded per manifest row so
-        # qa_outputs can check grayscale separability without guessing colours.
-        palette = (cfg or {}).get("palette") or CATEGORICAL
-        self.palette_cell = "|".join(str(c) for c in palette)
+        from matplotlib.colors import to_rgba, to_hex
+        palette = (cfg or {}).get("palette")
+        if palette is None or len(palette) == 0:
+            palette = CATEGORICAL
+        if isinstance(palette, str):
+            palette = [palette]
+        self.palette = [to_hex(to_rgba(c), keep_alpha=to_rgba(c)[3] < 1).upper() for c in palette]
         # selection / budgeting
         self.max_charts = None
         self.only_selectors: list[str] = []
@@ -408,6 +412,15 @@ class ChartPack:
 
     def vlabel(self, col: str) -> str:
         return self.vlabels.get(col, short_label(col, max_chars=len(str(col))+2))
+
+    def group_colors(self, column, levels):
+        """Keep each category's colour stable when a plot displays a subset."""
+        levels = list(levels)
+        known = list(dict.fromkeys(str(v) for v in self.df[column].dropna())) if column in self.df else []
+        positions = {value: i for i, value in enumerate(known)}
+        for level in levels:
+            positions.setdefault(str(level), len(positions))
+        return [self.palette[positions[str(level)] % len(self.palette)] for level in levels]
 
     def glabel(self, value, col: str = "") -> str:
         if col == self.outcome and self.outcome_labels:
@@ -565,9 +578,8 @@ class ChartPack:
             "note": note, "dpi": "", "px_width": "",
             "model_id": model_id or self.model_id_default,
             "data_hash": self.data_hash, "status": "ok",
-            # The cycle these figures draw from; qa_outputs checks it for
-            # grayscale separability, so it has to be recorded per row.
-            "palette": self.palette_cell,
+            "palette": "",  # populated from actual artists after drawing
+            "palette_kind": str(self.cfg.get("palette_kind") or ""),
         }
         if extra:
             row.update({str(k): v for k, v in extra.items()})
@@ -602,6 +614,11 @@ class ChartPack:
             if abs(after_right - before_right) > 1e-6:
                 note_parts.append(f"right={after_right:.3f}")
             row["note"] = "; ".join(x for x in note_parts if x)
+            colors = figure_color_metadata(fig.axes, row["palette_kind"])
+            row["palette"] = "|".join(colors["colors"])
+            row["palette_kind"] = colors["kind"]
+            row["palette_source"] = "artists; kind=" + colors["kind_source"]
+            row["colormaps"] = "|".join(colors["colormaps"])
             paths = save_fig(fig, self.fig_dir, name, formats=self.formats)
             row["tick_layout"] = {"status": "passed", "changes": getattr(fig, "_tick_layout_changes", [])}
         except Exception as exc:                 # 一张图失败不该毁掉整包
@@ -940,7 +957,8 @@ class ChartPack:
         fig, ax = plt.subplots(figsize=(FIG_W, max(3.4, 0.42 * len(tab) + 1.2)))
         stacked_bar(ax, [self.glabel(x, group) for x in tab.index],
                     [tab[c].values for c in tab.columns],
-                    [self.glabel(c, outcome) for c in tab.columns], normalize=True)
+                    [self.glabel(c, outcome) for c in tab.columns], normalize=True,
+                    colors=self.group_colors(outcome, tab.columns))
         self.save(fig, slug, "C 双变量", question, "100% stacked bar",
                   [group, outcome], int(tab.values.sum()),
                   self.caption(f"堆叠为组内结果类别百分比；仅列 n≥{self.min_n} 的组"))
@@ -962,7 +980,7 @@ class ChartPack:
                 if 2 <= len(vc) <= 6:
                     fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
                     pie_chart(ax, [self.glabel(x, treatment) for x in vc.index],
-                              vc.values, sort=False)
+                              vc.values, sort=False, colors=self.group_colors(treatment, vc.index))
                     self.save(fig, "treatment_donut", "B 单变量",
                               "处理阶段/核心分组的占比如何？", "donut",
                               [treatment], int(vc.sum()),
@@ -1121,7 +1139,8 @@ class ChartPack:
                 fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
                 stacked_bar(ax, [self.glabel(x, group) for x in tab.index],
                             [tab[c].values for c in tab.columns],
-                            [self.glabel(c, treatment) for c in tab.columns], normalize=True)
+                            [self.glabel(c, treatment) for c in tab.columns], normalize=True,
+                            colors=self.group_colors(treatment, tab.columns))
                 self.save(fig, "group_treatment_stacked", "C 双变量",
                           "各类别内部的处理阶段构成是否不同？", "100% stacked bar",
                           [group, treatment], int(tab.values.sum()),
@@ -1483,7 +1502,8 @@ class ChartPack:
         dist = np.sqrt((diffs ** 2).sum(axis=2))
         coords, explained = classical_mds(dist)
         fig, ax = plt.subplots(figsize=(FIG_W, 4.4))
-        mds_plot(ax, coords, groups=labs, explained=explained)
+        mds_plot(ax, coords, groups=labs, explained=explained,
+                 colors=self.group_colors(group, pd.Series(labs).value_counts().index) if labs is not None else self.palette)
         self.save(fig, "cluster_mds", "D 多变量",
                   "样本在低维相似性空间中是否分离？", "classical MDS",
                   cols + ([group] if group else []), len(dat),
@@ -1641,7 +1661,8 @@ class ChartPack:
                 fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
                 stacked_bar(ax, [str(x) for x in tab.index],
                             [tab[c].values for c in tab.columns],
-                            [self.glabel(c, outcome) for c in tab.columns], normalize=True)
+                            [self.glabel(c, outcome) for c in tab.columns], normalize=True,
+                            colors=self.group_colors(outcome, tab.columns))
                 ax.set_xlabel(str(time))
                 self.save(fig, "outcome_composition_trend", "E 时间",
                           "结果类别构成随年份如何变化？", "100% stacked bar",
@@ -1655,7 +1676,8 @@ class ChartPack:
                 fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
                 stacked_bar(ax, [str(x) for x in tab.index],
                             [tab[c].values for c in tab.columns],
-                            [self.glabel(c, treatment) for c in tab.columns], normalize=True)
+                            [self.glabel(c, treatment) for c in tab.columns], normalize=True,
+                            colors=self.group_colors(treatment, tab.columns))
                 self.save(fig, "treatment_composition_trend", "E 时间",
                           "处理阶段构成随年份如何变化？", "100% stacked bar",
                           [time, treatment], int(tab.values.sum()),
@@ -1663,7 +1685,8 @@ class ChartPack:
                 fig, ax = plt.subplots(figsize=(FIG_W, 3.6))
                 stacked_area(ax, list(tab.index),
                              [tab[c].values for c in tab.columns],
-                             [self.glabel(c, treatment) for c in tab.columns])
+                             [self.glabel(c, treatment) for c in tab.columns],
+                             colors=self.group_colors(treatment, tab.columns))
                 ax.set_xlabel(str(time))
                 ax.set_ylabel("构成比例")
                 self.save(fig, "treatment_composition_area", "E 时间",
@@ -1943,7 +1966,8 @@ class ChartPack:
              if group in self.df.columns else None)
         fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
         try:
-            kaplan_meier(ax, sub["t"], sub["e"], group=g)
+            kaplan_meier(ax, sub["t"], sub["e"], group=g,
+                         colors=self.group_colors(group, pd.Series(g).value_counts().index) if g is not None else self.palette)
         except Exception as exc:
             plt.close(fig)
             self.skip("F 模型诊断", "生存/随访时间如何变化？",
@@ -2203,7 +2227,11 @@ def main() -> int:
     for col in [outcome_col, group_col, treatment_col, time_col, id_col] + numeric[:4]:
         if col and col in df.columns and col not in key_cols:
             key_cols.append(col)
-    pack = ChartPack(df, out_dir, cfg, formats, args.top_n, args.min_n, key_cols=key_cols)
+    try:
+        pack = ChartPack(df, out_dir, cfg, formats, args.top_n, args.min_n, key_cols=key_cols)
+    except (ValueError, TypeError) as exc:
+        print(f"ERROR: invalid chart configuration: {exc}", file=sys.stderr)
+        return 2
     pack.set_outcome(outcome_col, kind, outcome_map)
     pack.configure_filters(only=split_multi(args.only),
                            sections=split_multi(args.sections) if args.sections else None,

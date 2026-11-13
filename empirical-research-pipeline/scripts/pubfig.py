@@ -43,10 +43,12 @@ GREY5 = LGRAY  # backwards-compatible alias used by older palettes
 PURPLE = "#1D1932"   # deepest step: reads almost black, still violet by hue
 TEAL = "#588B78"     # the second new hue the audit asked for (deep green)
 
-#: The categorical cycle every multi-series helper draws from.  These eight
-#: colours sit on a 10.8 L* ladder (10.5, 21.5, ... 86.3), so any subset is
-#: separable in grayscale as well as in colour, and eight series never repeat a
-#: colour.  ``INK``/``GRID`` stay out of the cycle: they are structure, not data.
+#: A fallback categorical cycle, not a required palette or a series limit. The
+#: helpers accept custom colours where supported; Agent scripts may use other
+#: palettes/colormaps and redundant encodings appropriate to their data. The
+#: eight colours have distinct lightness on a roughly 10.8 L* ladder; this does
+#: not prove accessibility in every rendered context. ``INK``/``GRID`` stay out
+#: of the cycle: they are structure, not data.
 CATEGORICAL = [BLUE, ORANGE, GREEN, RED, TEAL, PURPLE, GRAY, LGRAY]
 
 POSITIVE_LABELS = {
@@ -470,6 +472,19 @@ def _apply_pad(fig, pad):
         pass
 
 
+def _raise_missing_glyphs(caught, name: str, path: str | None = None) -> None:
+    missing = [str(w.message) for w in caught if "missing from font" in str(w.message)]
+    if missing:
+        written = f"已经写出的 {path} 请删除——它里面是方框。" if path else "图像未导出，请先修复字体。"
+        raise RuntimeError(
+            f"{name}: 有 {len(missing)} 个字符当前字体渲染不出来"
+            f"（多数是中文，例如 '{missing[0]}'）。\n"
+            "  调用 pubfig.set_style(font_cjk='SimSun') 或在你的脚本里设置 "
+            "font.family，确保选中的字体含中文；\n"
+            "  若这些字符是误入的（占位符、乱码），先清理文本。"
+            + written)
+
+
 def _write_formats(fig, out_dir: str, name: str,
                    formats: Sequence[str] = ("png", "pdf", "tiff"),
                    dpi: int = 600) -> list[str]:
@@ -487,18 +502,7 @@ def _write_formats(fig, out_dir: str, name: str,
                 fig.savefig(path, dpi=dpi, facecolor="white")
             else:
                 fig.savefig(path, facecolor="white")
-        missing = [str(w.message) for w in caught
-                   if "missing from font" in str(w.message)]
-        if missing:
-            # 字体缺字形时 matplotlib 只警告一次每个码位，图照样写出来。
-            # 图里出现方框是"看起来对、其实不可用"，必须让调用方停下来。
-            raise RuntimeError(
-                f"{name}: 有 {len(missing)} 个字符当前字体渲染不出来"
-                f"（多数是中文，例如 '{missing[0]}'）。\n"
-                "  调用 pubfig.set_style(font_cjk='SimSun') 或在你的脚本里设置 "
-                "font.family，确保选中的字体含中文；\n"
-                "  若这些字符是误入的（占位符、乱码），先清理文本。"
-                f"已经写出的 {path} 请删除——它里面是方框。")
+        _raise_missing_glyphs(caught, name, path)
         paths.append(path)
     return paths
 
@@ -659,8 +663,14 @@ def save_fig(fig, out_dir: str, name: str,
         bounding boxes crop/scale the figure and therefore change the effective
         resolution that ``qa_outputs.py`` measures.
     """
-    _apply_pad(fig, pad)
-    fig._tick_layout_changes = fit_tick_labels(fig)
+    # Layout also renders text. Catch missing glyphs here, before an equal-DPI
+    # save can reuse a cached layout without emitting the warning again.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _apply_pad(fig, pad)
+        fig._tick_layout_changes = fit_tick_labels(fig)
+        _fit_top_legend_titles(fig)
+    _raise_missing_glyphs(caught, name)
     paths = _write_formats(fig, out_dir, name, formats, dpi)
     plt.close(fig)
     return paths
@@ -832,41 +842,124 @@ def _lift_above_legend(ax) -> None:
         pass
 
 
-def _collect_colors(axes) -> list[str]:
-    """Colours actually painted on ``axes`` (patches, lines, collections).
+def _fit_top_legend_titles(fig, gap_points: float = 3.0, passes: int = 8) -> None:
+    """Keep a title clear of its above-axes legend on the final export canvas.
 
-    Pure white and the near-white background/frame shades are skipped, and the
-    order is first-seen, so a caller can record "the palette this figure used".
+    A legend can fit within the canvas and still cover the title. Measure both
+    after tick fitting, move the title above the legend, then reserve any top
+    margin this needs. Leave ordinary in-axes legends and untitled axes alone.
     """
-    from matplotlib.colors import to_hex
+    candidates = [ax for ax in fig.axes if ax.get_visible() and ax.get_legend() is not None
+                  and ax.get_legend().get_visible() and ax.title.get_visible()
+                  and ax.title.get_text().strip()]
+    if not candidates:
+        return
+    for _ in range(passes):
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        gap_px = gap_points * fig.dpi / 72.0
+        changed = False
+        for ax in candidates:
+            legend = ax.get_legend()
+            title = ax.title
+            abox = ax.get_window_extent(renderer)
+            lbox = legend.get_window_extent(renderer)
+            if lbox.y0 < abox.y1 - 1.0:
+                continue  # not a legend above this axes
+            tbox = title.get_window_extent(renderer)
+            shift = lbox.y1 + gap_px - tbox.y0
+            if shift > 0.5:
+                offset_px = ax.titleOffsetTrans.transform((0, 0))[1]
+                ax.set_title(title.get_text(), pad=(offset_px + shift) * 72.0 / fig.dpi)
+                changed = True
+        # Only this helper's title changes require extra canvas margin. Existing
+        # layout remains the caller's choice if there was no title/legend clash.
+        if changed or getattr(fig, "_top_legend_title_adjusted", False):
+            fig._top_legend_title_adjusted = True
+            _, overflow = _legend_overhang(fig)
+            if overflow > 1e-4:
+                top = float(fig.subplotpars.top)
+                minimum = max(0.3, float(fig.subplotpars.bottom) + 0.15)
+                new_top = max(minimum, top - overflow - 0.012)
+                if new_top < top - 1e-6:
+                    fig.subplots_adjust(top=new_top)
+                    changed = True
+        if not changed:
+            break
+
+
+def _collect_colors(axes) -> list[str]:
+    """Data-artist RGBA colours; scalar image maps are recorded separately.
+
+    This inventory includes reference lines/CI, not just semantic series. It
+    excludes axes frames/ticks/text, and does not certify rendered readability.
+    """
+    from matplotlib.colors import to_hex, to_rgba_array
 
     seen: list[str] = []
-    skip = {"#FFFFFF", "#000000"}
     for ax in axes:
+        if not ax.get_visible():
+            continue
         artists = list(getattr(ax, "patches", []) or [])
         artists += list(getattr(ax, "lines", []) or [])
         artists += list(getattr(ax, "collections", []) or [])
         for artist in artists:
+            if not artist.get_visible():
+                continue
+            try:
+                if artist.get_array() is not None:
+                    continue  # scalar-mapped collections belong to colormaps
+            except AttributeError:
+                pass
             candidates = []
-            for getter in ("get_facecolor", "get_color", "get_edgecolor"):
+            getters = ["get_facecolor", "get_color", "get_edgecolor"]
+            if hasattr(artist, "get_marker") and str(artist.get_marker()).strip().lower() not in {"", "none"}:
+                getters += ["get_markerfacecolor", "get_markeredgecolor"]
+            for getter in getters:
                 try:
                     candidates.append(getattr(artist, getter)())
                 except Exception:
                     continue
             for value in candidates:
                 try:
-                    rgba = value[0] if len(value) and isinstance(value[0], (list, tuple)) else value
-                    if len(rgba) < 3:
-                        continue
-                    if len(rgba) == 4 and float(rgba[3]) == 0.0:
-                        continue
-                    hex_value = to_hex(rgba).upper()
+                    values = to_rgba_array(value)
                 except Exception:
                     continue
-                if hex_value in skip or hex_value in seen:
-                    continue
-                seen.append(hex_value)
+                alpha = artist.get_alpha()
+                for rgba in values:
+                    rgba = list(rgba)
+                    if alpha is not None and np.ndim(alpha) == 0:
+                        rgba[3] = float(alpha)
+                    if rgba[3] <= 0:
+                        continue
+                    hex_value = to_hex(rgba, keep_alpha=rgba[3] < 1).upper()
+                    if hex_value not in seen:
+                        seen.append(hex_value)
     return seen
+
+
+def figure_color_metadata(axes, declared_kind: str = "") -> dict:
+    """Inspect actual artists without substituting an unused default palette."""
+    axes = list(axes)
+    declared_kind = str(declared_kind or "").strip()
+    colors = _collect_colors(axes)
+    maps = []
+    for ax in axes:
+        if not ax.get_visible():
+            continue
+        for artist in list(ax.images) + list(ax.collections):
+            try:
+                data = artist.get_array()
+                if artist.get_visible() and data is not None and np.ndim(data) <= 2:
+                    name = artist.get_cmap().name
+                    if name not in maps:
+                        maps.append(name)
+            except (AttributeError, TypeError):
+                continue
+    inferred = "continuous" if maps else "categorical" if len(colors) > 1 else "single" if colors else "image" if any(ax.images for ax in axes) else "unknown"
+    return {"colors": colors, "kind": declared_kind or inferred,
+            "kind_source": "declared" if declared_kind else "inferred",
+            "colormaps": maps}
 
 
 def compose_figure(panels, out_dir: str | None = None, name: str = "figure",
@@ -1062,7 +1155,8 @@ def compose_figure(panels, out_dir: str | None = None, name: str = "figure",
 
     tick_layout = fit_tick_labels(fig)
     height_cm = float(fig.get_figheight()) / CM
-    used_colors = _collect_colors(axes)
+    color_meta = figure_color_metadata(axes)
+    used_colors = color_meta["colors"]
     panel_sizes = _measure_panel_sizes_cm(fig, axes)
     min_fontsize = _measure_min_fontsize(fig, axes)
     pars = fig.subplotpars
@@ -1094,6 +1188,7 @@ def compose_figure(panels, out_dir: str | None = None, name: str = "figure",
         "paths": paths,
         "panel_sizes_cm": panel_sizes,
         "colors": used_colors,
+        "color_metadata": color_meta,
         "min_fontsize_pt": min_fontsize,
         "tick_layout": {"status": "passed", "changes": tick_layout},
         "width_cm": round(width_cm, 3),
@@ -2093,7 +2188,8 @@ def classical_mds(dist, n_components: int = 2) -> tuple[np.ndarray, float]:
 
 
 def mds_plot(ax, coords, labels: Sequence[str] | None = None,
-             groups: Sequence | None = None, explained: float | None = None) -> None:
+             groups: Sequence | None = None, explained: float | None = None,
+             colors: Sequence[str] | None = None) -> None:
     """Scatter of MDS coordinates, optionally colored by group."""
     xy = np.asarray(coords, dtype=float)
     if xy.ndim != 2 or xy.shape[0] < 2:
@@ -2104,8 +2200,8 @@ def mds_plot(ax, coords, labels: Sequence[str] | None = None,
     if groups is not None:
         g = pd.Series(list(groups)).astype(str).replace(
             {"nan": "未记载", "None": "未记载", "<NA>": "未记载"})
-        palette = list(CATEGORICAL)
-        for i, level in enumerate(g.value_counts().head(6).index):
+        palette = list(colors or CATEGORICAL)
+        for i, level in enumerate(g.value_counts().index):
             m = (g == level).to_numpy()
             ax.scatter(xy[m, 0], xy[m, 1], s=9, alpha=0.45, linewidths=0,
                        color=palette[i % len(palette)], label=str(level))
@@ -2116,8 +2212,8 @@ def mds_plot(ax, coords, labels: Sequence[str] | None = None,
         for i, lab in enumerate(labels):
             ax.annotate(str(lab), (xy[i, 0], xy[i, 1]), xytext=(3, 3),
                         textcoords="offset points", fontsize=7.4, color=INK)
-    qx = np.nanquantile(xy[:, 0], [0.01, 0.99])
-    qy = np.nanquantile(xy[:, 1], [0.01, 0.99])
+    qx = [np.nanmin(xy[:, 0]), np.nanmax(xy[:, 0])]
+    qy = [np.nanmin(xy[:, 1]), np.nanmax(xy[:, 1])]
     ax.set_xlim(qx[0] - 0.1 * (qx[1] - qx[0] + 1e-9),
                 qx[1] + 0.1 * (qx[1] - qx[0] + 1e-9))
     ax.set_ylim(qy[0] - 0.1 * (qy[1] - qy[0] + 1e-9),
@@ -2226,13 +2322,14 @@ def confusion_heatmap(ax, y_true: Iterable, y_score: Iterable[float],
 
 
 def kaplan_meier(ax, time: Iterable[float], event: Iterable,
-                 group: Sequence | None = None) -> None:
+                 group: Sequence | None = None,
+                 colors: Sequence[str] | None = None) -> None:
     """Kaplan-Meier survival curves with censoring ticks; no external dependency."""
     t = pd.to_numeric(pd.Series(list(time)), errors="coerce").to_numpy(float)
     e = binary_array(event)
     mask = np.isfinite(t) & np.isfinite(e) & (t >= 0)
     t, e = t[mask], e[mask]
-    if len(t) < 3:
+    if len(t) == 0:
         ax.text(0.5, 0.5, "随访数据不足", transform=ax.transAxes,
                 ha="center", va="center", fontsize=8)
         ax.set_axis_off()
@@ -2241,12 +2338,10 @@ def kaplan_meier(ax, time: Iterable[float], event: Iterable,
          .replace({"nan": "未记载", "None": "未记载", "<NA>": "未记载"}).to_numpy()
          if group is not None else np.array(["全体"] * len(mask), dtype=object))
     g = g[mask]
-    palette = list(CATEGORICAL)
-    for i, level in enumerate(pd.Series(g).value_counts().head(6).index):
+    palette = list(colors or CATEGORICAL)
+    for i, level in enumerate(pd.Series(g).value_counts().index):
         m = g == level
         tt, ee = t[m], e[m]
-        if len(tt) < 3:
-            continue
         order = np.argsort(tt)
         tt, ee = tt[order], ee[order]
         uniq = np.unique(tt[ee == 1])
@@ -2269,7 +2364,7 @@ def kaplan_meier(ax, time: Iterable[float], event: Iterable,
             ax.scatter(cens, cy, marker="|", s=12, color=palette[i % len(palette)],
                        linewidths=0.8, zorder=3)
         ax.step(xs, ys, where="post", color=palette[i % len(palette)],
-                linewidth=1.0, label=str(level))
+                linewidth=1.0, label=f"{level} (n={len(tt)})")
     ax.set_ylim(0, 1.02)
     ax.set_xlabel("随访时间")
     ax.set_ylabel("生存概率")

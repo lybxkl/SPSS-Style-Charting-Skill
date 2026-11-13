@@ -226,6 +226,9 @@ def _qa_section(path: str | None) -> dict:
             continue
         checks[name] = {"errors": len(value.get("errors") or []),
                         "warnings": len(value.get("warnings") or [])}
+        if "palette_unchecked" in value:
+            checks[name]["palette_unchecked"] = value["palette_unchecked"]
+            checks[name]["palette_eligible"] = value.get("palette_eligible")
     return {"provided": True,
             "error_count": report.get("error_count", 0),
             "warning_count": report.get("warning_count", 0),
@@ -373,6 +376,9 @@ def _render(payload: dict) -> str:
             if item["errors"] or item["warnings"]:
                 lines.append(f"- `{name}`：{item['errors']} error / "
                              f"{item['warnings']} warning")
+            if item.get("palette_unchecked"):
+                lines.append(f"- `{name}` 配色：{item['palette_unchecked']} 张未完成此项离散色诊断；"
+                             "这是建议性检查范围，需结合实际渲染复核，不等同于数据错误。")
     else:
         lines.append("- 未提供 `--qa`")
     decisions = payload["decisions"]

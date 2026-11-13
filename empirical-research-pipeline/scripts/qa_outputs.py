@@ -55,13 +55,12 @@ KEY_ALIASES = ("rel_path", "relpath", "file", "path", "doc_id", "id")
 N_SCOPES = ("sample", "subgroup", "corpus")
 N_RANGE_SPLIT = re.compile(r"[→\-–—~～至]")
 
-# Colour QA.  A 7-class figure whose colours all sit at the same lightness is
-# unreadable in print (black-and-white) even when it looks fine on screen, and
-# two hues that survive as "blue vs blue" under deuteranopia are the same
-# problem in colour.  Thresholds are the usual editorial minima.
-MIN_DELTA_L = 10.0      # CIE L* difference for two colours to be separable in gray
+# Colour QA provides advisory heuristics, not universal editorial standards.
+# Markers, patterns, direct labels and data semantics also determine readability.
+# Pairwise lightness distances apply to discrete colours, not dense gradients.
+MIN_DELTA_L = 10.0      # internal suggested CIE L* gap, not a publication standard
 MIN_DELTA_E = 8.0       # CIE76 difference after simulated colour-vision deficiency
-MIN_DELTA_CHROMA = 6.0  # ... and the (Δa*, Δb*) part alone, i.e. hue survival
+MIN_DELTA_CHROMA = 6.0  # legacy reference; similarity warnings use full Lab ΔE
 DEFAULT_CYCLE = ("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
                  "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf")
 # Machado, Oliveira & Fernandes (2009) severity 1.0, applied in LINEAR RGB.
@@ -135,35 +134,74 @@ def parse_palette(cell) -> list[str]:
     """``"#1C4E7B;#E18560"`` -> colour list (separators: ; , whitespace |)."""
     if not cell:
         return []
-    return [part for part in re.split(r"[;,|\s]+", str(cell).strip()) if part]
+    if isinstance(cell, (list, tuple)):
+        return [str(c).strip() for c in cell if str(c).strip()]
+    text = str(cell).strip()
+    # Named colours such as "xkcd:sky blue" contain a space. Structured
+    # delimiters preserve those names; whitespace remains a legacy separator.
+    if ";" in text or "|" in text:
+        return [part.strip() for part in re.split(r"[;|]+", text) if part.strip()]
+    if hex_to_rgb(text) is not None:
+        return [text]
+    return [part for part in re.split(r"[,\s]+", text) if part]
+
+
+def _palette_color_key(color):
+    """Canonical RGBA identity, preserving opacity and accepting legacy hex."""
+    rgb = hex_to_rgb(color)
+    if rgb is None:
+        return None
+    from matplotlib.colors import to_rgba
+    try:
+        alpha = to_rgba(color)[3]
+    except (ValueError, TypeError):
+        alpha = 1.0  # legacy hex without a leading '#'
+    return tuple(round(v, 12) for v in (*rgb, alpha))
 
 
 def check_palette(colors: list[str], colorblind: bool = False,
                   min_delta_l: float = MIN_DELTA_L,
-                  min_delta_e: float = MIN_DELTA_E) -> dict:
-    """Grayscale and colour-vision separability of one palette.
+                  min_delta_e: float = MIN_DELTA_E,
+                  strict: bool = False, graycheck: bool = True) -> dict:
+    """Advisory grayscale/colour-vision diagnostics for discrete colours.
 
-    Every pair must differ by at least ``min_delta_l`` in CIE L* to survive
-    printing, and (when ``colorblind``) by ``min_delta_e`` after simulating
-    deuteranopia/protanopia.
+    Low lightness separation is a warning by default. Explicit ``strict=True``
+    makes it an error for projects that require this particular grayscale rule.
+    Neither passing nor failing these heuristics proves a rendered chart's
+    accessibility; redundant encoding and actual placement still need review.
     """
-    result = {"colors": list(colors), "errors": [], "warnings": []}
-    usable = [(c, hex_to_rgb(c)) for c in colors]
-    usable = [(c, rgb) for c, rgb in usable if rgb is not None]
-    result["unparsed"] = [c for c in colors if hex_to_rgb(c) is None]
-    if len(usable) < 2:
+    for name, value in (("min_delta_l", min_delta_l), ("min_delta_e", min_delta_e)):
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"{name} must be finite and nonnegative")
+    colors = list(colors)
+    result = {"colors": colors, "errors": [], "warnings": [],
+              "pairwise_checked": False, "complete": False, "strict_applied": False}
+    parsed = [(c, _palette_color_key(c)) for c in colors]
+    usable = [(c, rgba[:3]) for c, rgba in parsed if rgba is not None]
+    result["unparsed"] = [c for c, rgba in parsed if rgba is None]
+    result["alpha_unassessed"] = [c for c, rgba in parsed if rgba is not None and rgba[3] < 1]
+    result["parsed_count"] = len(usable)
+    if result["unparsed"]:
+        result["errors" if strict and graycheck else "warnings"].append(
+            f"palette colours could not be parsed; diagnostics incomplete: {result['unparsed']}")
+    if result["alpha_unassessed"]:
+        result["warnings"].append("palette opacity/background is not assessed by isolated RGB distances; inspect the rendered figure")
+    if len(usable) < 2 or not (graycheck or colorblind):
         return result
+    result["pairwise_checked"] = bool(graycheck or colorblind)
+    result["complete"] = result["pairwise_checked"] and not result["unparsed"] and not result["alpha_unassessed"]
+    result["strict_applied"] = bool(strict and graycheck and not result["alpha_unassessed"])
     gray_pairs = []
     for i in range(len(usable)):
         for j in range(i + 1, len(usable)):
             (name_a, rgb_a), (name_b, rgb_b) = usable[i], usable[j]
             dl = abs(rgb_to_lab(rgb_a)[0] - rgb_to_lab(rgb_b)[0])
-            gray_pairs.append({"a": name_a, "b": name_b, "delta_l": round(dl, 2)})
-            if dl < min_delta_l:
-                result["errors"].append(
-                    f"grayscale: {name_a} vs {name_b} ΔL*={dl:.1f} < {min_delta_l:g}")
+            gray_pairs.append({"a": name_a, "b": name_b, "delta_l": round(dl, 6)})
+            if graycheck and dl + 1e-9 < min_delta_l:
+                result["errors" if result["strict_applied"] else "warnings"].append(
+                    f"grayscale: {name_a} vs {name_b} ΔL*={dl:.12g} < {min_delta_l:g}")
     result["gray_pairs"] = gray_pairs
-    result["min_delta_l"] = round(min((p["delta_l"] for p in gray_pairs), default=0.0), 2)
+    result["min_delta_l"] = min((p["delta_l"] for p in gray_pairs), default=None) if graycheck else None
     if colorblind:
         cv_pairs = []
         for i in range(len(usable)):
@@ -178,19 +216,18 @@ def check_palette(colors: list[str], colorblind: bool = False,
                     de = float(sum((x - y) ** 2 for x, y in zip(lab_a, lab_b)) ** 0.5)
                     if worst_kind == "" or de < worst:
                         worst, worst_kind = de, kind
-                        # ΔE76 is dominated by ΔL*, which the grayscale gate has
-                        # already forced to >=10; only the (Δa*, Δb*) part tells us
-                        # whether the two hues survive the simulation.
+                        # Report hue similarity separately from lightness; a
+                        # chart may still distinguish series with other cues.
                         chroma = math.hypot(lab_a[1] - lab_b[1], lab_a[2] - lab_b[2])
                 cv_pairs.append({"a": name_a, "b": name_b,
                                  "delta_e": round(worst, 2), "sim": worst_kind,
                                  "delta_chroma": round(chroma, 2)})
-                if chroma < MIN_DELTA_CHROMA:
+                if worst + 1e-9 < min_delta_e:
                     result["warnings"].append(
                         f"colour blind ({worst_kind}): {name_a} vs {name_b} "
-                        f"chromatic distance={chroma:.1f} < {MIN_DELTA_CHROMA:g} "
-                        f"(ΔE={worst:.1f}): the two "
-                        f"series look alike to colour-blind readers")
+                        f"ΔE={worst:.12g} < {min_delta_e:g}: "
+                        f"the colours may look similar; review lightness, markers, "
+                        f"line styles and labels in the rendered figure")
         result["cvd_pairs"] = cv_pairs
         result["min_delta_e"] = round(min((p["delta_e"] for p in cv_pairs), default=0.0), 2)
     return result
@@ -606,7 +643,8 @@ def check_audit(path: str) -> dict:
 def check_manifest(path: str, data_rows: int | None = None,
                    graycheck: bool = True, colorblind: bool = False,
                    min_delta_l: float = MIN_DELTA_L,
-                   min_delta_e: float = MIN_DELTA_E) -> dict:
+                   min_delta_e: float = MIN_DELTA_E,
+                   strict_palette: bool = False) -> dict:
     """Check chart_manifest.csv: required columns, N, captions, files, palettes."""
     result = {"path": path, "exists": os.path.isfile(path), "errors": [], "warnings": []}
     if not result["exists"]:
@@ -632,12 +670,14 @@ def check_manifest(path: str, data_rows: int | None = None,
     n_bad, caption_bad, file_bad, scope_bad, range_notes = [], [], [], [], []
     n_unknown: list[str] = []
     palette_rows: list[dict] = []
+    palette_eligible = 0
     for r in rows:
         cid = r.get("id", "?")
         status = str(r.get("status") or "ok").strip().lower()
         if status != "ok":
             result["warnings"].append(f"{cid}: chart status is {status}")
             continue
+        palette_eligible += 1
         if not str(cid).strip() or not (str(r.get("png") or "").strip() or str(r.get("pdf") or "").strip()):
             file_bad.append(f"{cid}: no output image/PDF")
         raw_n = (r.get("n") or "").strip()
@@ -682,48 +722,63 @@ def check_manifest(path: str, data_rows: int | None = None,
                         raise ValueError(raw)
                 except ValueError:
                     result["warnings"].append(f"{cid}: invalid {col}={raw!r}")
-        # Grayscale / colour-vision separability.  A declared ``palette`` is
-        # authoritative and a bad one is an ERROR.  A row may instead state
-        # ``n_series``, in which case the default matplotlib cycle it most likely
-        # used is checked and reported as a warning only.  Without either, the
-        # real colours are unknown -- guessing them from tick labels produced
-        # nothing but false alarms -- so the row is counted as unchecked.
+        # Palette diagnostics are recommendations unless explicitly made strict.
+        # A declared list is still metadata, not proof of actual rendered colours.
+        # Never hard-fail an inferred default cycle or apply a discrete-pair rule
+        # to sequential/diverging/cyclic gradients or an unknown custom mapping.
         declared = parse_palette(r.get("palette"))
-        colors = list(declared)
-        if not colors and graycheck and (r.get("n_series") or "").strip():
+        palette_kind = str(r.get("palette_kind") or "categorical").strip().lower()
+        discrete = palette_kind in {"categorical", "qualitative", "discrete", "nominal", "分类", "定性"}
+        series = 0
+        raw_series = str(r.get("n_series") or "").strip()
+        if raw_series:
             try:
-                count = int(float(r["n_series"]))
-            except (TypeError, ValueError):
-                count = 0
-            if count >= 2:
-                colors = list(DEFAULT_CYCLE[:min(len(DEFAULT_CYCLE), count)])
-        if declared:
-            distinct = len(dict.fromkeys(declared))
-            series = 0
-            raw_series = (r.get("n_series") or "").strip()
-            if raw_series:
-                try:
-                    series = int(float(raw_series))
-                except (TypeError, ValueError):
-                    series = 0
-            if len(declared) > distinct or (series and series > distinct):
+                number = float(raw_series)
+                if not math.isfinite(number) or number < 0 or not number.is_integer():
+                    raise ValueError(raw_series)
+                series = int(number)
+            except (TypeError, ValueError, OverflowError):
+                result["warnings"].append(f"{cid}: invalid n_series={raw_series!r}; series count not assessed")
+        colors = list(declared)
+        if not colors and discrete and (graycheck or colorblind) and series >= 2:
+            colors = list(DEFAULT_CYCLE[:min(len(DEFAULT_CYCLE), series)])
+        if declared and discrete:
+            keys = [_palette_color_key(c) for c in declared]
+            parsed = [key for key in keys if key is not None]
+            distinct = len(set(parsed))
+            if len(parsed) > distinct or (len(parsed) == len(keys) and series > distinct):
                 result["warnings"].append(
                     f"{cid}: palette declares {distinct} distinct colour(s) for "
                     f"{max(len(declared), series)} series; at least two series "
                     f"share a colour")
-        if graycheck and len(colors) >= 2:
-            palette_report = check_palette(colors, colorblind=colorblind,
-                                           min_delta_l=min_delta_l,
-                                           min_delta_e=min_delta_e)
+        if graycheck or colorblind:
+            if discrete:
+                palette_report = check_palette(colors, colorblind=colorblind,
+                                               min_delta_l=min_delta_l,
+                                               min_delta_e=min_delta_e,
+                                               strict=strict_palette and bool(declared), graycheck=graycheck)
+            else:
+                palette_report = check_palette(colors, graycheck=False, colorblind=False)
             palette_rows.append({
                 "id": cid,
                 "declared": bool(declared),
                 "colors": colors,
+                "kind": palette_kind,
+                "source": str(r.get("palette_source") or ("declared" if declared else "assumed_default_cycle" if colors else "none")),
+                "colormaps": str(r.get("colormaps") or ""),
+                "pairwise_checked": palette_report.get("pairwise_checked", False),
+                "complete": bool(declared and palette_report.get("complete", False)),
+                "parsed_count": palette_report.get("parsed_count"),
+                "unparsed": palette_report.get("unparsed", []),
+                "alpha_unassessed": palette_report.get("alpha_unassessed", []),
+                "strict": palette_report.get("strict_applied", False),
+                "note": ("Discrete palette heuristics only; opacity and rendered encodings need review; an assumed cycle is not evidence of actual colours." if discrete else
+                         "Pairwise categorical distances do not assess this mapping; review its data semantics, scale and rendered accessibility."),
                 "min_delta_l": palette_report.get("min_delta_l"),
                 "min_delta_e": palette_report.get("min_delta_e"),
             })
             for message in palette_report["errors"]:
-                if declared:
+                if declared and strict_palette:
                     result["errors"].append(f"{cid}: {message}")
                 else:
                     result["warnings"].append(f"{cid} (default cycle): {message}")
@@ -733,17 +788,19 @@ def check_manifest(path: str, data_rows: int | None = None,
         result["errors"].append(f"{len(n_bad)} chart N invalid: {n_bad[:8]}")
     result["graycheck"] = bool(graycheck)
     result["colorblind"] = bool(colorblind)
+    result["strict_palette"] = bool(strict_palette)
     result["palettes"] = palette_rows
-    if graycheck and rows:
-        unchecked = len(rows) - sum(1 for p in palette_rows if p["declared"])
+    result["palette_eligible"] = palette_eligible
+    if (graycheck or colorblind) and palette_eligible:
+        unchecked = palette_eligible - sum(1 for p in palette_rows if p["complete"])
         # A missing palette is not a defect: it is simply out of scope for the
         # grayscale check.  Record it as a note instead of a warning so that a
         # clean manifest keeps reporting an empty warning list.
         result["palette_unchecked"] = int(unchecked)
         result["palette_note"] = (
-            f"{unchecked}/{len(rows)} manifest row(s) record no palette of two or "
-            f"more colours; grayscale separability only applies where two series "
-            f"can be confused") if unchecked else ""
+            f"{unchecked}/{palette_eligible} eligible manifest row(s) have no declared discrete-palette "
+            f"complete diagnostics (single/unrecorded/continuous/custom/invalid/transparent mapping); inspect "
+            f"actual colours, encodings and scales in the rendered figure") if unchecked else ""
     result["n_na_count"] = len(n_unknown)
     result["n_total"] = len(rows)
     if n_unknown:
@@ -924,11 +981,13 @@ def main() -> int:
                              "(default: --figure-width-cm; 0 disables scaling)")
     parser.add_argument("--graycheck", dest="graycheck", action="store_true",
                         default=True,
-                        help="check grayscale separability of manifest palettes (default on)")
+                        help="report advisory discrete-palette grayscale diagnostics (default on)")
     parser.add_argument("--no-graycheck", dest="graycheck", action="store_false",
                         help="skip the grayscale check")
     parser.add_argument("--colorblind", action="store_true",
                         help="also simulate deuteranopia/protanopia (warnings)")
+    parser.add_argument("--strict-palette", action="store_true",
+                        help="opt in to errors for low grayscale separation of declared categorical palettes; not a universal publication requirement")
     parser.add_argument("--allow-raster-text", action="store_true",
                         help="downgrade no_text_layer (bitmap figures whose type "
                              "cannot be measured) from error to warning")
@@ -973,7 +1032,8 @@ def main() -> int:
             data_report = report["checks"].get("data") or {}
             data_rows = data_report.get("rows")
         report["checks"]["manifest"] = check_manifest(
-            args.manifest, data_rows, args.graycheck, args.colorblind)
+            args.manifest, data_rows, args.graycheck, args.colorblind,
+            strict_palette=args.strict_palette)
     if args.figures:
         report["checks"]["figures"] = check_figures(
             args.figures, args.min_dpi, args.figure_width_cm, min_fontsize,

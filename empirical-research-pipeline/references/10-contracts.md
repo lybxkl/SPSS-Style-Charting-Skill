@@ -93,9 +93,9 @@
 - **字号也按版面折算**：独立源图用 `--min-fontsize 7.2` 与 `--target-width-cm`（默认 15）；最终稿须传 DOCX 的实际宽高，以图片内容 SHA 关联源 PNG/同名矢量 PDF，不能对所有图统一套默认 15 cm。
   15 cm 的图排进 8.5 cm 双栏后，8.5 pt 只剩 4.8 pt——按原始宽度报"合格"等于没检查。
   PDF 里没有文字层的图（回填成位图之后）**不能因为"没有 span"就判通过**，必须显式报 `no_text_layer`。
-- **分类色两两灰度 ΔL\* ≥ 10**（CIE Lab，D65）。`CATEGORICAL` 是唯一色环，多系列图都从它取色；
-  色板写进 manifest 的 `palette` 列（`#RRGGBB|#RRGGBB|…`），`qa_outputs --graycheck` 才能真的检查，
-  否则它会静默跳过并报 `palette_unchecked`。
+- **配色为可调整的推荐**：`CATEGORICAL` 是 8 色默认值，不是唯一色环或系列数上限。Agent 可按数据含义与用户/期刊要求选择其他颜色/映射/冗余编码；详细建议见 `04-figures-publication.md`。
+- manifest 的 `palette` 记录实际可提取的数据图元颜色（含边线/CI/透明度，不等同于语义类别数）；`palette_source` 记录来源，`colormaps` 记录实际标量色图。`palette_kind` 可自由声明用途，未声明的新图按艺术对象推断；旧清单缺省 categorical 仅为兼容诊断。连续映射不展开成离散类别色，也不以默认色环填充空取色。
+- `qa_outputs --graycheck` 默认提供分类色板建议，低于内部 `ΔL*` 阈值只 warning；色觉模拟 `--colorblind` 也只提示。`--strict-palette` 是用户/项目明确选择时的额外严格检查，不是通用投稿要求。未知/不适用用途、未解析/透明色、只推测的默认色环等保留为未完成/未适用，`pairwise_checked` 与 `complete` 不得伪报；按有效图统计 `palette_unchecked` 并传给审稿包。显式严格的分类色检查无法解析时报错，透明度/背景仍转实际渲染复核。元数据本身不证明真实图像颜色正确。
 - 多类别长横轴保留同图，倾斜 45°/60°/75° 并增加底部空间；导出前检测实际旋转文字边界，不能容纳时明确失败，不自动分页、截断或缩小字。
 - **多面板**用 `pubfig.compose_figure()` → 返回 `panel_sizes_cm`（每格实际厘米）与 `min_fontsize_pt`（实测），
   不要在自写脚本里手算 figsize；面板字母字号 = `max(8.5, base_size)`。

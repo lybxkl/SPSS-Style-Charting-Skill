@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "data": "SYNTHETIC ONLY",
+    "n": 90
+  },
+  "charts": [
+    {
+      "id": "F01",
+      "section": "C 双变量",
+      "question": "synthetic colour audit",
+      "chart_type": "100% stacked bar",
+      "variables": "g; y",
+      "n": 90,
+      "n_scope": "sample",
+      "png": "figures/fig01_nine_classes.png",
+      "pdf": "figures/fig01_nine_classes.pdf",
+      "tiff": "",
+      "caption": "注：N=90；堆叠为组内结果类别百分比；仅列 n≥2 的组；数据来源：分析数据集。",
+      "note": "top=0.799",
+      "dpi": 600,
+      "px_width": 3543,
+      "model_id": "",
+      "data_hash": "68b6818b9e212ab60931cbfa9219d08f7bc955d24157319b7a8664123b68b2e0",
+      "status": "ok",
+      "palette": "#0072B2|#FFFFFF|#D55E00|#009E73|#CC79A7|#F0E442|#56B4E9|#E69F00|#111111|#999999",
+      "palette_kind": "categorical",
+      "palette_source": "artists; kind=inferred",
+      "colormaps": "",
+      "tick_layout": {
+        "status": "passed",
+        "changes": []
+      }
+    },
+    {
+      "id": "F02",
+      "section": "synthetic",
+      "question": "synthetic continuous audit",
+      "chart_type": "scatter",
+      "variables": "id; signal",
+      "n": 90,
+      "n_scope": "sample",
+      "png": "figures/fig02_continuous.png",
+      "pdf": "figures/fig02_continuous.pdf",
+      "tiff": "",
+      "caption": "Synthetic observations only; N=90",
+      "note": "top=0.944",
+      "dpi": 600,
+      "px_width": 3543,
+      "model_id": "",
+      "data_hash": "68b6818b9e212ab60931cbfa9219d08f7bc955d24157319b7a8664123b68b2e0",
+      "status": "ok",
+      "palette": "#333333",
+      "palette_kind": "continuous",
+      "palette_source": "artists; kind=inferred",
+      "colormaps": "viridis",
+      "tick_layout": {
+        "status": "passed",
+        "changes": []
+      }
+    }
+  ],
+  "skipped": [],
+  "counts": {
+    "ok": 2,
+    "skipped": 0,
+    "error": 0,
+    "skipped_total": 0
+  }
+}

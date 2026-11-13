@@ -280,6 +280,7 @@ class PaperFiguresCase(TempCase):
                   [["amount", -0.42, -0.70, -0.14, 120],
                    ["age", -0.08, -0.20, 0.03, 120]])
         spec = {"figures": [{"id": "FigF", "question": "系数", "n": 120,
+                             "palette_kind": "custom-grayscale-with-labels",
                              "caption": "图F 系数（N=120）。",
                              "panels": [{"chart": "forest",
                                          "data": {"coef": self.p("coef.csv")}}]}]}
@@ -290,6 +291,7 @@ class PaperFiguresCase(TempCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         row = read_csv(self.p("fo", "paper_figures_manifest.csv"))[0]
         self.assertEqual(row["chart_type"], "forest")
+        self.assertEqual(row["palette_kind"], "custom-grayscale-with-labels")
         self.assertEqual(row["n"], "120")
 
     def test_forest_accepts_a_singular_term_key(self):
@@ -639,21 +641,87 @@ class QaManifestNCase(TempCase):
 class QaPaletteCase(TempCase):
     """B3: grayscale and colour-vision separability of a manifest palette."""
 
-    def _manifest(self, palette, name="m.csv"):
+    def _manifest(self, palette, name="m.csv", **fields):
         rows = [{"id": "F01", "question": "q", "chart_type": "bar",
                  "variables": "a; b", "n": "10", "png": make_png(self.p("fig.png")),
                  "pdf": "", "caption": "注：N=10。", "palette": palette}]
+        rows[0].update(fields)
         write_csv(self.p(name), list(rows[0]), [rows[0]])
         return self.p(name)
 
-    def test_low_contrast_palette_is_an_error(self):
-        # pubfig GREEN vs a teal: ΔL* ≈ 1.7, indistinguishable in grayscale.
+    def test_chart_pack_preserves_palette_purpose_in_csv(self):
+        import auto_chart_pack as acp
+        import pandas as pd
+        pack = acp.ChartPack(pd.DataFrame({"x": range(10)}), self.p("pack"),
+                             {}, ["png"], 8, 2)
+        fig, ax = plt.subplots(figsize=(15/2.54, 3))
+        ax.imshow([list(range(10))], cmap="Blues", aspect="auto")
+        pack.save(fig, "gradient", "A", "synthetic gradient", "heatmap", ["x"], 10,
+                  "Synthetic N=10", extra={"palette_kind": "sequential"})
+        path = pack.write({})
+        row = read_csv(path)[0]
+        self.assertEqual(row["palette_kind"], "sequential")
+        report = qa.check_manifest(path, strict_palette=True)
+        self.assertFalse(report["palettes"][0]["pairwise_checked"])
+
+    def test_low_grayscale_separation_is_advisory_by_default(self):
+        # Close lightness is a heuristic; line styles/markers may still work.
         path = self._manifest("#5B7F62;#3E8683")
         out = run("qa_outputs.py", "--manifest", path)
-        self.assertEqual(out.returncode, 2, out.stdout)
+        self.assertEqual(out.returncode, 0, out.stdout)
+        report = json.loads(out.stdout)
+        self.assertEqual(report["checks"]["manifest"]["errors"], [])
+        self.assertTrue(report["checks"]["manifest"]["warnings"])
         self.assertIn("grayscale", out.stdout)
         self.assertIn("ΔL*", out.stdout)
         self.assertLess(abs(qa.lightness("#5B7F62") - qa.lightness("#3E8683")), 10.0)
+
+    def test_strict_palette_is_explicit_opt_in(self):
+        path = self._manifest("#5B7F62;#3E8683")
+        out = run("qa_outputs.py", "--manifest", path, "--strict-palette")
+        self.assertEqual(out.returncode, 2, out.stdout)
+        report = json.loads(out.stdout)["checks"]["manifest"]
+        self.assertTrue(report["strict_palette"])
+        self.assertTrue(report["errors"])
+
+    def test_gradients_and_custom_mappings_do_not_use_discrete_pairwise_gate(self):
+        for kind in ("sequential", "diverging", "cyclic", "single", "my-study-custom-map"):
+            with self.subTest(kind=kind):
+                path = self._manifest("#555555;#565656;#575757", palette_kind=kind)
+                out = run("qa_outputs.py", "--manifest", path, "--strict-palette", "--colorblind")
+                self.assertEqual(out.returncode, 0, out.stdout)
+                report = json.loads(out.stdout)["checks"]["manifest"]
+                self.assertFalse(report["palettes"][0]["pairwise_checked"])
+                self.assertFalse(report["palettes"][0]["strict"])
+                self.assertEqual(report["palette_unchecked"], 1)
+                self.assertIn("mapping", report["palette_note"])
+
+    def test_colorblind_diagnostics_can_run_without_grayscale_heuristic(self):
+        path = self._manifest("#D62728;#2CA02C")
+        out = run("qa_outputs.py", "--manifest", path, "--no-graycheck", "--colorblind")
+        self.assertEqual(out.returncode, 0, out.stdout)
+        self.assertIn("colour blind", out.stdout)
+        self.assertFalse(json.loads(out.stdout)["checks"]["manifest"]["graycheck"])
+
+    def test_palette_advice_does_not_downgrade_invalid_sample_size(self):
+        path = self._manifest("#555555;#565656", n="invalid")
+        out = run("qa_outputs.py", "--manifest", path)
+        self.assertEqual(out.returncode, 2, out.stdout)
+        self.assertTrue(json.loads(out.stdout)["checks"]["manifest"]["errors"])
+
+    def test_custom_nine_colour_chart_has_no_default_eight_colour_limit(self):
+        colors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#F0E442",
+                  "#56B4E9", "#E69F00", "#111111", "#999999"]
+        fig, ax = plt.subplots()
+        try:
+            pf.stacked_bar(ax, ["A", "B"], [[1, 2]]*9,
+                           [f"g{i}" for i in range(9)], colors=colors)
+            used = list(dict.fromkeys(matplotlib.colors.to_hex(p.get_facecolor()).upper() for p in ax.patches))
+            self.assertEqual(used, colors)
+        finally:
+            plt.close(fig)
+        report = qa.check_palette(colors)
+        self.assertEqual(report["errors"], [])
 
     def test_no_graycheck_disables_it(self):
         path = self._manifest("#5B7F62;#3E8683")

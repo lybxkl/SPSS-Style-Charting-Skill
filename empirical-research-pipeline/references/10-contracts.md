@@ -47,6 +47,7 @@
   1. 整数（`2713`，可带千分位）；
   2. 区间（`3111→2713` / `3111-2713`）——**取第一个整数**作为 N；
   3. 带前缀（`N=2713`）。
+- 成功 manifest 行至少给出一条真实 PNG/PDF 产物路径，损坏文件也是 error，不能以存在扩展名作为通过。
 - `n_scope` ∈ `sample`（默认）| `corpus` | `subgroup`。
   - `sample`/`subgroup`：`n` 必须 ≤ `--data` 的行数，否则 error；
   - `corpus`：允许 `n` > 行数（漏斗图、语料级图），只做 warning 提示。
@@ -86,15 +87,16 @@
 - 对数轴：设置 `xscale("log")` 后必须同时关闭次刻度标注
   （`ax.xaxis.set_minor_formatter(NullFormatter())`）。
 - `export_pdf_hires.py` 回填原图后必须 `page.clean_contents(sanitize=True)`，
-  并以 `garbage=4` 保存；否则旧低分辨率副本留在 `/Resources` 里。
+  并以 `garbage=4` 保存；否则旧低分辨率副本留在 `/Resources` 里。所给图题必须匹配；缺图、定位失败和多条映射重复指向同图以错误结束。
 - `qa_outputs.py` 的分辨率判据是**有效 dpi**（像素宽 ÷ 版面宽英寸），不是像素宽；
   默认 `--min-dpi 600`，`--min-width` 仅作兼容保留。
-- **字号也按版面折算**：`--min-fontsize 7.2` 与 `--target-width-cm`（默认 15）一起用。
+- **字号也按版面折算**：独立源图用 `--min-fontsize 7.2` 与 `--target-width-cm`（默认 15）；最终稿须传 DOCX 的实际宽高，以图片内容 SHA 关联源 PNG/同名矢量 PDF，不能对所有图统一套默认 15 cm。
   15 cm 的图排进 8.5 cm 双栏后，8.5 pt 只剩 4.8 pt——按原始宽度报"合格"等于没检查。
   PDF 里没有文字层的图（回填成位图之后）**不能因为"没有 span"就判通过**，必须显式报 `no_text_layer`。
 - **分类色两两灰度 ΔL\* ≥ 10**（CIE Lab，D65）。`CATEGORICAL` 是唯一色环，多系列图都从它取色；
   色板写进 manifest 的 `palette` 列（`#RRGGBB|#RRGGBB|…`），`qa_outputs --graycheck` 才能真的检查，
   否则它会静默跳过并报 `palette_unchecked`。
+- 多类别长横轴保留同图，倾斜 45°/60°/75° 并增加底部空间；导出前检测实际旋转文字边界，不能容纳时明确失败，不自动分页、截断或缩小字。
 - **多面板**用 `pubfig.compose_figure()` → 返回 `panel_sizes_cm`（每格实际厘米）与 `min_fontsize_pt`（实测），
   不要在自写脚本里手算 figsize；面板字母字号 = `max(8.5, base_size)`。
 

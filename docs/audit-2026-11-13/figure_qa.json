@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-11-13T17:29:14",
+  "checks": {
+    "figures": {
+      "dir": "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\audit-2026-11-13\\figures",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "files": [
+        {
+          "file": "fig01_binary_prevalence.png",
+          "bytes": 312885,
+          "px_width": 3543,
+          "px_height": 2941,
+          "dpi_meta": 600.0,
+          "dpi_at_width": 599.9,
+          "placed_width_cm": 15.0
+        }
+      ],
+      "count": 1,
+      "min_dpi": 600,
+      "width_cm": 15.0,
+      "pdfs": [
+        {
+          "file": "fig01_binary_prevalence.pdf",
+          "pages": 1,
+          "placed_width_cm": 15.0,
+          "min_fontsize": 8.0,
+          "min_fontsize_effective": 8.0,
+          "low_font_count": 0
+        }
+      ],
+      "min_fontsize": 8.0,
+      "min_fontsize_limit": 7.2,
+      "low_font": [],
+      "low_font_count": 0,
+      "font_verified_image_hashes": []
+    }
+  },
+  "error_count": 0,
+  "warning_count": 0
+}

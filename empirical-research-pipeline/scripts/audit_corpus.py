@@ -218,9 +218,10 @@ def classify(path: str, rec: dict, ext: str, min_chars: int) -> str:
     if error_kind:
         return ERROR_KIND_STATUS.get(error_kind, "corrupt")
     error = (rec.get("error") or "").lower()
-    # Partial reads ("read:2/9 pages unreadable") keep the salvaged text, so
-    # they are judged by the character count like any other readable file.
+    # Salvaged characters do not establish that the whole document was read.
     partial_read = error.startswith("read:") and "pages unreadable" in error
+    if partial_read:
+        return "unreadable"
     if error and not partial_read:
         if any(word in error for word in ("archive", "legacy office", "audio/video", "unsupported")):
             return "unsupported"
@@ -580,6 +581,7 @@ def main(argv: list[str] | None = None) -> int:
         "duplicate_groups": byte_stats["groups"],
         "duplicate_files": byte_stats["files"],
         "redundant_files": byte_stats["redundant"],
+        "effective_redundant_files": sum(row["dedupe_role"] == "duplicate" for row in rows),
         "keeper_ties": byte_stats["ties"],
         "content_duplicate_groups": content_stats["groups"],
         "content_duplicate_files": content_stats["files"],
@@ -805,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
 
     issues = (status_counts.get("zero_byte", 0) + status_counts.get("corrupt", 0)
               + status_counts.get("encrypted", 0) + status_counts.get("textless", 0)
-              + status_counts.get("image_only", 0) + summary["redundant_files"]
+              + status_counts.get("image_only", 0) + summary["effective_redundant_files"]
               + unreadable)
     if args.fail_on_issues and issues:
         print(f"fail-on-issues: {issues} blocking issue(s)", file=sys.stderr)

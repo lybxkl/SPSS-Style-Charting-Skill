@@ -43,12 +43,12 @@ try:
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    from docx.shared import Cm, Pt
+    from docx.shared import Cm, Pt, RGBColor
 except ImportError as exc:  # pragma: no cover - depends on the host
     print(f"ERROR: python-docx is required: {exc}", file=sys.stderr)
     raise SystemExit(2)
 
-PLACEHOLDER = re.compile(r"\{([A-Za-z0-9_.\-]+)\}")
+PLACEHOLDER = re.compile(r"\{([\w.\-]+)\}")
 FIGURE_PX_MIN = 3543  # 15 cm at 600 dpi
 
 ALIGNS = {
@@ -224,7 +224,9 @@ def resolve_text(text: str, numbers: dict, where: str) -> str:
         key = match.group(1)
         if key not in numbers:
             raise SpecError(f"{where}: no value for {{{key}}}; add it to numbers.csv")
-        return numbers[key]
+        if numbers[key] is None or not str(numbers[key]).strip():
+            raise SpecError(f"{where}: empty value for {{{key}}}")
+        return str(numbers[key])
 
     return PLACEHOLDER.sub(sub, text or "")
 
@@ -364,12 +366,17 @@ class Builder:
 
     def add_heading(self, block: dict) -> None:
         level = int(block.get("level", 1))
+        if not 1 <= level <= 9:
+            raise SpecError("heading level must be between 1 and 9")
         sizes = self.style["heading_sizes_pt"]
         size = float(block.get("size_pt") or sizes[min(level, len(sizes)) - 1])
-        self._para(self._text(block, "text"), size_pt=size,
+        paragraph = self._para(self._text(block, "text"), size_pt=size,
                    align=block.get("align", "left"), space_before=12, space_after=6,
                    line_spacing=1.2, keep_with_next=True, bold=True,
                    cjk=self.style["heading_cjk"], latin=self.style["heading_latin"])
+        paragraph.style = f"Heading {level}"
+        for run in paragraph.runs:
+            run.font.color.rgb = RGBColor(0, 0, 0)
 
     def add_para(self, block: dict) -> None:
         indent = block.get("indent_chars")

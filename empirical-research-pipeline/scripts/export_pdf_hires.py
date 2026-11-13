@@ -253,17 +253,24 @@ def main() -> int:
             return 2
         pdf = fitz.open(raw)
         replaced = []
+        unmatched, used_images = [], set()
         if not args.no_backfill:
             for item in figures:
                 tag, title, image = item.get("tag", ""), item.get("title", ""), item.get("image", "")
                 if not image or not os.path.isfile(image):
-                    print(f"WARN: image missing for {tag}: {image}", file=sys.stderr)
+                    unmatched.append({"tag": tag, "title": title, "reason": "source image missing", "image": image})
+                    print(f"ERROR: image missing for {tag}: {image}", file=sys.stderr)
                     continue
                 hit = find_figure_page(pdf, tag, title)
                 if not hit:
-                    print(f"WARN: caption not found: {tag} {title}", file=sys.stderr)
+                    unmatched.append({"tag": tag, "title": title, "reason": "caption/image match not found"})
+                    print(f"ERROR: caption not found: {tag} {title}", file=sys.stderr)
                     continue
                 page, xref = hit
+                if (page.number, xref) in used_images:
+                    unmatched.append({"tag": tag, "title": title, "reason": "multiple map entries target one image"})
+                    continue
+                used_images.add((page.number, xref))
                 page.replace_image(xref, filename=os.path.abspath(image))
                 # replace_image only swaps the stream; the old bitmap stays in
                 # /Resources until the page content is rewritten.  Without this
@@ -280,6 +287,7 @@ def main() -> int:
             "docx": docx,
             "pdf": out_pdf,
             "figures_replaced": replaced,
+            "unmatched_figures": unmatched,
             "images": widths,
             "low_resolution": low,
             "low_dpi": low_dpi,
@@ -303,6 +311,9 @@ def main() -> int:
         for w in low:
             print(f"  LOW-WIDTH p{w['page']}: {w['width']}x{w['height']}")
         print(f"report: {report_path}")
+        if unmatched:
+            print(f"ERROR: {len(unmatched)} requested figure(s) were not backfilled; fix the figure map/captions", file=sys.stderr)
+            return 2
         if (low or low_dpi) and not args.allow_low:
             print("ERROR: figure resolution below target; fix the source images "
                   "or pass --allow-low to downgrade this to a warning.", file=sys.stderr)

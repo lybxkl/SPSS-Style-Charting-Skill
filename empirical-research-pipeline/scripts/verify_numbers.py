@@ -936,8 +936,13 @@ def check_text_numbers(text: str, source: str, tables, numbers_csv, report: Repo
             continue
         semantic = token_semantics(kind)
         paragraph = text[text.rfind("\n", 0, start)+1:text.find("\n", start) if "\n" in text[start:] else len(text)]
-        mentioned = [m for m in model_ids if re.search(r"(?<![A-Za-z0-9_])"+re.escape(m)+r"(?![A-Za-z0-9_])", paragraph)]
-        claim_model = mentioned[0] if len(mentioned) == 1 else None
+        mentioned = {m for m in model_ids if re.search(r"(?<![A-Za-z0-9_])"+re.escape(m)+r"(?![A-Za-z0-9_])", paragraph)}
+        # An explicit but nonexistent M99 must not fall back to another model.
+        mentioned.update(re.findall(r"(?<![A-Za-z0-9_])M\d+(?![A-Za-z0-9_])", paragraph))
+        claim_model = next(iter(mentioned)) if len(mentioned) == 1 else None
+        if len(mentioned) > 1 and semantic in {"p", "estimate"}:
+            report.warning("V-03-context", f"{source}:{line}: {raw}", "one model context", ", ".join(sorted(mentioned)),
+                        "同段出现多个模型，数值同值不能确定归属；请拆段或逐项人工核对")
         claim_metric_match = re.match(r"(OR|HR|RR|β|B)\s*[=＝]", raw, re.I)
         claim_metric = claim_metric_match.group(1).upper() if claim_metric_match else None
         if claim_metric in {"Β", "B"}:

@@ -53,9 +53,7 @@ from analysis_utils import (  # noqa: E402
 
 FIG_W = 15 / 2.54  # 15 cm text width, A4 with standard margins
 
-# Cap on the number of figures a single run may write. The documented default pack
-# is ~40-55 charts (references/07-chart-atlas.md §1/§5); --max-charts defaults to
-# this ceiling and can only be lowered explicitly.
+# No default cap. A positive --max-charts is an explicit preview budget.
 MAX_CHARTS = 0  # unlimited by default; a positive preview budget is explicit
 
 N_SCOPES = ("sample", "corpus", "subgroup")
@@ -102,15 +100,13 @@ _C_WRAPPER_RE = re.compile(r"^C\(\s*(?P<var>[^()]+?)\s*\)$")
 _N_TOKEN_RE = re.compile(r"[Nn]\s*[=＝]\s*\d[\d,，]*(?:\s*[→\-–—~]\s*\d[\d,，]*)?")
 
 
-def short_label(value, col: str = "") -> str:
+def short_label(value, col: str = "", max_chars: int | None = None) -> str:
     """Compact tick/axis label -- one implementation, shared with ``pubfig``.
 
     The pack only adds patsy's ``C(var)[T.level]`` wrapper handling: ``C()`` is
     stripped, so ``C(charge_f)[T.水生资源]`` and ``charge_f[T.水生资源]`` print the
-    same ``charge_f：水生资源``.  Everything else (keeping ``var：level`` instead of
-    cutting to 8 characters, never scrubbing a character out of the data, truncating
-    only what is really too long) comes from :func:`pubfig.short_label`.  A second
-    private copy is exactly what let the two versions drift apart.
+    same ``charge_f：水生资源``. The optional compact utility stays compatible;
+    actual charts pass an explicit budget retaining the entire label.
     """
     s = str(value).strip()
     if col in {"category", "crime"} and s in SHORT_CATEGORY:
@@ -120,7 +116,7 @@ def short_label(value, col: str = "") -> str:
         var = _C_WRAPPER_RE.sub(r"\g<var>", dummy.group("var").strip()).strip()
         if var:
             s = f"{var}[{dummy.group('level').strip()}]"
-    return _pubfig_short_label(s, col)
+    return _pubfig_short_label(s, col, max_chars=max_chars)
 
 
 def parse_n(value) -> tuple[int | None, str]:
@@ -411,7 +407,7 @@ class ChartPack:
         self.mean_label = f"{label}均值"
 
     def vlabel(self, col: str) -> str:
-        return self.vlabels.get(col, short_label(col))
+        return self.vlabels.get(col, short_label(col, max_chars=len(str(col))+2))
 
     def glabel(self, value, col: str = "") -> str:
         if col == self.outcome and self.outcome_labels:
@@ -422,7 +418,7 @@ class ChartPack:
             except (TypeError, ValueError):
                 pass
         mapping = self.glabels.get(col, {})
-        return mapping.get(str(value), short_label(value, col))
+        return mapping.get(str(value), short_label(value, col, max_chars=len(str(value))+2))
 
     def numeric_display(self, s: pd.Series):
         """Return (values, note) where note is '', 'log', or 'clip'."""
@@ -607,6 +603,7 @@ class ChartPack:
                 note_parts.append(f"right={after_right:.3f}")
             row["note"] = "; ".join(x for x in note_parts if x)
             paths = save_fig(fig, self.fig_dir, name, formats=self.formats)
+            row["tick_layout"] = {"status": "passed", "changes": getattr(fig, "_tick_layout_changes", [])}
         except Exception as exc:                 # 一张图失败不该毁掉整包
             reason = f"error: {type(exc).__name__}: {exc}"[:240]
             self.errors += 1
@@ -789,12 +786,17 @@ class ChartPack:
                       self.caption(f"按 {self.vlabel(region)} 统计，仅列前 {self.top_n} 类"))
 
     def binary_prevalence(self, outcome, binaries):
+        ensure_style()
         cols = []
         for c in binaries:
             if c not in self.df.columns:
                 continue
-            s = pd.to_numeric(self.df[c], errors="coerce").dropna()
-            if len(s) >= self.min_n and 0 < s.mean() < 1:
+            numeric = pd.to_numeric(self.df[c], errors="coerce")
+            s = numeric.dropna()
+            if (self.df[c].notna() & numeric.isna()).any() or not set(s.unique()) <= {0, 1}:
+                self.skip("A 数据质量", "关键二元变量的发生率是多少？", f"{c}: 存在非 0/1 值，不能作为二元比例")
+                continue
+            if len(s) >= self.min_n:
                 cols.append(c)
         if not cols:
             self.skip("A 数据质量", "关键二元变量的发生率是多少？", "没有可用的二元变量")
@@ -808,27 +810,23 @@ class ChartPack:
             lo.append(a)
             hi.append(b)
             sizes.append(n)
+        labels = [f"{self.vlabel(c)}（n={n}）" for c, n in zip(cols, sizes)]
+        values, lows, highs = (np.asarray(a) * 100 for a in (est, lo, hi))
         fig, ax = plt.subplots(figsize=(FIG_W, 3.8))
-        bar_counts(ax, [f"{self.vlabel(c)}（n={n}）" for c, n in zip(cols, sizes)],
-                   np.array(est) * 100, ylabel="发生率（%）", annotate=False)
-        ax.errorbar(np.arange(len(cols)), np.array(est) * 100,
-                    yerr=[(np.array(est) - np.array(lo)) * 100,
-                          (np.array(hi) - np.array(est)) * 100],
+        bar_counts(ax, labels, values, ylabel="发生率（%）", annotate=False)
+        ax.errorbar(np.arange(len(cols)), values, yerr=[values-lows, highs-values],
                     fmt="none", ecolor=INK, elinewidth=0.8, capsize=2.2, zorder=3)
-        for i, v in enumerate(est):
-            ax.text(i, hi[i] * 100 + 2.0, f"{v * 100:.1f}%", ha="center",
-                    va="bottom", fontsize=7.8)
-        ax.set_ylim(0, 105)
-        # One chart, up to 10 variables, each with its own valid N: there is no
-        # single sample size. Report the span with n_scope="subgroup" instead of
-        # a bare min(), which read as if the whole chart used that N.
+        for i, value, high in zip(range(len(cols)), values, highs):
+            ax.text(i, high + 2.0, f"{value:.1f}%", ha="center", va="bottom", fontsize=8.5)
+        ax.set_ylim(0, 112)
+        # save_fig measures and tilts dense tick labels on this same figure.
+        # Never paginate, truncate categories or shrink labels to make them fit.
         n_span = min(sizes) if min(sizes) == max(sizes) else f"{min(sizes)}→{max(sizes)}"
         self.save(fig, "binary_prevalence", "A 数据质量",
-                  "关键二元变量的发生率是多少？", "bar + 95%CI",
-                  cols, n_span,
+                  "关键二元变量的发生率是多少？", "bar + 95%CI", cols, n_span,
                   self.caption("横轴标注各变量有效 N；误差线为 95% Wilson CI"),
-                  note=f"per-variable n {min(sizes)}-{max(sizes)}",
-                  n_scope="subgroup")
+                  note=f"per-variable n {min(sizes)}-{max(sizes)}; layout=single figure, adaptive tilted labels",
+                  n_scope="subgroup", extra={"category_labels": labels, "category_indices": list(range(len(cols)))})
 
     def outcome_distribution(self, outcome):
         if not outcome:
@@ -1806,7 +1804,7 @@ class ChartPack:
                             fig, ax = plt.subplots(
                                 figsize=(FIG_W, max(3.2, 0.4 * len(sub) + 1.2)))
                             forest_plot(ax,
-                                        [term_labels.get(str(x), short_label(x))
+                                        [term_labels.get(str(x), short_label(x, max_chars=len(str(x))+2))
                                          for x in sub["term"]],
                                         sub["est"].values, sub["lo"].values,
                                         sub["hi"].values,
@@ -2211,7 +2209,9 @@ def main() -> int:
                            sections=split_multi(args.sections) if args.sections else None,
                            max_charts=args.max_charts)
 
-    prevalence_binaries = binary_predictors[:]
+    # Predictor exclusions (constants/outcome copies) prevent singular models,
+    # but do not justify omitting a declared variable's descriptive prevalence.
+    prevalence_binaries = [c for c in binaries if c != outcome_col]
     if outcome_col and kind == "binary":
         prevalence_binaries = [outcome_col] + prevalence_binaries
 

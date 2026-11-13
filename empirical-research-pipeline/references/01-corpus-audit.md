@@ -27,7 +27,7 @@
 | `media` | 音频/视频 | 转写/抽帧后再用 |
 | `unreadable` | 读取失败（权限、路径失效、文件被占用等） | 否，先修复再重跑 |
 
-重复不是独立的 `status`：内容相同的文件仍是 `valid`，另用 `dup_group`/`dup_role` 标记 keeper/duplicate；`unique_valid_files` 已扣除副本（`--no-hash` 时无法判断副本，此时等于 `valid`）。单个文件读不出来时脚本只把该文件记为 `unreadable` 并继续，不会丢弃整次扫描结果。
+重复不是独立的 `status`：内容相同的文件仍是 `valid`，另保留字节组 `dup_group`/`dup_role`、内容组 `dup_content_group`/`dup_role_content`，并以两者并集生成 `dedupe_group`/`dedupe_role`，统一选一份 keeper。`unique_valid_files` 按统一角色扣除副本；禁用字节哈希但显式开启内容去重时，仍按实际文本证据归并。单个文件读不出来时脚本只把该文件记为 `unreadable` 并继续，不会丢弃整次扫描结果。
 
 ## 先跑审计脚本
 
@@ -56,7 +56,7 @@ python scripts/audit_corpus.py \
 
 | 文件 | 关键列 |
 |---|---|
-| `corpus_files.csv` | `rel_path, relpath, top, name, ext, kind, bytes, pages, chars, chars_effective, images, encrypted, status, year_hint, md5, dup_group, dup_content_group, dup_role, dup_role_content, error, error_kind` |
+| `corpus_files.csv` | `rel_path, relpath, top, name, ext, kind, bytes, pages, chars, chars_effective, images, encrypted, status, year_hint, md5, dup_group, dup_content_group, dup_role, dup_role_content, dedupe_group, dedupe_role, error, error_kind` |
 | `corpus_duplicates.csv` | `group, md5, role, keeper_reason, top, file, rel_path, relpath, bytes, pages, chars, chars_effective` |
 | `corpus_summary.json` | 总数、有效数、重复组、状态分布、扩展名分布、年份提示、`sampling_frame` |
 | `corpus_report.md` | 可直接放进项目日志的中文摘要，顶部有「抽样框」一节 |
@@ -70,8 +70,8 @@ python scripts/audit_corpus.py \
 
 ## 多格式处理规则
 
-- **PDF**：优先取文字层，按页按阅读顺序提取；单页损坏只会记为 `read:…` 错误并保留其余页的正文，只有整份文档没有一页可读时才记为 `corrupt`，`extract_text()` 也同样保留可读页、只有全部页不可读才报错。`chars_effective` 低且 `images` 高时记为 `image_only`，先 OCR。
-- **DOCX/DOCM、ODT、PPTX/PPTM**：读段落/幻灯片文本；旧版 `.doc/.ppt` 用 Office 或 LibreOffice 转换。
+- **PDF**：优先取文字层，按页按阅读顺序提取；部分页不可读时审计保留可读字数和 `read:…` 错误，但标为 `unreadable`，不能将这份资料当完整可读文件。`extract_text()` 默认拒绝部分读取；仅诊断/抢救调用显式 `allow_partial=True` 时返回已读页，不能拿它冒充完整抽取。全部页不可读始终报错。`chars_effective` 低且 `images` 高时记为 `image_only`，先 OCR。
+- **DOCX/DOCM、ODT、PPTX/PPTM**：按 XML 元素拼接段内 runs，保留段落/换行分隔；DOCX 同时读取页眉、页脚、脚注、尾注与批注，PPTX 包含演讲者备注，不能把这些内容遗漏为“无数据”。这些部件尚不等于保留表格单元格坐标，表格值应另用结构定位或适配器。旧版 `.doc/.ppt` 用 Office 或 LibreOffice 转换。
 - **XLSX/XLSM**：按工作表读取文本/单元格；建议安装 `openpyxl`，未安装时会尝试直接解析 XML。`.xls` 先另存为 `.xlsx`。
 - **CSV/TSV/JSON**：属于表格/结构化数据，审计只统计字符与行；字段质量另做检查，编码工作表会跳过它们。
 - **HTML**：去掉脚本、样式和标签后统计正文。
@@ -106,14 +106,14 @@ MD5 相同 → 同一内容 → 保留一份
 
 ### 第二层：内容级（`--content-dedupe`，默认关闭）
 
-对每个 `valid` 文件调用 `text_extract.extract_text()`，去掉空白与标点、统一小写/全半角（NFKC）后取 SHA-1，再分组写 `dup_content_group` / `dup_role_content`。它能抓到"同一文档的转码版、另排版、另存版本"这类字节不同但内容相同的副本。
+对每个 `valid` 文件调用 `text_extract.extract_text()`，做 NFKC、将连续空白折叠为一个空格后取 SHA-1；保留标点与大小写，避免把 `1.2` 与 `12`、`ID a1` 与 `ID A1` 当作相同内容。以此文本键分组写 `dup_content_group` / `dup_role_content`。它能抓到"同一文档的转码版、另排版、另存版本"这类字节不同但内容相同的副本。
 
 开启后报告同时给出两组数字：
 
 - 字节级重复组/多余副本；
 - 内容级重复组/多余副本。
 
-二者关系：**字节级只看字节，内容级在 `valid` 文件上按正文归并**。对能提取正文的文件，字节级相同必然内容相同，所以内容级不会漏掉这类重复；但内容级可能把多个字节组合并成一个内容组，也可能发现字节级没有的重复，两组数字口径不同、不能相减，应分别报告。内容级多出来的多余副本就是需要人工复核的转码/排版副本。内容级去重只改变报告与 CSV 标记，不会自动删除任何文件。
+二者关系：**字节级只看字节，内容级在 `valid` 文件上按正文归并**。对能提取正文的文件，字节级相同必然内容相同，所以内容级不会漏掉这类重复；但内容级可能把多个字节组合并成一个内容组，也可能发现字节级没有的重复，两组数字口径不同、不能相减，应分别报告。不能把两组冗余数量相加。`effective_redundant_files` 是统一去重组的多余副本数，编码与去重计划使用同一组 keeper；内容相同的转码/排版副本仍须查看上下文。内容级去重只改变报告与 CSV 标记，不会自动删除任何文件。
 
 ### 第三层：标题/近似内容级（人工）
 

@@ -77,6 +77,46 @@ class IntegrityAudit(IntegrityCase):
 
 
 class CorpusAudit(TempCase):
+    def test_partial_pdf_is_not_classified_as_complete_valid_source(self):
+        from audit_corpus import classify
+        self.assertEqual(classify("synthetic.pdf", {"error": "read:1/4 pages unreadable", "chars_effective": 3000}, "pdf", 10), "unreadable")
+
+    def test_decisions_compare_large_candidates_exactly_and_require_real_supersession(self):
+        import check_decisions as cd
+        huge = 10**28
+        self.assertFalse(cd._same_value(str(huge), str(huge+1)))
+        Path(self.p("a.txt")).write_text("SYNTHETIC value=1")
+        item = {"id":"D1", "stage":"extract", "target":"a.txt#x", "decision":"value", "value":1,
+                "reason":"synthetic reread", "evidence":["a.txt"], "confidence":1, "needs_human":True}
+        second = dict(item, id="D2", supersedes="WRONG", needs_human=False)
+        review = {("a.txt","x"):{"value":"1", "alternatives":""}}
+        self.assertTrue(cd.validate_decisions([item, second], self.tmp, review))
+        second["supersedes"] = "D1"
+        self.assertEqual(cd.validate_decisions([item, second], self.tmp, review), [])
+
+    def test_valid_all_na_profile_does_not_claim_zero_match_failure(self):
+        raw = Path(self.p("raw")); raw.mkdir()
+        (raw/"a.txt").write_text("合成访谈记录\n年龄：未记录\n其他资料：本例仅用于测试，不是研究结果。", encoding="utf-8")
+        profile = {"profile":"synthetic-na", "version":"1", "fields":[{"name":"age", "func":"quantity", "type":"numeric", "unit":"岁", "labels":["年龄"], "na":["未记录"]}]}
+        Path(self.p("profile.json")).write_text(json.dumps(profile, ensure_ascii=False), encoding="utf-8")
+        result = run("make_coding_sheet.py", "--root", raw, "--out", self.p("coding"), "--extract", self.p("profile.json"), "--min-chars", "5")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(read_csv(self.p("coding/dataset.csv"))[0]["age"], "")
+
+    def test_high_precision_json_number_requires_exact_source_evidence(self):
+        from verify_dataset import Verifier, VerificationError
+        registry = self.p("registry.json")
+        Path(registry).write_text('{}', encoding="utf-8")
+        source = self.p("numbers.json")
+        Path(source).write_text('{"x": 0.12345678901234567890123456789}', encoding="utf-8")
+        v = Verifier(registry, self.tmp)
+        evidence = {"path": source, "sha256": sha256(source), "locator": {"type": "json", "pointer": "/x"}, "raw": .12345678901234568}
+        with self.assertRaises(VerificationError):
+            v.source(evidence)
+        evidence["locator"]["number_as_text"] = True
+        evidence["raw"] = "0.12345678901234567890123456789"
+        self.assertEqual(v.source(evidence), evidence["raw"])
+
     def test_text_dedup_preserves_decimal_and_case_distinctions(self):
         from audit_corpus import content_key
         self.assertNotEqual(content_key("金额 1.2 万"), content_key("金额 12 万"))
@@ -114,6 +154,45 @@ class CorpusAudit(TempCase):
 
 
 class StatisticsAudit(TempCase):
+    def test_unknown_requested_columns_and_kano_pairs_never_disappear(self):
+        import methods_pack as mp
+        import methods_lib as ml
+        df = pd.DataFrame({"x":range(10), "y":range(10), "a":[1]*10, "b":[5]*10})
+        with self.assertRaises((ml.MethodError, mp.Skip)):
+            mp.run_m03({"df":df, "cfg":{"correlate":["x", "y", "TYPO"]}, "alpha":.05})
+        with self.assertRaises((ml.MethodError, mp.Skip)):
+            mp.run_m14({"df":df, "cfg":{"kano":{"valid":["a","b"], "bad":["a","TYPO"]}}})
+
+    def test_different_pairwise_samples_have_no_invented_scalar_n(self):
+        import methods_pack as mp
+        import methods_lib as ml
+        from types import SimpleNamespace
+        df = pd.DataFrame({"a":range(10), "b":range(10), "c":list(range(5))+[None]*5})
+        result = ml.correlation(df, list(df), method="pearson")
+        self.assertIsNone(mp._model_n(SimpleNamespace(result=result), df))
+
+    def test_welch_is_the_selected_omnibus_test_for_unequal_variances(self):
+        import methods_lib as ml
+        from scipy import stats
+        rng = np.random.default_rng(9)
+        groups = [rng.normal(0, 1, 70), rng.normal(.3, 2, 40), rng.normal(4, 18, 8)]
+        df = pd.DataFrame({"y": np.concatenate(groups), "g": np.repeat(["a", "b", "c"], [len(g) for g in groups])})
+        result = ml.anova(df, "y", "g")
+        self.assertEqual(result.stats["selected_test"], "Welch")
+        table = result.tables[1][1].iloc[0]
+        self.assertEqual(result.stats["p"], table["p"])
+        post = ml.posthoc(df, "y", "g", unequal=True).tables[0][1]
+        self.assertAlmostEqual(post.iloc[0]["p_raw"], stats.ttest_ind(groups[0], groups[1], equal_var=False).pvalue, places=5)
+
+    def test_time_axis_numeric_strings_are_sorted_numerically_and_gaps_fail(self):
+        import methods_lib as ml
+        df = pd.DataFrame({"t": list(map(str, range(1, 13))), "y": np.sin(np.arange(12))})
+        result = ml.time_series(df, "t", "y", max_p=0)
+        fitted = dict(result.tables)["fitted"]
+        self.assertEqual(fitted["time"].tolist(), list(range(1,13)))
+        with self.assertRaises(ml.MethodError):
+            ml.time_series(df.drop(index=5), "t", "y", max_p=0)
+
     def test_missing_category_does_not_become_reference_group(self):
         import methods_lib as ml
         df = pd.DataFrame({"g": ["A"]*15 + ["B"]*15 + [None]*15,
@@ -210,7 +289,133 @@ class StatisticsAudit(TempCase):
         np.testing.assert_allclose(np.abs(captured[0]), np.abs(expected), atol=1e-10)
 
 
+class DenseChartAudit(TempCase):
+    def test_composed_paper_figure_also_checks_and_tilts_dense_ticks(self):
+        import pubfig as pf
+        pf.set_style()
+        labels = [f"合成完整分类项目 {i}（n=100）" for i in range(10)]
+        result = pf.compose_figure([{"draw": lambda ax: pf.bar_counts(ax, labels, range(10), annotate=False)}], width_cm=15, height_cm=10)
+        try:
+            self.assertEqual(result["tick_layout"]["status"], "passed")
+            self.assertEqual(pf.tick_label_issues(result["fig"]), [])
+            self.assertEqual([t.get_text() for t in result["fig"].axes[0].get_xticklabels()], labels)
+        finally:
+            plt.close(result["fig"])
+
+    def test_chart_labels_never_silently_truncate_long_variable_or_category_names(self):
+        import auto_chart_pack as cp
+        label = "这是一个超过十六个中文字且需要完整保留的实际类别名称"
+        pack = cp.ChartPack(pd.DataFrame({label:[0,1]}), self.tmp, {}, [], 8, 1)
+        self.assertEqual(pack.vlabel(label), label)
+        self.assertEqual(pack.glabel(label), label)
+
+    def test_screenshot_shape_labels_tilt_on_one_figure_and_all_values_survive(self):
+        import auto_chart_pack as cp
+        import pubfig as pf
+        pf.set_style()
+        names = ["宣告缓刑", "缴纳罚金", "自首", "坦白", "认罪认罚", "立功", "退赔", "生态修复被害人谅解", "前科劣迹", "累犯"]
+        df = pd.DataFrame({f"v{i}": [0]*(i+1)+[1]*(39-i) for i in range(10)})
+        cfg = {"variable_labels": dict(zip(df.columns, names))}
+        pack = cp.ChartPack(df, self.tmp, cfg, ["png", "pdf"], 8, 5)
+        pack.binary_prevalence(None, list(df.columns))
+        self.assertEqual(pack.errors, 0, pack.manifest)
+        self.assertEqual(pack.manifest[0]["category_indices"], list(range(10)))
+        self.assertEqual(len(pack.manifest), 1)
+        self.assertEqual(pack.manifest[0]["tick_layout"]["status"], "passed")
+        self.assertIn(pack.manifest[0]["tick_layout"]["changes"][0]["angle"], [45,60,75])
+        from PIL import Image
+        with Image.open(Path(self.tmp)/pack.manifest[0]["png"]) as im:
+            self.assertGreaterEqual(im.width, 3540)
+
+    def test_impossible_density_fails_visibly_without_pagination_or_lost_items(self):
+        import auto_chart_pack as cp
+        import pubfig as pf
+        pf.set_style()
+        df = pd.DataFrame({f"v{i}": [0]*10+[1]*30 for i in range(100)})
+        labels = {c: f"合成测试：第 {i+1} 项生态修复与赔偿情况及其他长期追踪指标" for i,c in enumerate(df)}
+        pack = cp.ChartPack(df, self.tmp, {"variable_labels": labels}, [], 8, 5)
+        pack.binary_prevalence(None, list(df))
+        self.assertEqual(len(pack.manifest), 1)
+        self.assertEqual(pack.manifest[0]["category_indices"], list(range(100)))
+        self.assertEqual(pack.errors, 1)
+        self.assertTrue(pack.manifest[0]["status"].startswith("error:"))
+        self.assertFalse(pack.manifest[0]["png"])
+
+    def test_constant_binary_columns_are_not_omitted_or_fractional_values_coerced(self):
+        import auto_chart_pack as cp
+        df = pd.DataFrame({"zero": [0]*30, "one": [1]*30, "invalid": [.9]*30,
+                           "invalid_text": [0, 1]*14+["unparsed", None]})
+        pack = cp.ChartPack(df, self.tmp, {}, [], 8, 5)
+        seen = []
+        def capture(fig, *args, **kwargs):
+            seen.extend(args[4])
+            plt.close(fig)
+        pack.save = capture
+        pack.binary_prevalence(None, list(df))
+        self.assertEqual(seen, ["zero", "one"])
+        self.assertTrue(pack.skipped)
+
+    def test_generic_bar_tilt_preserves_full_labels_and_publication_width(self):
+        import pubfig as pf
+        pf.set_style()
+        labels = [f"完整测试分类{i}" for i in range(8)]
+        fig, ax = plt.subplots(figsize=(15/2.54, 3.4))
+        pf.bar_counts(ax, labels, np.arange(8)+1)
+        pf.fit_tick_labels(fig)
+        self.assertEqual([t.get_text().replace("\n", "") for t in ax.get_xticklabels()], labels)
+        self.assertEqual(pf.tick_label_issues(fig), [])
+        self.assertAlmostEqual(fig.get_figwidth(), 15/2.54)
+        plt.close(fig)
+
+
 class DeliveryAudit(TempCase):
+    def test_chinese_placeholder_and_semantic_heading_are_supported(self):
+        from assemble_manuscript import resolve_text, Builder, SpecError
+        self.assertEqual(resolve_text("N={样本量}", {"样本量":"17"}, "test"), "N=17")
+        with self.assertRaises(SpecError): resolve_text("N={样本量}", {}, "test")
+        b = Builder({}, self.tmp, {}, self.p("paper.docx"))
+        b.add_heading({"text":"合成测试方法", "level":2})
+        self.assertEqual(b.doc.paragraphs[-1].style.name, "Heading 2")
+        with self.assertRaises(SpecError): b.add_heading({"text":"bad", "level":0})
+
+    def test_explicit_unknown_model_does_not_borrow_another_models_number(self):
+        import verify_numbers as vn
+        table = vn.Table("coef.csv", [{"model":"M1", "OR":"1.2", "p":".001"}])
+        report = vn.Report()
+        vn.check_text_numbers("模型 M99: OR=1.2; p=.001", "synthetic.md", [table], [], report, .5)
+        self.assertEqual(report.errors, 2)
+        report = vn.Report()
+        vn.check_text_numbers("M1 与 M2: OR=1.2", "synthetic.md", [table], [], report, .5)
+        self.assertEqual(report.warnings, 1)
+
+    def test_caption_cannot_be_its_own_body_citation(self):
+        import verify_numbers as vn
+        from types import SimpleNamespace
+        figure = SimpleNamespace(series="图", number=1, caption="图1 合成图 N=4", where="manifest:2", id="图1")
+        report = vn.Report()
+        vn.check_figure_numbering([figure], figure.caption, report)
+        self.assertEqual(report.warnings, 1)
+        report = vn.Report()
+        vn.check_figure_numbering([figure], "正文见图1。\n"+figure.caption, report)
+        self.assertEqual(report.warnings, 0)
+
+    def test_unmatched_backfill_fails_even_if_original_pdf_resolution_passes(self):
+        import fitz
+        import shutil
+        import export_pdf_hires as export
+        png = make_png(self.p("x.png"), width=3600, height=1200)
+        source = self.p("original.pdf")
+        pdf=fitz.open(); page=pdf.new_page()
+        page.insert_image(fitz.Rect(50,50,475,191.667),filename=png)
+        page.insert_text((50,215),"Figure1 Actual title")
+        pdf.save(source); pdf.close()
+        docx=make_docx(self.p("paper.docx"), ["SYNTHETIC"])
+        fmap=self.p("map.json")
+        Path(fmap).write_text(json.dumps([{"tag":"Figure1", "title":"WRONG", "image":png}]), encoding="utf-8")
+        with patch("sys.argv", ["export_pdf_hires.py", "--docx", docx, "--out-pdf", self.p("final.pdf"), "--figure-map", fmap]), patch.object(export, "word_export", side_effect=lambda _doc, out: shutil.copyfile(source,out)):
+            self.assertEqual(export.main(), 2)
+        self.assertTrue(load_json(self.p("final_export_report.json"))["unmatched_figures"])
+
     def test_empty_placeholder_and_malformed_table_never_build(self):
         from assemble_manuscript import load_numbers, read_table, SpecError
         file = write_csv(self.p("numbers.csv"), ["key","value"], [["n",""]])

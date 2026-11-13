@@ -1222,8 +1222,8 @@ def main() -> int:
         producers["make_coding_sheet.py --extract"] = run
         merged.setdefault("schema", "run.json v2")
         merged["extract"] = run
-        # Also mirror the scalars at the top level when nobody else claimed them,
-        # so a reader that predates `producers` still finds `documents`/`fields`.
+        # Mirror the current extraction, so legacy readers do not see stale
+        # documents/fields after a decisions-based re-run.
         for key, value in run.items():
             merged[key] = value
         # `review` describes this extraction run, not the first one that ever
@@ -1244,8 +1244,14 @@ def main() -> int:
                   f"check_decisions.py, then re-run with --decisions",
                   file=sys.stderr)
             return 2
+        if ds_errors:
+            print(f"ERROR: {ds_errors} document(s) failed field extraction; see evidence/run.json and repair before final use", file=sys.stderr)
+            return 2
         empty = [n for n in ds_field_names if not ds_hit_counts.get(n, 0)]
-        if len(empty) == len(ds_field_names):
+        explicit_all_na = bool(ds_evidence) and all(
+            field.get("source") == "decision:na" or field.get("na") or field.get("negated") or field.get("redacted")
+            for rec in ds_evidence for field in rec.get("fields", {}).values())
+        if len(empty) == len(ds_field_names) and not explicit_all_na:
             print(f"ERROR: profile '{extract_profile['profile']}' matched 0 of "
                   f"{len(ds_field_names)} fields in {len(ds_rows)} document(s); the "
                   f"profile does not fit this corpus (check --extract, scope and "

@@ -503,6 +503,139 @@ def _write_formats(fig, out_dir: str, name: str,
     return paths
 
 
+def _tick_polygon(tick, renderer):
+    """Rotated text rectangle; axis-aligned boxes falsely flag tilted labels."""
+    box = tick.get_window_extent(renderer)
+    angle = float(tick.get_rotation())
+    if not angle:
+        return np.array([[box.x0, box.y0], [box.x1, box.y0],
+                         [box.x1, box.y1], [box.x0, box.y1]])
+    tick.set_rotation(0)
+    try:
+        unrotated = tick.get_window_extent(renderer)
+    finally:
+        tick.set_rotation(angle)
+    w, h = unrotated.width, unrotated.height
+    corners = np.array([[-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]])
+    theta = math.radians(angle)
+    rotation = np.array([[math.cos(theta), -math.sin(theta)],
+                         [math.sin(theta), math.cos(theta)]])
+    return corners @ rotation.T + [(box.x0+box.x1)/2, (box.y0+box.y1)/2]
+
+
+def _polygons_overlap(a, b, tolerance=1.0):
+    # Separating-axis test for two convex text rectangles. One pixel of metric
+    # rounding is tolerated; crossing bounding boxes alone do not imply overlap.
+    for polygon in (a, b):
+        for edge in np.roll(polygon, -1, axis=0) - polygon:
+            normal = np.array([-edge[1], edge[0]])
+            length = np.linalg.norm(normal)
+            if not length:
+                continue
+            normal /= length
+            pa, pb = a @ normal, b @ normal
+            if min(pa.max(), pb.max()) - max(pa.min(), pb.min()) <= tolerance:
+                return False
+    return True
+
+
+def _visible_ticks(ax, direction):
+    axis = ax.xaxis if direction == "x" else ax.yaxis
+    if not ax.axison or not ax.get_visible() or not axis.get_visible():
+        return []
+    lower, upper = sorted(ax.get_xlim() if direction == "x" else ax.get_ylim())
+    # Locators may return a tick just beyond the axis limits. Matplotlib does
+    # not draw that tick, although its Text artist still has visible=True.
+    return [t for position, t in zip(axis.get_majorticklocs(), axis.get_ticklabels())
+            if lower-1e-9 <= position <= upper+1e-9 and t.get_visible() and t.get_text()]
+
+
+def tick_label_issues(fig) -> list[dict]:
+    """Measure tick collisions and canvas clipping, respecting text rotation.
+
+    This does not check arbitrary annotations, cross-panel collisions or chart
+    semantics. Rendered figure and Word placement review are still necessary.
+    """
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    canvas = fig.bbox
+    issues = []
+    for i, ax in enumerate(fig.axes):
+        if not ax.axison:
+            continue
+        for direction in ("x", "y"):
+            ticks = _visible_ticks(ax, direction)
+            boxes = [t.get_window_extent(renderer) for t in ticks]
+            polygons = [_tick_polygon(t, renderer) for t in ticks]
+            for j, (tick, box) in enumerate(zip(ticks, boxes)):
+                if box.x0 < canvas.x0 - 1 or box.x1 > canvas.x1 + 1 or box.y0 < canvas.y0 - 1 or box.y1 > canvas.y1 + 1:
+                    issues.append({"axes": i, "axis": direction, "kind": "clipped", "label": tick.get_text()})
+                for k in range(j+1, len(ticks)):
+                    if box.overlaps(boxes[k]) and _polygons_overlap(polygons[j], polygons[k]):
+                        issues.append({"axes": i, "axis": direction, "kind": "overlap", "label": tick.get_text(), "other": ticks[k].get_text()})
+    return issues
+
+
+def fit_tick_labels(fig) -> list[dict]:
+    """Tilt dense x labels on ONE figure, keeping all text and the font size.
+
+    Try 45, 60, then 75 degrees and reserve physical bottom space. There is no
+    automatic pagination, category truncation, font reduction or width change.
+    If the target paper width cannot fit the items, fail visibly for the Agent
+    to choose a larger paper/figure or a user-approved alternative arrangement.
+    """
+    original_dpi = fig.dpi
+    changes = []
+    try:
+        fig.set_dpi(100)
+        initial = tick_label_issues(fig)
+        if not initial:
+            return changes
+        crowded_x = {r["axes"] for r in initial if r["axis"] == "x" and r["kind"] == "overlap"}
+        for angle in (45, 60, 75) if crowded_x else (None,):
+            for i in crowded_x:
+                for tick in fig.axes[i].get_xticklabels():
+                    tick.set_rotation(angle)
+                    tick.set_rotation_mode("anchor")
+                    tick.set_ha("right")
+                    tick.set_va("center")
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            height = float(fig.get_figheight())
+            bottom_extra, row_extra = 0.0, 0.0
+            for i, ax in enumerate(fig.axes):
+                xt = _visible_ticks(ax, "x")
+                if xt:
+                    lowest = min(t.get_window_extent(renderer).y0 for t in xt)
+                    bottom_extra = max(bottom_extra, (8-lowest)/fig.dpi)
+                yt = _visible_ticks(ax, "y")
+                if len(yt) > 1 and any(r["axes"] == i and r["axis"] == "y" and r["kind"] == "overlap" for r in initial):
+                    required = sum(t.get_window_extent(renderer).height + 5 for t in yt)/fig.dpi
+                    row_extra = max(row_extra, (required-ax.bbox.height/fig.dpi)/max(ax.get_position().height, .1))
+            if row_extra > 0:
+                fig.set_figheight(height + row_extra)
+                height += row_extra
+            if bottom_extra > 0:
+                sp = fig.subplotpars
+                bottom, top = sp.bottom, sp.top
+                fig.set_figheight(height + bottom_extra)
+                fig.subplots_adjust(bottom=(bottom*height+bottom_extra)/(height+bottom_extra),
+                                    top=(top*height+bottom_extra)/(height+bottom_extra))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                fig.tight_layout(pad=0.7)
+            remaining = tick_label_issues(fig)
+            if not remaining:
+                changes = [{"axes": i, "axis": "x", "action": "tilt", "angle": angle} for i in sorted(crowded_x)]
+                if row_extra > 0:
+                    changes.append({"axis": "y", "action": "increase_height"})
+                return changes
+        problem = remaining[0]
+        raise ValueError(f"tick-label layout {problem['kind']} on {problem['axis']} axis: {problem['label']!r}; cannot fit at the chosen publication width without losing readability; choose a larger figure/paper or another arrangement (no automatic pagination)")
+    finally:
+        fig.set_dpi(original_dpi)
+
+
 def save_fig(fig, out_dir: str, name: str,
              formats: Sequence[str] = ("png", "pdf", "tiff"),
              dpi: int = 600, pad: float | None = None) -> list[str]:
@@ -527,6 +660,7 @@ def save_fig(fig, out_dir: str, name: str,
         resolution that ``qa_outputs.py`` measures.
     """
     _apply_pad(fig, pad)
+    fig._tick_layout_changes = fit_tick_labels(fig)
     paths = _write_formats(fig, out_dir, name, formats, dpi)
     plt.close(fig)
     return paths
@@ -926,6 +1060,8 @@ def compose_figure(panels, out_dir: str | None = None, name: str = "figure",
     if title:
         fig.suptitle(str(title), fontsize=base_size + 0.5, y=0.985)
 
+    tick_layout = fit_tick_labels(fig)
+    height_cm = float(fig.get_figheight()) / CM
     used_colors = _collect_colors(axes)
     panel_sizes = _measure_panel_sizes_cm(fig, axes)
     min_fontsize = _measure_min_fontsize(fig, axes)
@@ -959,6 +1095,7 @@ def compose_figure(panels, out_dir: str | None = None, name: str = "figure",
         "panel_sizes_cm": panel_sizes,
         "colors": used_colors,
         "min_fontsize_pt": min_fontsize,
+        "tick_layout": {"status": "passed", "changes": tick_layout},
         "width_cm": round(width_cm, 3),
         "height_cm": round(height_cm, 3),
         "dpi": int(dpi),

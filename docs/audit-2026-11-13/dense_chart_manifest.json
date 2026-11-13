@@ -1,0 +1,73 @@
+{
+  "fixture": "SYNTHETIC, not research evidence",
+  "n": 100,
+  "counts": [
+    62,
+    71,
+    30,
+    52,
+    39,
+    2,
+    8,
+    41,
+    3,
+    11
+  ],
+  "charts": [
+    {
+      "id": "F01",
+      "section": "A 数据质量",
+      "question": "关键二元变量的发生率是多少？",
+      "chart_type": "bar + 95%CI",
+      "variables": "v0; v1; v2; v3; v4; v5; v6; v7; v8; v9",
+      "n": 100,
+      "n_scope": "subgroup",
+      "png": "figures/fig01_binary_prevalence.png",
+      "pdf": "figures/fig01_binary_prevalence.pdf",
+      "tiff": "",
+      "caption": "注：N=100；横轴标注各变量有效 N；误差线为 95% Wilson CI；数据来源：分析数据集。",
+      "note": "per-variable n 100-100; layout=single figure, adaptive tilted labels; top=0.938",
+      "dpi": 600,
+      "px_width": 3543,
+      "model_id": "",
+      "data_hash": "fc32aac8fe6870ade3dff702d1f89e9843806db9abc07ef0dc83cffa27764093",
+      "status": "ok",
+      "palette": "#1C4E7B|#E18560|#4B6E52|#67130A|#588B78|#1D1932|#BABABA|#D8D8D8",
+      "category_labels": [
+        "宣告缓刑（n=100）",
+        "缴纳罚金（n=100）",
+        "自首（n=100）",
+        "坦白（n=100）",
+        "认罪认罚（n=100）",
+        "立功（n=100）",
+        "退赔（n=100）",
+        "生态修复与被害人谅解（n=100）",
+        "前科劣迹（n=100）",
+        "累犯（n=100）"
+      ],
+      "category_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "tick_layout": {
+        "status": "passed",
+        "changes": [
+          {
+            "axes": 0,
+            "axis": "x",
+            "action": "tilt",
+            "angle": 45
+          }
+        ]
+      }
+    }
+  ]
+}

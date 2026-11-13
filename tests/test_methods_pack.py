@@ -155,6 +155,10 @@ class MethodsRunTest(TempCase):
         grouped = pd.DataFrame({"group": ["甲", "乙", "丙"], "n": [10, 12, 8]})
         run = types.SimpleNamespace(
             result=types.SimpleNamespace(stats={}, tables=[("t", scalar)]))
+        # Two different pairwise samples have no single scalar N. Neither
+        # their sum nor their maximum describes both comparisons correctly.
+        self.assertIsNone(MP._model_n(run, pd.DataFrame({"x": range(100)})))
+        scalar["n"] = 28
         self.assertEqual(MP._model_n(run, pd.DataFrame({"x": range(100)})), 28)
         run2 = types.SimpleNamespace(
             result=types.SimpleNamespace(stats={}, tables=[("t", grouped)]))

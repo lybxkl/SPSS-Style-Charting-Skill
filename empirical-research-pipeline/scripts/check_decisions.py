@@ -32,6 +32,7 @@ import json
 import os
 import re
 import sys
+from decimal import Decimal, InvalidOperation
 
 SCRIPT_VERSION = "1.0.0"
 
@@ -109,8 +110,9 @@ def _same_value(left, right) -> bool:
     if isinstance(left, (dict, list)) or isinstance(right, (dict, list)):
         return False
     try:
-        return float(left) == float(right)
-    except (TypeError, ValueError):
+        a, b = Decimal(str(left).strip()), Decimal(str(right).strip())
+        return a.is_finite() and b.is_finite() and a == b
+    except (InvalidOperation, TypeError, ValueError):
         return str(left).strip() == str(right).strip()
 
 

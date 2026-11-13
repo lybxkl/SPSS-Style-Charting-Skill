@@ -295,7 +295,8 @@ def run_m03(ctx: dict) -> ML.Result:
     df, cfg = ctx["df"], ctx["cfg"]
     cols = cfg.get("correlate") or ([_col(cfg, "continuous")] if _col(cfg, "continuous") else [])
     cols = [c for c in cols if c] + list(cfg.get("predictors") or [])
-    cols = list(dict.fromkeys([c for c in cols if c in df.columns]))
+    cols = list(dict.fromkeys(cols))
+    _need_cols(df, *cols)
     _need(len(cols) >= 2, "相关分析需要至少两个数值列（config.correlate / predictors）", "m01")
     return ML.correlation(df, cols, method=cfg.get("corr_method", "auto"), alpha=ctx["alpha"])
 
@@ -430,9 +431,13 @@ def run_m14(ctx: dict) -> ML.Result:
     df, cfg = ctx["df"], ctx["cfg"]
     pairs = cfg.get("kano")
     _need(bool(pairs), "卡诺模型需要 config.kano = {需求名: [功能列, 反功能列]}", "")
-    clean = {k: tuple(v) for k, v in pairs.items()
-             if isinstance(v, (list, tuple)) and len(v) == 2 and all(c in df.columns for c in v)}
-    _need(bool(clean), "config.kano 里的列在数据中找不到", "")
+    _need(isinstance(pairs, dict), "config.kano 必须按需求名列出两列配对", "")
+    clean = {}
+    for key, pair in pairs.items():
+        _need(isinstance(pair, (list, tuple)) and len(pair) == 2,
+              f"config.kano[{key!r}] 必须恰好包含功能列和反功能列", "")
+        _need_cols(df, *pair)
+        clean[key] = tuple(pair)
     return ML.kano(df, clean)
 
 
@@ -578,7 +583,7 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m11" and ctx.get("beta_frame") is not None:
             sub = ctx["beta_frame"]
             fig, axes = _fig(h_in=max(2.4, 0.32 * len(sub) + 1.2))
-            _lab = [f"{PF.short_label(t)}（{b:.2f}）"
+            _lab = [f"{PF.short_label(t, max_chars=len(str(t))+2)}（{b:.2f}）"
                     for t, b in zip(sub["term"], sub["beta"])]
             PF.forest_plot(axes[0][0], _lab,
                            sub["beta"].tolist(), sub["low"].tolist(),
@@ -597,7 +602,7 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
         elif mid == "m18" and ctx.get("or_frame") is not None:
             sub = ctx["or_frame"]
             fig, axes = _fig(h_in=max(2.4, 0.32 * len(sub) + 1.2))
-            _lab = [f"{PF.short_label(t)}（{o:.2f}）"
+            _lab = [f"{PF.short_label(t, max_chars=len(str(t))+2)}（{o:.2f}）"
                     for t, o in zip(sub["term"], sub["OR"])]
             PF.forest_plot(axes[0][0], _lab,
                            sub["OR"].tolist(), sub["OR_ci_low"].tolist(),
@@ -767,7 +772,7 @@ def draw(mid: str, run: Run, ctx: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _model_n(run, df) -> int:
+def _model_n(run, df) -> int | None:
     """模型实际用的 n（dropna 之后），不是数据行数。
 
     原来一律写 len(df)：60 行里含缺失、实际在 50 例上拟合的模型会宣称 n=60，
@@ -790,7 +795,11 @@ def _model_n(run, df) -> int:
                 # 否则每行是同一样本上的一个统计量（如成对比较），相加会得到 25625。
                 grouped = any(c in table.columns
                               for c in ("group", "cluster", "level", "组"))
-                return int(vals.sum()) if grouped else int(vals.max())
+                if grouped:
+                    return int(vals.sum())
+                # Pairwise tests may use different samples. There is no one N;
+                # leave the scalar unset instead of silently reporting max N.
+                return int(vals.iloc[0]) if vals.nunique() == 1 else None
     return None
 
 

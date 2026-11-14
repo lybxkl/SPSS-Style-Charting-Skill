@@ -1,0 +1,1645 @@
+{
+  "schema_version": 1,
+  "plan_revision": "1.1",
+  "scope": "Acceptance designs only. No fixture, capability or test is claimed executed by creating this file.",
+  "cases": [
+    {
+      "id": "A01",
+      "status": "planned",
+      "scenario": "原件改写/删除、硬链接/输出重叠被发现；原件保护保留，失败不出成功回执",
+      "primary_acceptance_task": "T01",
+      "linked_tasks": [
+        "T01",
+        "T34"
+      ],
+      "fixture_and_procedure_spec": "已知哈希原件，注入写入/删除/硬链接/输出重叠",
+      "independent_expected_observation": "真实错误与原件恢复范围明确，失败不发布成功回执",
+      "negative_control": "只查目录存在，恢复后仍称本次成功",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A02",
+      "status": "planned",
+      "scenario": "v1 正常使用；v2 关键能力不能被旧读取器静默忽略；迁移不继承旧 verified",
+      "primary_acceptance_task": "T02",
+      "linked_tasks": [
+        "T02",
+        "T34",
+        "T35"
+      ],
+      "fixture_and_procedure_spec": "合法v1、必需视觉语义v2及其迁移副本",
+      "independent_expected_observation": "旧能力不能消费新语义，迁移后重新核对",
+      "negative_control": "剥关键字段或续用旧verified",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A03",
+      "status": "planned",
+      "scenario": "数字精度、重复 JSON 键、缺失/0、非法值和容差规则保持正确",
+      "primary_acceptance_task": "T02",
+      "linked_tasks": [
+        "T01",
+        "T02",
+        "T13",
+        "T34"
+      ],
+      "fixture_and_procedure_spec": "长十进制、大整数、重复JSON键、空值/0/非法值",
+      "independent_expected_observation": "按独立原值/有理数真值核对，非法容差拒绝",
+      "negative_control": "先转float舍入或缺失转0",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A04",
+      "status": "planned",
+      "scenario": "局部扫描 PDF：文字层和扫描区域均有真实读取范围，不把局部成功写成全文成功",
+      "primary_acceptance_task": "T05",
+      "linked_tasks": [
+        "T04",
+        "T05"
+      ],
+      "fixture_and_procedure_spec": "同页PDF有文字层与扫描表格，预先列两区域",
+      "independent_expected_observation": "两区读取范围真实，未恢复不称全页已读",
+      "negative_control": "有文字层即跳过扫描区",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_ocr_or_table_provider"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A05",
+      "status": "planned",
+      "scenario": "旋转/缩放图：bbox、裁片与原页可准确互相定位，错误页/坐标被拒绝",
+      "primary_acceptance_task": "T05",
+      "linked_tasks": [
+        "T04",
+        "T05"
+      ],
+      "fixture_and_procedure_spec": "原页90度旋转/缩放裁片，并加入错误页号",
+      "independent_expected_observation": "几何真值可回原页，错页/越界拒绝",
+      "negative_control": "仅有bbox或图片即通过",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_ocr_or_table_provider"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A06",
+      "status": "planned",
+      "scenario": "OCR 将字符错读：转写一致仍不能冒充原图已核，原图复核能纠正并使旧值失效",
+      "primary_acceptance_task": "T13",
+      "linked_tasks": [
+        "T05",
+        "T13"
+      ],
+      "fixture_and_procedure_spec": "原图18，故障注入OCR文本81且候选81",
+      "independent_expected_observation": "实际回看能更正并使旧81失效",
+      "negative_control": "文本相等或高confidence就verified",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_ocr_or_table_provider"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A07",
+      "status": "planned",
+      "scenario": "跨页表、多级表头、单位与脚注正确对应；续表连接不丢观测、不重复计数",
+      "primary_acceptance_task": "T06",
+      "linked_tasks": [
+        "T06"
+      ],
+      "fixture_and_procedure_spec": "两页续表、多级单位、重复表头和分母脚注",
+      "independent_expected_observation": "独立观察/表头/脚注真值对账，不丢合法重复",
+      "negative_control": "第二页全删或表头当观察",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_ocr_or_table_provider"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A08",
+      "status": "planned",
+      "scenario": "合并格、公式过期缓存、日期纪元和原始空格不造成假观测或假日期",
+      "primary_acceptance_task": "T06",
+      "linked_tasks": [
+        "T06"
+      ],
+      "fixture_and_procedure_spec": "合并表头/空格/过期公式缓存/不同日期纪元",
+      "independent_expected_observation": "独立复算和日期真值一致，空格保留",
+      "negative_control": "填满合并格或直接信缓存",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A09",
+      "status": "planned",
+      "scenario": "音视频转写有真实时间定位，错误词/说话身份可标争议；缺引擎和实际失败不写成功",
+      "primary_acceptance_task": "T07",
+      "linked_tasks": [
+        "T07"
+      ],
+      "fixture_and_procedure_spec": "有原稿/时间段的短音频，模糊身份和缺引擎变体",
+      "independent_expected_observation": "真实引擎运行与回听有证据，未知身份留疑",
+      "negative_control": "mock当ASR或臆认身份",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_asr_provider"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A10",
+      "status": "planned",
+      "scenario": "图像读数单列近似精度，专有/多维格式原生文件与审计视图可对账",
+      "primary_acceptance_task": "T38",
+      "linked_tasks": [
+        "T04",
+        "T07",
+        "T38"
+      ],
+      "fixture_and_procedure_spec": "合成图有标尺，另给多维原生文件及审计视图",
+      "independent_expected_observation": "近似精度单列，原生结构/内容独立对账",
+      "negative_control": "近似充实测或哈希证明无损",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A11",
+      "status": "planned",
+      "scenario": "埋在表格/脚注/附件和同义表述的字段能进入发现与处置；额外数据集形式被保留",
+      "primary_acceptance_task": "T08",
+      "linked_tasks": [
+        "T08",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "表/脚注/附件/同义句埋字段，另指定长表",
+      "independent_expected_observation": "预先人工真值中的候选有真实处置，新形态保留",
+      "negative_control": "只分析CSV或仅做指定表",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A12",
+      "status": "planned",
+      "scenario": "搜索回执确实对应执行和当前来源；旧索引、虚假逐文件记录或关键词未命中冒充无数据不可通过",
+      "primary_acceptance_task": "T09",
+      "linked_tasks": [
+        "T09"
+      ],
+      "fixture_and_procedure_spec": "真实查询后改原件保留旧索引，另设无命中查询",
+      "independent_expected_observation": "执行/来源/上下文可追，旧索引重建",
+      "negative_control": "假搜索日志或无命中当不存在",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A13",
+      "status": "planned",
+      "scenario": "模型缺数找到真实值后，实际补表、重整合、全格复核和重评模型形成闭环",
+      "primary_acceptance_task": "T10",
+      "linked_tasks": [
+        "T10",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "模型缺字段而附件真实有值，执行回查闭环",
+      "independent_expected_observation": "实际补表/整表重核/重评均可追",
+      "negative_control": "只把gap改found",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A14",
+      "status": "planned",
+      "scenario": "仍无法取得的数据留真实缺失与搜索范围，不能默认 0 或用其他实体值替代",
+      "primary_acceptance_task": "T10",
+      "linked_tasks": [
+        "T10"
+      ],
+      "fixture_and_procedure_spec": "字段未提供，但不同实体有同名字段值",
+      "independent_expected_observation": "真实缺失及搜索范围保留",
+      "negative_control": "填0或借另实体数值",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A15",
+      "status": "planned",
+      "scenario": "两遍抽取对不同实体的同数值、否定/转述、时间/单位冲突能够暴露并裁决",
+      "primary_acceptance_task": "T12",
+      "linked_tasks": [
+        "T11",
+        "T12"
+      ],
+      "fixture_and_procedure_spec": "两个实体同为42，但有否定/建议/日期/单位冲突",
+      "independent_expected_observation": "独立语义真值区分并裁决",
+      "negative_control": "只匹配42或多数投票",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A16",
+      "status": "planned",
+      "scenario": "更新后全表包含键/空值/派生格再次复核；旧页面和旧记录无法自动续签",
+      "primary_acceptance_task": "T13",
+      "linked_tasks": [
+        "T11",
+        "T12",
+        "T13"
+      ],
+      "fixture_and_procedure_spec": "已核表含键/空值/派生，更新后保留旧页面",
+      "independent_expected_observation": "新整表逐格复核，旧补丁/签名拒绝",
+      "negative_control": "只查变化格或自动盖章",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A17",
+      "status": "planned",
+      "scenario": "缺失格的证据只证明上下文可访问，不自动宣称“全篇未记载”",
+      "primary_acceptance_task": "T12",
+      "linked_tasks": [
+        "T11",
+        "T12",
+        "T13"
+      ],
+      "fixture_and_procedure_spec": "正文无值但附件有值，另设真正未记载字段",
+      "independent_expected_observation": "真实全范围回查区分两者",
+      "negative_control": "只看片段或无关键词即缺失",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A18",
+      "status": "planned",
+      "scenario": "同名异人、别名、脱敏标识有正确匹配/未匹配结果，不凭相似度强行合并",
+      "primary_acceptance_task": "T14",
+      "linked_tasks": [
+        "T14"
+      ],
+      "fixture_and_procedure_spec": "同名异编号、别名同体、重复脱敏名",
+      "independent_expected_observation": "已知匹配与未匹配按证据核对",
+      "negative_control": "字符串相似即合并",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A19",
+      "status": "planned",
+      "scenario": "一对多/多对多连接行数、键与分母可对账；无依据笛卡尔积被发现",
+      "primary_acceptance_task": "T15",
+      "linked_tasks": [
+        "T15"
+      ],
+      "fixture_and_procedure_spec": "合法重复测量及多对多缺关联键的连接",
+      "independent_expected_observation": "独立关系真值/行数/分母对账",
+      "negative_control": "机械去重或无依据扩行",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A20",
+      "status": "planned",
+      "scenario": "单位/量纲/口径和有效时间变化有明确变换或冲突，不能错误合并",
+      "primary_acceptance_task": "T15",
+      "linked_tasks": [
+        "T15"
+      ],
+      "fixture_and_procedure_spec": "0.5万元/5000元、不同分母及不重叠有效期",
+      "independent_expected_observation": "精确换算正确，不相容量明确冲突",
+      "negative_control": "数值同型相加或未知时区补时刻",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A21",
+      "status": "planned",
+      "scenario": "内置目录以外的数学/统计实现可接入；没有默认数据集/模型/系列数量封顶",
+      "primary_acceptance_task": "T17",
+      "linked_tasks": [
+        "T16",
+        "T17",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "内置目录外数学/统计脚本，规模超过旧展示限",
+      "independent_expected_observation": "实际执行接入、不封顶，仅宣称实测引擎",
+      "negative_control": "只有family名字而不能运行",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_model_engine"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A22",
+      "status": "planned",
+      "scenario": "多数据集样本键、事件/配对/时点/组数分别正确；n_dropna 不作估计 N",
+      "primary_acceptance_task": "T18",
+      "linked_tasks": [
+        "T16",
+        "T17",
+        "T18"
+      ],
+      "fixture_and_procedure_spec": "同人多时点/多表，真实n=5且n_dropna=2",
+      "independent_expected_observation": "按角色计数且n=5，独立个体不膨胀",
+      "negative_control": "跨表累加或优先取剔除数",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A23",
+      "status": "planned",
+      "scenario": "成功退出且存在输出，但数值/方法未核的模型不获得正式推断状态",
+      "primary_acceptance_task": "T18",
+      "linked_tasks": [
+        "T18"
+      ],
+      "fixture_and_procedure_spec": "退出0且写系数，但无数值/方法校核",
+      "independent_expected_observation": "execution完成，其余未核，不能正式推断",
+      "negative_control": "completed等于ready",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A24",
+      "status": "planned",
+      "scenario": "不可行优化、不可识别逆问题、动态方程参数/边界缺失被记录；可行实例有独立可核数值",
+      "primary_acceptance_task": "T19",
+      "linked_tasks": [
+        "T16",
+        "T19",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "min(x-2)^2,x>=0；互斥约束；秩不足逆问题",
+      "independent_expected_observation": "解析真值x=2，不可行/不可识别如实记录",
+      "negative_control": "有数字解即现实有效",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_model_engine"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A25",
+      "status": "planned",
+      "scenario": "不收敛、分离、相关结构、缺失策略等按相应统计设计评估，不能填空 diagnostics 放行",
+      "primary_acceptance_task": "T20",
+      "linked_tasks": [
+        "T16",
+        "T20"
+      ],
+      "fixture_and_procedure_spec": "完全分离、不收敛、聚类相关、不同缺失策略",
+      "independent_expected_observation": "实际设计相应诊断及结论范围正确",
+      "negative_control": "空diagnostics或统一N阈值放行",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_model_engine"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A26",
+      "status": "planned",
+      "scenario": "规格差异引起结论变化时如实呈现；不显著、失败和未运行规格保留",
+      "primary_acceptance_task": "T21",
+      "linked_tasks": [
+        "T21"
+      ],
+      "fixture_and_procedure_spec": "预列合理正/负/未显著/失败/未运行规格",
+      "independent_expected_observation": "全量保留，差异来源及待办可追",
+      "negative_control": "只留显著或同向规格",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A27",
+      "status": "planned",
+      "scenario": "检验族/多重比较、按组/时间划分、训练内预处理和样本外表现有正确区分",
+      "primary_acceptance_task": "T21",
+      "linked_tasks": [
+        "T20",
+        "T21"
+      ],
+      "fixture_and_procedure_spec": "同人跨组/有时间顺序，注入全样本预处理",
+      "independent_expected_observation": "训练内拟合、设计留出、多重比较真实",
+      "negative_control": "训练分数当样本外或预处理泄漏",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_model_engine"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A28",
+      "status": "planned",
+      "scenario": "独立实现不一致时失败或未核；合理浮点/随机/等价解差异按预设标准比较",
+      "primary_acceptance_task": "T22",
+      "linked_tasks": [
+        "T19",
+        "T22"
+      ],
+      "fixture_and_procedure_spec": "独立公式与引擎一致/真错及符号等价变体",
+      "independent_expected_observation": "按预设标准接受等价、拒绝真实差异",
+      "negative_control": "抄结果或事后放宽容差",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_model_engine"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A29",
+      "status": "planned",
+      "scenario": "原件改动及仅新增材料触发正向供值、缺失判断、发现和适用性依赖失效",
+      "primary_acceptance_task": "T23",
+      "linked_tasks": [
+        "T03",
+        "T23",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "改供值文件，再单独增加含缺失字段的附件",
+      "independent_expected_observation": "正向/否定/发现/适用性均按依赖失效",
+      "negative_control": "新增材料不触发复评",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A30",
+      "status": "planned",
+      "scenario": "受影响数据集整表重新复核；未知依赖保守失效，缓存不伪造本次验证",
+      "primary_acceptance_task": "T24",
+      "linked_tasks": [
+        "T23",
+        "T24"
+      ],
+      "fixture_and_procedure_spec": "表有未改格、未知依赖与旧缓存/复核",
+      "independent_expected_observation": "受影响整表重核，未知保守失效",
+      "negative_control": "只改格或旧签名绑新快照",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A31",
+      "status": "planned",
+      "scenario": "仅变图/正文与仅变计算环境的影响范围可解释；干净目录与环境可重跑",
+      "primary_acceptance_task": "T25",
+      "linked_tasks": [
+        "T03",
+        "T24",
+        "T25"
+      ],
+      "fixture_and_procedure_spec": "分开只改图例/正文/环境并隔离重跑",
+      "independent_expected_observation": "影响解释明确，环境前后绑定，适当标准比较",
+      "negative_control": "只查文件名或事后收集版本",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A32",
+      "status": "planned",
+      "scenario": "数字相同但最高/最低、方向、时间、分母或关联/因果写错的论断被提出复核并正确处置",
+      "primary_acceptance_task": "T26",
+      "linked_tasks": [
+        "T26"
+      ],
+      "fixture_and_procedure_spec": "A=10/B=20但正文称A最高，关联改写导致",
+      "independent_expected_observation": "语义错被实际复核处置，数字相同不豁免",
+      "negative_control": "数字出现过即支持论断",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A33",
+      "status": "planned",
+      "scenario": "真实 DOI 配不支持原文、仅元数据/摘要访问、撤稿/更正信息缺查均不冒充全文支持",
+      "primary_acceptance_task": "T27",
+      "linked_tasks": [
+        "T27"
+      ],
+      "fixture_and_procedure_spec": "真实元数据配错误观点，另有仅摘要访问",
+      "independent_expected_observation": "观点支持/访问范围/更正状态分开核",
+      "negative_control": "DOI存在即全文支持",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "metadata_and_source_access"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A34",
+      "status": "planned",
+      "scenario": "摘要/正文/讨论/结论/附录的结果和引用版本一致，形成完整论文而非结果日志",
+      "primary_acceptance_task": "T28",
+      "linked_tasks": [
+        "T26",
+        "T27",
+        "T28",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "完整合成研究稿，更新一个结果版本",
+      "independent_expected_observation": "各部分可读且版本支持一致，测试身份明确",
+      "negative_control": "空标题或技术日志当论文",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A35",
+      "status": "planned",
+      "scenario": "绘图数据与实际点/线/类别/矩阵/误差范围一致，隐藏系列或不同分母可发现",
+      "primary_acceptance_task": "T29",
+      "linked_tasks": [
+        "T29"
+      ],
+      "fixture_and_procedure_spec": "图注入漏系列、错误差、矩阵列或分母",
+      "independent_expected_observation": "实际绘图数据/图元与结果的差异可定位",
+      "negative_control": "只验图片存在或图元数量",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A36",
+      "status": "planned",
+      "scenario": "多类别中文标签、多行图例和标注按实际边界检查；保留同图、完整文本和字号",
+      "primary_acceptance_task": "T30",
+      "linked_tasks": [
+        "T30"
+      ],
+      "fixture_and_procedure_spec": "长中文标签/多行图例/标题/数值标注实渲染",
+      "independent_expected_observation": "真实边界与目视核查，同图全项不缩字",
+      "negative_control": "自动分页/截字/删类",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A37",
+      "status": "planned",
+      "scenario": "连续色图、透明度、点形/边色与分类色按真实用途报告；建议不变成默认强制样式",
+      "primary_acceptance_task": "T30",
+      "linked_tasks": [
+        "T30"
+      ],
+      "fixture_and_procedure_spec": "分类/连续/透明/点边色及旧用途清单",
+      "independent_expected_observation": "实际用途和未核范围真实，建议不默认阻断",
+      "negative_control": "默认色环填补实际色或分类阈值验连续图",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A38",
+      "status": "planned",
+      "scenario": "双栏缩图、合法窄图、长图在最终 DOCX/PDF 中检查真实 dpi/字号，源图合格不等于安置合格",
+      "primary_acceptance_task": "T31",
+      "linked_tasks": [
+        "T31"
+      ],
+      "fixture_and_procedure_spec": "同源图最终放双栏、窄图、长图",
+      "independent_expected_observation": "按实际宽高/哈希/矢量字核dpi与字号",
+      "negative_control": "统一15cm或只看像素",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "word_pdf_actual_integration"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A39",
+      "status": "planned",
+      "scenario": "Word 表头/续表、图题/图注、公式、交叉引用、字体/缺图和高清回填实际验证",
+      "primary_acceptance_task": "T31",
+      "linked_tasks": [
+        "T31",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "真实Word稿含续表/图题/公式/引用并高清回填",
+      "independent_expected_observation": "真实DOCX/PDF逐页核，缺字/缺图/错回填拒绝",
+      "negative_control": "替代导出冒充Word已验",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "word_pdf_actual_integration"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A40",
+      "status": "planned",
+      "scenario": "发布报告区分覆盖/未恢复/未核/失败，0 错误不冒充全研究完成；包与源码/标准 SHA256 对应",
+      "primary_acceptance_task": "T32",
+      "linked_tasks": [
+        "T32",
+        "T35",
+        "T36"
+      ],
+      "fixture_and_procedure_spec": "完整/受限/未就绪/失败及源码包失配变体",
+      "independent_expected_observation": "范围/状态/SHA分别核，阶段成功不等完整",
+      "negative_control": "zero-error或包存在即全完成",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A41",
+      "status": "planned",
+      "scenario": "大文件、长表、大量数据集/模型/证据采用流式/分批处理仍对账完整，不因性能静默截断",
+      "primary_acceptance_task": "T34",
+      "linked_tasks": [
+        "T24",
+        "T34"
+      ],
+      "fixture_and_procedure_spec": "预声明递增表/格/候选/模型及计数真值",
+      "independent_expected_observation": "全范围对账，到限留恢复点，不称语义复读已验",
+      "negative_control": "隐形top-N或超时写成功",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A42",
+      "status": "planned",
+      "scenario": "C01–C18、V-05、已有完整性/统计/数字/Word-PDF 用例保持，无以删除失败测试处理回归",
+      "primary_acceptance_task": "T34",
+      "linked_tasks": [
+        "T01",
+        "T34",
+        "T36"
+      ],
+      "fixture_and_procedure_spec": "最终源码重跑C01-C18/V-05及既有回归",
+      "independent_expected_observation": "新实际结果与历史585记录分开，失败保留",
+      "negative_control": "删反例或以旧日志冒充新增验收",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A43",
+      "status": "planned",
+      "scenario": "压缩/内嵌子资源逐项登记并定位到父原件；物理文件数、逻辑单元数和独立观察数不混算，未知成员有处置",
+      "primary_acceptance_task": "T04",
+      "linked_tasks": [
+        "T04",
+        "T07",
+        "T08",
+        "T33",
+        "T38"
+      ],
+      "fixture_and_procedure_spec": "嵌套压缩/Office/PDF附件含可读与不可读成员",
+      "independent_expected_observation": "父子/hash/范围对账，三种计数分开",
+      "negative_control": "仅记容器或副本当新样本",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A44",
+      "status": "planned",
+      "scenario": "原生到审计视图的维度、顺序、精确数值、前导零、Unicode、缺失与嵌套路径可独立核验；有哈希但丢字段仍失败",
+      "primary_acceptance_task": "T38",
+      "linked_tasks": [
+        "T02",
+        "T04",
+        "T33",
+        "T38"
+      ],
+      "fixture_and_procedure_spec": "数组/嵌套对象含长整数/前导零/Unicode/有序轴",
+      "independent_expected_observation": "独立解析/重建核路径类型维度顺序内容",
+      "negative_control": "丢轴/字段仍以hash称无损",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A45",
+      "status": "planned",
+      "scenario": "多输入按拟合/校准/约束/训练/验证/测试等角色逐键核算；重复测量与泄漏分别检查，不能跨表累加为独立 N",
+      "primary_acceptance_task": "T17",
+      "linked_tasks": [
+        "T02",
+        "T16",
+        "T17",
+        "T18",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "拟合/参数/约束/训练/验证/测试及重复时点多表",
+      "independent_expected_observation": "角色独立核算与泄漏检查，消费者同步支持",
+      "negative_control": "所有表行数相加成N",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A46",
+      "status": "planned",
+      "scenario": "有范围证据的合法空表与没有统计 N 的数学输入得到正确状态；无单元格不报 0/0=100%，无记录不默认事件数 0",
+      "primary_acceptance_task": "T38",
+      "linked_tasks": [
+        "T02",
+        "T13",
+        "T16",
+        "T17",
+        "T33",
+        "T38"
+      ],
+      "fixture_and_procedure_spec": "原件明确观察10人0事件与空表；只含约束的模型",
+      "independent_expected_observation": "空表有范围依据，格率不适用，无N记录维度",
+      "negative_control": "无命中当0、0/0=100%或补虚构行",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A47",
+      "status": "planned",
+      "scenario": "v2 特性/类型/签名及状态转移检查能拒绝缺证据、旧版回执、非法迁移和自报 ready，必需未知语义不静默消费",
+      "primary_acceptance_task": "T02",
+      "linked_tasks": [
+        "T02",
+        "T13",
+        "T18",
+        "T32",
+        "T35",
+        "T40"
+      ],
+      "fixture_and_procedure_spec": "非法状态/未知必需特性/旧读取器/自报ready",
+      "independent_expected_observation": "维护入口及新闸门拒绝不支持，扩展无损保留",
+      "negative_control": "忽略新语义或信自报版本",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A48",
+      "status": "planned",
+      "scenario": "任意关键写入点中断或磁盘写入失败后，发布指针不指向半成品，旧完整版本仍可读，新运行保留真实失败状态",
+      "primary_acceptance_task": "T37",
+      "linked_tasks": [
+        "T24",
+        "T33",
+        "T34",
+        "T37"
+      ],
+      "fixture_and_procedure_spec": "写文件/校核/提交清单/发布指针各点注入失败",
+      "independent_expected_observation": "旧完整版本可读，半成品不发布，本次失败真实",
+      "negative_control": "逐个覆盖正式文件后completed",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A49",
+      "status": "planned",
+      "scenario": "两次运行或两位复核者同时写同一版本时，不覆盖其他结果、不丢复核事件；过期父版本和重复补丁可识别",
+      "primary_acceptance_task": "T37",
+      "linked_tasks": [
+        "T11",
+        "T24",
+        "T33",
+        "T34",
+        "T37"
+      ],
+      "fixture_and_procedure_spec": "两运行或复核同父版本并发提交并重放操作ID",
+      "independent_expected_observation": "锁/父版本/幂等防丢失覆盖，冲突明确",
+      "negative_control": "最后写覆盖或重复应用",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A50",
+      "status": "planned",
+      "scenario": "取消/超时/崩溃恢复时只续用输入与代码仍匹配的检查点，源变化使检查点失效，不能恢复成虚构完成",
+      "primary_acceptance_task": "T37",
+      "linked_tasks": [
+        "T11",
+        "T24",
+        "T25",
+        "T33",
+        "T34",
+        "T37",
+        "T40"
+      ],
+      "fixture_and_procedure_spec": "取消/超时/崩溃后保持或更改原件代码再恢复",
+      "independent_expected_observation": "只恢复匹配上下文，只处理本运行资源",
+      "negative_control": "失配检查点verified或关闭其他用户任务",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A51",
+      "status": "planned",
+      "scenario": "已知答案和独立校核不依赖待测抽取/预处理实现；两种计算共享错误预处理时不会仅凭一致判正确",
+      "primary_acceptance_task": "T22",
+      "linked_tasks": [
+        "T01",
+        "T21",
+        "T22",
+        "T33",
+        "T39"
+      ],
+      "fixture_and_procedure_spec": "两计算共享错误单位换算，另有预先独立真值",
+      "independent_expected_observation": "分层校核发现预处理错，期望不来自待测程序",
+      "negative_control": "错误结果一致即正确",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A52",
+      "status": "planned",
+      "scenario": "每个验收卡有原件/步骤/独立期望/实际结果/环境/证据路径；仅编号、说明、mock 或 skip 不能计作实际集成通过",
+      "primary_acceptance_task": "T39",
+      "linked_tasks": [
+        "T33",
+        "T35",
+        "T36",
+        "T39"
+      ],
+      "fixture_and_procedure_spec": "真实完整验收卡与仅编号/mock/skip卡比较",
+      "independent_expected_observation": "真实执行与判定后才可集成passed，设计仍待执行",
+      "negative_control": "字段齐全或skip当真提供方已验",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A53",
+      "status": "planned",
+      "scenario": "后加的论断、文献、图、图注和文稿都注册依赖；编辑/重排/更换来源使相应审阅失效，旧文本支持不被沿用",
+      "primary_acceptance_task": "T23",
+      "linked_tasks": [
+        "T03",
+        "T23",
+        "T26",
+        "T27",
+        "T28",
+        "T29",
+        "T30",
+        "T31",
+        "T33",
+        "T40"
+      ],
+      "fixture_and_procedure_spec": "后加图文节点换来源/改句子/重排/改图注",
+      "independent_expected_observation": "依赖注册且旧审阅失效，实印内容匹配",
+      "negative_control": "框架存在即自动接入或只看句子ID",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A54",
+      "status": "planned",
+      "scenario": "产品能力、用户要求范围、阶段命令成功和正式发布就绪分开；partial 或零错误不能绕过正式结果的来源/复核闸门",
+      "primary_acceptance_task": "T32",
+      "linked_tasks": [
+        "T02",
+        "T10",
+        "T18",
+        "T28",
+        "T31",
+        "T32",
+        "T33",
+        "T35",
+        "T36",
+        "T40"
+      ],
+      "fixture_and_procedure_spec": "缺ASR产品/无音频项目/生成器成功/partial未核稿",
+      "independent_expected_observation": "产品项目阶段发布分开，partial不绕事实硬条件",
+      "negative_control": "项目不适用证明产品或部分稿豁免真实性",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A55",
+      "status": "planned",
+      "scenario": "本次执行与缓存复用有不同回执并绑定原执行和当前依据；改时间戳、遗漏依赖或借旧签名冒充新计算被拒绝",
+      "primary_acceptance_task": "T24",
+      "linked_tasks": [
+        "T24",
+        "T25",
+        "T33",
+        "T37",
+        "T40"
+      ],
+      "fixture_and_procedure_spec": "缓存有原回执，再改输入/环境/时间戳/签名",
+      "independent_expected_observation": "复用与执行分开，依赖失配或伪造拒绝",
+      "negative_control": "touch旧文件称新计算",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A56",
+      "status": "planned",
+      "scenario": "不同目标参数/尺度/分母/观察窗的结果不直接按显著性比较；图文只使用具有相同支持范围的结果",
+      "primary_acceptance_task": "T21",
+      "linked_tasks": [
+        "T02",
+        "T16",
+        "T18",
+        "T21",
+        "T26",
+        "T29",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "OR/风险差/标准化系数/不同时间分母混比较",
+      "independent_expected_observation": "按参数尺度分组，图文支持范围一致",
+      "negative_control": "最小p排名或ready授权所有结论",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A57",
+      "status": "planned",
+      "scenario": "不可行、无界、超时、可行候选、局部解与已认证全局解分开；KKT/小残差等必要证据不被升级为全局最优证明",
+      "primary_acceptance_task": "T19",
+      "linked_tasks": [
+        "T19",
+        "T33"
+      ],
+      "fixture_and_procedure_spec": "无界max x/互斥约束/(x²-1)²驻点0/超时可行解",
+      "independent_expected_observation": "独立真值区分解质量，证据充分才认证全局",
+      "negative_control": "超时当不可行或KKT/残差证全局",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core",
+        "selected_model_engine"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A58",
+      "status": "planned",
+      "scenario": "插补、估计、模拟和图像近似读数保留原始层、方法及不确定性；验证生成链不能伪装为来源直接观测",
+      "primary_acceptance_task": "T38",
+      "linked_tasks": [
+        "T02",
+        "T07",
+        "T13",
+        "T17",
+        "T33",
+        "T38"
+      ],
+      "fixture_and_procedure_spec": "实测旁有插补/估计/模拟/图读数并删除标记",
+      "independent_expected_observation": "原层不覆盖，方法不确定性用途可追",
+      "negative_control": "生成链验证冒充来源直接观测",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A59",
+      "status": "planned",
+      "scenario": "明确规模、资源预算和环境后测试流式/检查点对账；达到预算如实部分完成，不能静默减少数据集/模型/单元格",
+      "primary_acceptance_task": "T34",
+      "linked_tasks": [
+        "T24",
+        "T33",
+        "T34"
+      ],
+      "fixture_and_procedure_spec": "预声明三档具体规模/计数/资源，中档故障",
+      "independent_expected_observation": "各档实测耗时内存/范围，到限有继续点",
+      "negative_control": "小样例称大规模或预算变数量上限",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    },
+    {
+      "id": "A60",
+      "status": "planned",
+      "scenario": "每批在实现前准备独立期望并执行相应验收；新模块既是生产者也是消费者，最终综合测试不替代前置门检",
+      "primary_acceptance_task": "T39",
+      "linked_tasks": [
+        "T01",
+        "T08",
+        "T22",
+        "T33",
+        "T34",
+        "T36",
+        "T39"
+      ],
+      "fixture_and_procedure_spec": "每批注入错生产/消费方，查前置期望与执行",
+      "independent_expected_observation": "本批门检拒错，M7综合，必要集成齐才关任务",
+      "negative_control": "只等M7测或文档完成即发布",
+      "oracle_requirement": "Freeze actual fixture and independent oracle before implementation; this card is not an executed oracle.",
+      "environment_profiles": [
+        "local_core"
+      ],
+      "required_evidence": [
+        "fixture_and_oracle_hashes",
+        "actual_program_config_environment",
+        "execution_receipt",
+        "observed_values_states_differences",
+        "actual_semantic_or_visual_review_when_applicable"
+      ],
+      "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+      "actual_evidence": []
+    }
+  ]
+}

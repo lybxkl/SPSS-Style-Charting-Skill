@@ -1,0 +1,2688 @@
+{
+ "schema_version": 1,
+ "kind": "implementation_ledger_not_a_plan",
+ "plan_revision": "1.1",
+ "baseline_commit": "f0c45b4b5eafb86211640e2557ef013f066ef8c3",
+ "created_at": "2026-11-14T14:09:30+08:00",
+ "note": "Real implementation progress. The frozen planning audit under docs/plan-audit-2026-11-14/ keeps its own planned-state records and is not rewritten by this ledger.",
+ "tasks": {
+  "T01": {
+   "id": "T01",
+   "phase": "M0",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "冻结与复核现有基线",
+   "planned_status": "planned",
+   "depends_on": [],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A01",
+    "A03",
+    "A42",
+    "A51",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "基线源码/安装包/哈希记录",
+    "当前环境与既有回归清单",
+    "首批已知答案材料",
+    "冻结原始 fixture 与独立期望，先于新生产实现制定"
+   ],
+   "done_when": "记录实际基线；原件保护、精确数值、V-05 与 C01-C18 行为保留；历史 585 项记录与本次运行结果明确区分。 新增模块从首批即验证，不把历史 585 项当新增能力证据。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "note": "冻结基线：585 项通过（318s）已记录；环境探针（Python 3.12.4、依赖、Word COM、ffmpeg、缺失引擎）已记录；本次改动后同入口 759 项通过。"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "note": "冻结基线：585 项通过（318s）已记录；环境探针（Python 3.12.4、依赖、Word COM、ffmpeg、缺失引擎）已记录；本次改动后同入口 759 项通过。"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "note": "冻结基线：585 项通过（318s）已记录；环境探针（Python 3.12.4、依赖、Word COM、ffmpeg、缺失引擎）已记录；本次改动后同入口 759 项通过。"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "note": "冻结基线：585 项通过（318s）已记录；环境探针（Python 3.12.4、依赖、Word COM、ffmpeg、缺失引擎）已记录；本次改动后同入口 759 项通过。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "基线冻结（585 项/318s）、环境探针、改动后同入口完整回归均记录在 verification/baseline 与 verification/final；历史与本次结果分文件保存。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "docs/implementation/verification/baseline/regression-before.log"
+    },
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "docs/implementation/verification/regression-final.log"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "evidence": "docs/implementation/verification/baseline/regression-before.log"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "evidence": "docs/implementation/verification/regression-final.log"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "evidence": "docs/implementation/verification/baseline/regression-before.log"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "evidence": "docs/implementation/verification/regression-final.log"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "evidence": "docs/implementation/verification/baseline/regression-before.log"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "evidence": "docs/implementation/verification/regression-final.log"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "docs/implementation/verification/baseline/regression-before.log",
+      "docs/implementation/verification/final/regression-v4.log"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:58+08:00"
+  },
+  "T02": {
+   "id": "T02",
+   "phase": "M0",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "版本化统一记录与能力协商",
+   "planned_status": "planned",
+   "depends_on": [
+    "T01"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A02",
+    "A03",
+    "A44",
+    "A45",
+    "A46",
+    "A47",
+    "A54",
+    "A56",
+    "A58"
+   ],
+   "planned_deliverables": [
+    "v2 核心/扩展 schema",
+    "v1 兼容与迁移方案",
+    "requires_features/读取版本规则",
+    "可机器校验 schema、迁移差异和状态转移表",
+    "带输入角色及目标参数/单位/范围的公共结果元数据"
+   ],
+   "done_when": "维护中的入口和发布闸门拒绝不具备能力的读取器/回执；迁移不剥关键字段、不续签旧 verified。 必需未知语义、非法状态与未经支持的回执拒绝消费；原始字节哈希与记录规范化签名分开。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "note": "contract_v2：31 类记录、状态机、内容哈希、特性协商、迁移不继承 verified；23 项测试。"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "note": "contract_v2：31 类记录、状态机、内容哈希、特性协商、迁移不继承 verified；23 项测试。"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "note": "contract_v2：31 类记录、状态机、内容哈希、特性协商、迁移不继承 verified；23 项测试。"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "note": "contract_v2：31 类记录、状态机、内容哈希、特性协商、迁移不继承 verified；23 项测试。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "tests/test_contract_v2.py"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "evidence": "tests/test_contract_v2.py"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "evidence": "tests/test_contract_v2.py"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "evidence": "tests/test_contract_v2.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:58+08:00"
+  },
+  "T03": {
+   "id": "T03",
+   "phase": "M0",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "建立依赖节点、边与事件基础",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A29",
+    "A31",
+    "A53"
+   ],
+   "planned_deliverables": [
+    "身份/内容版本规则",
+    "正向供值与否定判断依赖类型",
+    "事件和状态存储接口",
+    "后续图文与负向证据依赖注册契约"
+   ],
+   "done_when": "依赖可查询和对账；单版本派生无环；实际时间、输入和程序版本绑定；未知依赖可保守处理。 新节点实际接入与失效联查，不能只有图框架。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "note": "depgraph：节点/边/事件、负向边、影响传播、环检测、重放；22 项测试中的图部分。"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "note": "depgraph：节点/边/事件、负向边、影响传播、环检测、重放；22 项测试中的图部分。"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "note": "depgraph：节点/边/事件、负向边、影响传播、环检测、重放；22 项测试中的图部分。"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "note": "depgraph：节点/边/事件、负向边、影响传播、环检测、重放；22 项测试中的图部分。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "evidence": "tests/test_research_core.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:58+08:00"
+  },
+  "T04": {
+   "id": "T04",
+   "phase": "M1",
+   "requirements": [
+    "R01"
+   ],
+   "title": "资料单元与恢复适配接口",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02",
+    "T37",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A04",
+    "A05",
+    "A10",
+    "A43",
+    "A44"
+   ],
+   "planned_deliverables": [
+    "原生文字适配接入",
+    "source_units 及 locator/预览接口",
+    "恢复回执与失败分类",
+    "物理/逻辑资料清单和容器/内嵌资源父子映射"
+   ],
+   "done_when": "保留旧文本定位；实际页/区域/表格等结构能定位、预览和记录范围；不是只有空接口。 内嵌和解包副本不重复计为独立观察。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "note": "source_units：PDF 文本/扫描/混合、Office 成员、zip、表格、结构化、媒体；三数分开；失败分类回执。"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "note": "source_units：PDF 文本/扫描/混合、Office 成员、zip、表格、结构化、媒体；三数分开；失败分类回执。"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "note": "source_units：PDF 文本/扫描/混合、Office 成员、zip、表格、结构化、媒体；三数分开；失败分类回执。"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "note": "source_units：PDF 文本/扫描/混合、Office 成员、zip、表格、结构化、媒体；三数分开；失败分类回执。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:20+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:58+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:58+08:00"
+  },
+  "T05": {
+   "id": "T05",
+   "phase": "M1",
+   "requirements": [
+    "R01"
+   ],
+   "title": "接通 OCR、混合页面与视觉证据",
+   "planned_status": "planned",
+   "depends_on": [
+    "T04",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A04",
+    "A05",
+    "A06"
+   ],
+   "planned_deliverables": [
+    "至少一个实际 OCR 提供方",
+    "原页/bbox/裁片/变换记录",
+    "原图回核与转写区分"
+   ],
+   "done_when": "真实扫描及混合页接入测试完成；转写一致不能充当原图事实核对；引擎失败与未恢复范围如实报告。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "note": "ocr_provider：真实 RapidOCR，旋转页面 bbox 回映射 IoU>0.55（与文本层独立对照），转写永远未核，adjudicate 走 human-reread。"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "note": "ocr_provider：真实 RapidOCR，旋转页面 bbox 回映射 IoU>0.55（与文本层独立对照），转写永远未核，adjudicate 走 human-reread。"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "note": "ocr_provider：真实 RapidOCR，旋转页面 bbox 回映射 IoU>0.55（与文本层独立对照），转写永远未核，adjudicate 走 human-reread。"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "note": "ocr_provider：真实 RapidOCR，旋转页面 bbox 回映射 IoU>0.55（与文本层独立对照），转写永远未核，adjudicate 走 human-reread。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:32+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:59+08:00"
+  },
+  "T06": {
+   "id": "T06",
+   "phase": "M1",
+   "requirements": [
+    "R01"
+   ],
+   "title": "恢复表格与工作簿语义",
+   "planned_status": "planned",
+   "depends_on": [
+    "T04",
+    "T39"
+   ],
+   "integration_dependencies": [
+    "T05"
+   ],
+   "acceptance_cases": [
+    "A07",
+    "A08"
+   ],
+   "planned_deliverables": [
+    "跨页和多级表头恢复",
+    "单位/脚注/续表关系",
+    "公式/日期/合并格处理"
+   ],
+   "done_when": "表头、原值、位置、分母和空格可逐项核对；不过度填充合并格，不信过期公式缓存。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "note": "table_recovery：跨页续表、重复表头、合并单元格空值、公式缓存 999 vs 复算 42 判 mismatch、日期序列号。"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "note": "table_recovery：跨页续表、重复表头、合并单元格空值、公式缓存 999 vs 复算 42 判 mismatch、日期序列号。"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "note": "table_recovery：跨页续表、重复表头、合并单元格空值、公式缓存 999 vs 复算 42 判 mismatch、日期序列号。"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "note": "table_recovery：跨页续表、重复表头、合并单元格空值、公式缓存 999 vs 复算 42 判 mismatch、日期序列号。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:10+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:59+08:00"
+  },
+  "T07": {
+   "id": "T07",
+   "phase": "M1",
+   "requirements": [
+    "R01"
+   ],
+   "title": "接通转写和原生格式扩展",
+   "planned_status": "planned",
+   "depends_on": [
+    "T04",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A09",
+    "A10",
+    "A43",
+    "A58"
+   ],
+   "planned_deliverables": [
+    "实际 ASR/转写提供方与时间定位",
+    "原生文件/审计视图适配示例",
+    "图像近似读数独立标识",
+    "时间段回听与近似读数/估计来源性质"
+   ],
+   "done_when": "真实时间段可回听；不确定身份/读数保留；原生视图无损核对；只有模拟提供方不算完成。 近似和转写不冒充原始精确观测。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "note": "asr_provider：真实 Vosk 转写与词级时间戳、ffmpeg 区间回放、re-listen 记录说话人。"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "note": "asr_provider：真实 Vosk 转写与词级时间戳、ffmpeg 区间回放、re-listen 记录说话人。"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "note": "asr_provider：真实 Vosk 转写与词级时间戳、ffmpeg 区间回放、re-listen 记录说话人。"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "note": "asr_provider：真实 Vosk 转写与词级时间戳、ffmpeg 区间回放、re-listen 记录说话人。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:59+08:00"
+  },
+  "T08": {
+   "id": "T08",
+   "phase": "M2",
+   "requirements": [
+    "R02"
+   ],
+   "title": "双路径发现与开放候选登记",
+   "planned_status": "planned",
+   "depends_on": [
+    "T04",
+    "T39"
+   ],
+   "integration_dependencies": [
+    "T05",
+    "T06",
+    "T07",
+    "T38"
+   ],
+   "acceptance_cases": [
+    "A11",
+    "A43",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "资料优先/问题优先发现",
+    "开放字段、实体、数据集候选",
+    "结构级覆盖和采用处置",
+    "接口优先、按模态分开的集成验收范围"
+   ],
+   "done_when": "预埋表格/脚注/附件/同义字段与新增形态得到发现和真实处置；不限制候选或数据集数量。 纯文本工作可以先实施，多模态组合未验仍标未完成。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "note": "discovery：材料优先+问题优先两条路径、结构覆盖、未解释结构报错、未找到不写成 0。"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "note": "discovery：材料优先+问题优先两条路径、结构覆盖、未解释结构报错、未找到不写成 0。"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "note": "discovery：材料优先+问题优先两条路径、结构覆盖、未解释结构报错、未找到不写成 0。"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "note": "discovery：材料优先+问题优先两条路径、结构覆盖、未解释结构报错、未找到不写成 0。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:59+08:00"
+  },
+  "T09": {
+   "id": "T09",
+   "phase": "M2",
+   "requirements": [
+    "R02"
+   ],
+   "title": "可追溯索引与实际搜索回执",
+   "planned_status": "planned",
+   "depends_on": [
+    "T03",
+    "T08",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A12"
+   ],
+   "planned_deliverables": [
+    "可重建全文/结构索引",
+    "查询与来源版本绑定",
+    "实际读取/命中/上下文记录"
+   ],
+   "done_when": "搜索证据能对应真实执行；过期索引不被复用为当前；关键词无命中不自动证明不存在。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "note": "search_index：可重建索引、过期即拒绝回答「没有」、真实执行回执与上下文。"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "note": "search_index：可重建索引、过期即拒绝回答「没有」、真实执行回执与上下文。"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "note": "search_index：可重建索引、过期即拒绝回答「没有」、真实执行回执与上下文。"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "note": "search_index：可重建索引、过期即拒绝回答「没有」、真实执行回执与上下文。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:59+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:44:59+08:00"
+  },
+  "T10": {
+   "id": "T10",
+   "phase": "M2",
+   "requirements": [
+    "R02"
+   ],
+   "title": "缺口回查和补数闭环",
+   "planned_status": "planned",
+   "depends_on": [
+    "T08",
+    "T09",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A13",
+    "A14",
+    "A54"
+   ],
+   "planned_deliverables": [
+    "data_gaps 及 searches 关联",
+    "找到数据后的整合/复核任务",
+    "未获得/不可用/阻塞的真实终态",
+    "开放流程中的缺口/阻塞/恢复事件"
+   ],
+   "done_when": "补数实际进入新数据集和复核；相关模型重评；没有假搜索、假分母或未记载填 0。 预算或引擎不足不能自动改不适用或完整交付。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "note": "gaps：resolved 需 found 检索、unavailable 需检索、exhausted 需覆盖全部来源、无搜索不得关闭。"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "note": "gaps：resolved 需 found 检索、unavailable 需检索、exhausted 需覆盖全部来源、无搜索不得关闭。"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "note": "gaps：resolved 需 found 检索、unavailable 需检索、exhausted 需覆盖全部来源、无搜索不得关闭。"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "note": "gaps：resolved 需 found 检索、unavailable 需检索、exhausted 需覆盖全部来源、无搜索不得关闭。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:21+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:00+08:00"
+  },
+  "T11": {
+   "id": "T11",
+   "phase": "M2",
+   "requirements": [
+    "R03"
+   ],
+   "title": "可用的离线逐格复核工作台",
+   "planned_status": "planned",
+   "depends_on": [
+    "T03",
+    "T04",
+    "T37",
+    "T39"
+   ],
+   "integration_dependencies": [
+    "T05",
+    "T06",
+    "T07"
+   ],
+   "acceptance_cases": [
+    "A15",
+    "A16",
+    "A17",
+    "A49",
+    "A50"
+   ],
+   "planned_deliverables": [
+    "文字/表格/图片/时间段联显",
+    "全格导航与当前版本补丁",
+    "复核记录导出/导入验证",
+    "父版本/操作 ID 校验及并发复核提交"
+   ],
+   "done_when": "实际打开完整证据并处理全部格；显示分页不缩减范围；原件不被界面覆盖；旧页面/补丁被识别。 并发与恢复不覆盖他人记录，不重放旧通过状态。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "note": "review_workbench：离线页面列出全部格与证据，明确没有一键 verified。"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "note": "review_workbench：离线页面列出全部格与证据，明确没有一键 verified。"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "note": "review_workbench：离线页面列出全部格与证据，明确没有一键 verified。"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "note": "review_workbench：离线页面列出全部格与证据，明确没有一键 verified。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:11+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:33+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:00+08:00"
+  },
+  "T12": {
+   "id": "T12",
+   "phase": "M2",
+   "requirements": [
+    "R03"
+   ],
+   "title": "第二遍复读与差异裁决",
+   "planned_status": "planned",
+   "depends_on": [
+    "T11",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A15",
+    "A16",
+    "A17"
+   ],
+   "planned_deliverables": [
+    "隐藏初值的再抽取选项",
+    "真实复核者/方法/独立程度",
+    "冲突、改判链与理由"
+   ],
+   "done_when": "逐项支持实际回源；争议不自动投票为事实；批量序列化不能替代复读。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "note": "盲第二次抽取不含第一遍值；冲突记 differs 不投票；通用备注/过时时间戳/签名不符/缺定位一律拒绝；补丁父版本校验与全表失效。"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "note": "盲第二次抽取不含第一遍值；冲突记 differs 不投票；通用备注/过时时间戳/签名不符/缺定位一律拒绝；补丁父版本校验与全表失效。"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "note": "盲第二次抽取不含第一遍值；冲突记 differs 不投票；通用备注/过时时间戳/签名不符/缺定位一律拒绝；补丁父版本校验与全表失效。"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "note": "盲第二次抽取不含第一遍值；冲突记 differs 不投票；通用备注/过时时间戳/签名不符/缺定位一律拒绝；补丁父版本校验与全表失效。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:00+08:00"
+  },
+  "T13": {
+   "id": "T13",
+   "phase": "M2",
+   "requirements": [
+    "R03"
+   ],
+   "title": "扩展 prepare/final 全格验证",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02",
+    "T10",
+    "T12",
+    "T38",
+    "T39"
+   ],
+   "integration_dependencies": [
+    "T05",
+    "T06",
+    "T07"
+   ],
+   "acceptance_cases": [
+    "A03",
+    "A06",
+    "A16",
+    "A17",
+    "A46",
+    "A47",
+    "A58"
+   ],
+   "planned_deliverables": [
+    "视觉/转写证据校验",
+    "复核签名与状态验证",
+    "重整合后整表回核",
+    "不同来源性质与合法空数据验证"
+   ],
+   "done_when": "键、空值、标记、派生格全部覆盖；源/规则/数据变化使旧复核失效；不降低现有全格要求。 0/0 不显示 100%；插补/模拟/近似不升级为直接观测。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "note": "v2 侧已有 data_gap/legal-empty/generated-kind/review_gate 检查，但 verify_dataset.py 的 prepare/final 本身未扩展，视觉/转写证据尚未成为 final 的必需项；发布层只读既有 dataset_verification.json。"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "note": "v2 侧已有 data_gap/legal-empty/generated-kind/review_gate 检查，但 verify_dataset.py 的 prepare/final 本身未扩展，视觉/转写证据尚未成为 final 的必需项；发布层只读既有 dataset_verification.json。"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "note": "v2 侧已有 data_gap/legal-empty/generated-kind/review_gate 检查，但 verify_dataset.py 的 prepare/final 本身未扩展，视觉/转写证据尚未成为 final 的必需项；发布层只读既有 dataset_verification.json。"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "note": "v2 侧已有 data_gap/legal-empty/generated-kind/review_gate 检查，但 verify_dataset.py 的 prepare/final 本身未扩展，视觉/转写证据尚未成为 final 的必需项；发布层只读既有 dataset_verification.json。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "verify_dataset.py 新增 v2 检查：v2_cells（值类型义务、证据单元版本、partial 单元只能支撑 image_approx 且需记录回读、合法空表的范围证据）与 v2_review_bound（review_event 签名/归属/时间/独立性），report 增加 contract_v2 段；v2 账本不存在时行为不变（既有 585 项基线不受影响）。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "evidence": "tests/test_discovery_review.py"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "tests/test_design_v2.py",
+      "empirical-research-pipeline/scripts/verify_dataset.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:00+08:00"
+  },
+  "T14": {
+   "id": "T14",
+   "phase": "M3",
+   "requirements": [
+    "R04"
+   ],
+   "title": "实体、别名与身份冲突处理",
+   "planned_status": "planned",
+   "depends_on": [
+    "T08",
+    "T13",
+    "T37"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A18"
+   ],
+   "planned_deliverables": [
+    "候选匹配与证据",
+    "采用/拒绝/未解决记录",
+    "实体合并/拆分版本"
+   ],
+   "done_when": "同名异人、异名同体、脱敏同名的已知答案正确；不凭字符串相似度硬合并。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "note": "entities：类型注册、稳定 id、别名合并与冲突记录、身份归并留痕。"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "note": "entities：类型注册、稳定 id、别名合并与冲突记录、身份归并留痕。"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "note": "entities：类型注册、稳定 id、别名合并与冲突记录、身份归并留痕。"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "note": "entities：类型注册、稳定 id、别名合并与冲突记录、身份归并留痕。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:00+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:00+08:00"
+  },
+  "T15": {
+   "id": "T15",
+   "phase": "M3",
+   "requirements": [
+    "R04"
+   ],
+   "title": "关系、连接基数与口径核对",
+   "planned_status": "planned",
+   "depends_on": [
+    "T14",
+    "T13",
+    "T37"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A19",
+    "A20"
+   ],
+   "planned_deliverables": [
+    "关系/有效时间记录",
+    "连接前后行数与键审计",
+    "单位/量纲/分母裁决"
+   ],
+   "done_when": "一对多和多对多可对账；无依据扩行、冲突单位/日期及来源矛盾不能静默进入模型。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "note": "relation 需两端已注册实体；join_audit 记录一对多/未匹配/口径冲突/结果单位；单位换算显式因子。"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "note": "relation 需两端已注册实体；join_audit 记录一对多/未匹配/口径冲突/结果单位；单位换算显式因子。"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "note": "relation 需两端已注册实体；join_audit 记录一对多/未匹配/口径冲突/结果单位；单位换算显式因子。"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "note": "relation 需两端已注册实体；join_audit 记录一对多/未匹配/口径冲突/结果单位；单位换算显式因子。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:34+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:01+08:00"
+  },
+  "T16": {
+   "id": "T16",
+   "phase": "M4",
+   "requirements": [
+    "R05"
+   ],
+   "title": "开放模型需求与适用性登记",
+   "planned_status": "planned",
+   "depends_on": [
+    "T10",
+    "T15"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A21",
+    "A22",
+    "A24",
+    "A25",
+    "A45",
+    "A46",
+    "A56"
+   ],
+   "planned_deliverables": [
+    "开放规格/引擎能力记录",
+    "数据/设计/识别条件评估",
+    "缺数/故障到回查的路由",
+    "按输入角色和目标参数定义的数学/统计规格"
+   ],
+   "done_when": "没有固定模型目录、数量或统一 N 拒绝阈值；每个已登记候选有真实理由和处置；实现缺失不冒充数据不适用。 不以单表样本 N 限制数学模型，不强制比较不同目标参数。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "note": "models：spec 校验（统计需 observation+unit+result；数学需 kind=none+dimensions+constraints）、conditions 检查版本/唯一键/参数数/变异性。"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "note": "models：spec 校验（统计需 observation+unit+result；数学需 kind=none+dimensions+constraints）、conditions 检查版本/唯一键/参数数/变异性。"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "note": "models：spec 校验（统计需 observation+unit+result；数学需 kind=none+dimensions+constraints）、conditions 检查版本/唯一键/参数数/变异性。"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "note": "models：spec 校验（统计需 observation+unit+result；数学需 kind=none+dimensions+constraints）、conditions 检查版本/唯一键/参数数/变异性。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:12+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:22+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:01+08:00"
+  },
+  "T17": {
+   "id": "T17",
+   "phase": "M4",
+   "requirements": [
+    "R05"
+   ],
+   "title": "多输入、不同引擎与结果适配",
+   "planned_status": "planned",
+   "depends_on": [
+    "T13",
+    "T16",
+    "T37",
+    "T38"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A21",
+    "A22",
+    "A45",
+    "A46",
+    "A58"
+   ],
+   "planned_deliverables": [
+    "可追溯分析视图/多输入键",
+    "至少代表性统计与数学引擎接入",
+    "原生结果与结构化审计输出",
+    "research_gate 多输入/角色映射及原生结果适配"
+   ],
+   "done_when": "Agent 自编脚本可接入；不是只支持系数表；输入/代码/环境/原生结果完整绑定。 同步改造消费者，不能只让 runner 接受多文件。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "note": "多输入按角色绑定数据集版本；validate 行不计入 fit 的 N；引擎适配 statsmodels + 自定义 callable。"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "note": "多输入按角色绑定数据集版本；validate 行不计入 fit 的 N；引擎适配 statsmodels + 自定义 callable。"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "note": "多输入按角色绑定数据集版本；validate 行不计入 fit 的 N；引擎适配 statsmodels + 自定义 callable。"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "note": "多输入按角色绑定数据集版本；validate 行不计入 fit 的 N；引擎适配 statsmodels + 自定义 callable。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:01+08:00"
+  },
+  "T18": {
+   "id": "T18",
+   "phase": "M4",
+   "requirements": [
+    "R05"
+   ],
+   "title": "分离执行、数值、方法和结论状态",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02",
+    "T17"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A22",
+    "A23",
+    "A45",
+    "A47",
+    "A54",
+    "A56"
+   ],
+   "planned_deliverables": [
+    "四项模型状态",
+    "实际样本键与 N/事件/配对等指标",
+    "研究闸门接入",
+    "四项状态的准入/失效/结论范围及可核结果类型"
+   ],
+   "done_when": "零退出码、非空诊断和 completed 不能单独授权推断；n_dropna 仍为剔除数。 按角色给真实 N 或不适用，发布就绪不能从 completed 推出。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "note": "执行、数值校核、方法评估、结论范围分字段保存；assert_conclusion_scope 拒绝因果/全局最优/样本 N 无依据的措辞。"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "note": "执行、数值校核、方法评估、结论范围分字段保存；assert_conclusion_scope 拒绝因果/全局最优/样本 N 无依据的措辞。"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "note": "执行、数值校核、方法评估、结论范围分字段保存；assert_conclusion_scope 拒绝因果/全局最优/样本 N 无依据的措辞。"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "note": "执行、数值校核、方法评估、结论范围分字段保存；assert_conclusion_scope 拒绝因果/全局最优/样本 N 无依据的措辞。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:01+08:00"
+  },
+  "T19": {
+   "id": "T19",
+   "phase": "M4",
+   "requirements": [
+    "R05"
+   ],
+   "title": "数学模型可行性与数值诊断",
+   "planned_status": "planned",
+   "depends_on": [
+    "T18"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A24",
+    "A28",
+    "A57"
+   ],
+   "planned_deliverables": [
+    "参数/目标/约束/初边值来源",
+    "模型适用的残差/界限/误差记录",
+    "可行/不可行/不可识别已知答案",
+    "不可行/无界/超时/可行候选/局部/认证全局解的区分"
+   ],
+   "done_when": "真实求解结果与诊断可核；不将局部解、不可行解或缺条件问题称为已证明现实有效。 必要条件或小残差不冒充全局最优证明。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "note": "求解质量：infeasible/unbounded/timeout/local_optimum/certified_global；子进程墙钟超时；LP 最优为 certified_global。"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "note": "求解质量：infeasible/unbounded/timeout/local_optimum/certified_global；子进程墙钟超时；LP 最优为 certified_global。"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "note": "求解质量：infeasible/unbounded/timeout/local_optimum/certified_global；子进程墙钟超时；LP 最优为 certified_global。"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "note": "求解质量：infeasible/unbounded/timeout/local_optimum/certified_global；子进程墙钟超时；LP 最优为 certified_global。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:01+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:01+08:00"
+  },
+  "T20": {
+   "id": "T20",
+   "phase": "M4",
+   "requirements": [
+    "R05"
+   ],
+   "title": "统计诊断与研究设计联查",
+   "planned_status": "planned",
+   "depends_on": [
+    "T18"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A25",
+    "A27"
+   ],
+   "planned_deliverables": [
+    "设计相关的收敛/分离/协方差等诊断",
+    "缺失/权重/相关结构处理说明",
+    "诊断不适用或未核的理由"
+   ],
+   "done_when": "复用已有方法并按实际设计评估；不能用空诊断或一个固定样本门槛代替方法判断。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "note": "诊断含收敛/条件数/分离预警，但「研究设计与诊断联查表」尚未成表；只做到点检。"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "note": "诊断含收敛/条件数/分离预警，但「研究设计与诊断联查表」尚未成表；只做到点检。"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "note": "诊断含收敛/条件数/分离预警，但「研究设计与诊断联查表」尚未成表；只做到点检。"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "note": "诊断含收敛/条件数/分离预警，但「研究设计与诊断联查表」尚未成表；只做到点检。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 designcheck.py：从数据推断 clustered/repeated/weighted/matched/stratified/panel/small_n/missing/multiple_outcomes，映射到必须报告的诊断；缺诊断即失败；角色 N 按单位计，检测 fit/test 泄漏与重复测量；结果写 validation_result(target.kind=design_linkage)。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:35+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/designcheck.py",
+      "tests/test_design_v2.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:02+08:00"
+  },
+  "T21": {
+   "id": "T21",
+   "phase": "M4",
+   "requirements": [
+    "R06"
+   ],
+   "title": "规格稳定性、多重比较与预测验证",
+   "planned_status": "planned",
+   "depends_on": [
+    "T19",
+    "T20",
+    "T22"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A26",
+    "A27",
+    "A51",
+    "A56"
+   ],
+   "planned_deliverables": [
+    "合理规格登记及全部结果",
+    "共同目标参数下的比较",
+    "按组/时间划分及泄漏控制",
+    "同目标参数/尺度/范围的比较与预处理范围绑定"
+   ],
+   "done_when": "显著/不显著/失败/未运行均可见；原始/调整结果和检验族依据可追溯；训练表现不冒充样本外表现。 在基础数值独立核查接通后扩展合理规格。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "note": "stability：无通过独立校核即拒绝（T22 先于 T21）；变体含去控制/换 link/子样本/缩尾；符号翻转与 CI 跨零进入 fragile。"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "note": "stability：无通过独立校核即拒绝（T22 先于 T21）；变体含去控制/换 link/子样本/缩尾；符号翻转与 CI 跨零进入 fragile。"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "note": "stability：无通过独立校核即拒绝（T22 先于 T21）；变体含去控制/换 link/子样本/缩尾；符号翻转与 CI 跨零进入 fragile。"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "note": "stability：无通过独立校核即拒绝（T22 先于 T21）；变体含去控制/换 link/子样本/缩尾；符号翻转与 CI 跨零进入 fragile。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:13+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:02+08:00"
+  },
+  "T22": {
+   "id": "T22",
+   "phase": "M4",
+   "requirements": [
+    "R06"
+   ],
+   "title": "独立公式或另一实现数值校核",
+   "planned_status": "planned",
+   "depends_on": [
+    "T19",
+    "T20",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A28",
+    "A51",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "独立校核执行与代码",
+    "预先声明的容差/等价标准",
+    "不一致与未核处置",
+    "分层独立性与共享错误预处理的反例"
+   ],
+   "done_when": "校核不是抄回原结果；精确/浮点/随机/等价解分别比较；不事后放大容差使结果通过。 先验证单模型数值，再应用到规格；同一错误输入上重复一致不自证输入正确。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "note": "独立 OLS（numpy lstsq）与独立 IRLS（自写）；共享预处理只给 agrees_but_not_independent 且状态为 failed；篡改估计能被发现。"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "note": "独立 OLS（numpy lstsq）与独立 IRLS（自写）；共享预处理只给 agrees_but_not_independent 且状态为 failed；篡改估计能被发现。"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "note": "独立 OLS（numpy lstsq）与独立 IRLS（自写）；共享预处理只给 agrees_but_not_independent 且状态为 failed；篡改估计能被发现。"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "note": "独立 OLS（numpy lstsq）与独立 IRLS（自写）；共享预处理只给 agrees_but_not_independent 且状态为 failed；篡改估计能被发现。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:23+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "evidence": "tests/test_models_entities.py"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "evidence": "tests/test_models_entities.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:02+08:00"
+  },
+  "T23": {
+   "id": "T23",
+   "phase": "M5",
+   "requirements": [
+    "R07"
+   ],
+   "title": "变更影响与保守失效",
+   "planned_status": "planned",
+   "depends_on": [
+    "T03",
+    "T10",
+    "T13",
+    "T15",
+    "T18",
+    "T37"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A29",
+    "A30",
+    "A53"
+   ],
+   "planned_deliverables": [
+    "资料/规则/实体/环境/文稿变更清单",
+    "正向及缺失/排除判断依赖",
+    "当前与 stale 状态传播",
+    "后续论断/引用/绘图/最终文稿依赖的注册和验收"
+   ],
+   "done_when": "新材料与删改原件都能触发发现、回查和适用性复评；未知依赖保守失效。 后加节点必须验证失效传播，未知依赖保守处理。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "note": "depgraph.impact + claims.link_dependencies 已可用；图表/文稿节点尚未自动注册，数据集变化的自动传播仍需调用方接线。"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "note": "depgraph.impact + claims.link_dependencies 已可用；图表/文稿节点尚未自动注册，数据集变化的自动传播仍需调用方接线。"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "note": "depgraph.impact + claims.link_dependencies 已可用；图表/文稿节点尚未自动注册，数据集变化的自动传播仍需调用方接线。"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "note": "depgraph.impact + claims.link_dependencies 已可用；图表/文稿节点尚未自动注册，数据集变化的自动传播仍需调用方接线。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "claims.link_dependencies 显式登记 claim/manuscript_block 节点与 supplies/presents 边；manuscript.register_media_dependencies 登记 figure 节点与 result→figure(derived)、figure→block(presents) 边；propagate 覆盖下游失效。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/claims.py",
+      "empirical-research-pipeline/scripts/manuscript.py",
+      "tests/test_claims.py",
+      "tests/test_refs_manuscript.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:02+08:00"
+  },
+  "T24": {
+   "id": "T24",
+   "phase": "M5",
+   "requirements": [
+    "R07"
+   ],
+   "title": "安全缓存、检查点与增量排程",
+   "planned_status": "planned",
+   "depends_on": [
+    "T23",
+    "T37"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A30",
+    "A31",
+    "A41",
+    "A48",
+    "A49",
+    "A50",
+    "A55",
+    "A59"
+   ],
+   "planned_deliverables": [
+    "内容/代码/环境绑定缓存",
+    "可恢复的分批执行",
+    "受影响数据集整表复核排程",
+    "执行与复用分开的回执和恢复协议"
+   ],
+   "done_when": "缓存不自动续签复核；现有全局失效标准保留；分批不截断或少算。 不能触碰时间或改签名冒充本次运行，失配检查点不可续用。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "note": "cache 复用写新运行记录（ran_again=false，不 re-date）；输入变化即 stale；检查点五层比较在 txn。"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "note": "cache 复用写新运行记录（ran_again=false，不 re-date）；输入变化即 stale；检查点五层比较在 txn。"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "note": "cache 复用写新运行记录（ran_again=false，不 re-date）；输入变化即 stale；检查点五层比较在 txn。"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "note": "cache 复用写新运行记录（ran_again=false，不 re-date）；输入变化即 stale；检查点五层比较在 txn。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:44:36+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:45:02+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:02+08:00"
+  },
+  "T25": {
+   "id": "T25",
+   "phase": "M5",
+   "requirements": [
+    "R07"
+   ],
+   "title": "完整环境和隔离重跑",
+   "planned_status": "planned",
+   "depends_on": [
+    "T17",
+    "T22",
+    "T24",
+    "T40"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A31",
+    "A50",
+    "A55"
+   ],
+   "planned_deliverables": [
+    "解释器/包/引擎/字体/种子环境记录",
+    "可重建环境与重跑入口",
+    "数值/语义/视觉复现报告",
+    "执行前环境/外部参数快照与执行后检查"
+   ],
+   "done_when": "干净目录真实重跑并比较；缺引擎或环境不可重建不能标 passed；不要求无意义的 Word 元数据逐字节相同。 不固定服务/并行算法如实记录复现限制，不能只事后收集版本。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "note": "environment_snapshot 前后对比（python/packages/engines/规则文件哈希），drift 标 drifted；明确种子不等于可复现。"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "note": "environment_snapshot 前后对比（python/packages/engines/规则文件哈希），drift 标 drifted；明确种子不等于可复现。"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "note": "environment_snapshot 前后对比（python/packages/engines/规则文件哈希），drift 标 drifted；明确种子不等于可复现。"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "note": "environment_snapshot 前后对比（python/packages/engines/规则文件哈希），drift 标 drifted；明确种子不等于可复现。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:03+08:00"
+  },
+  "T26": {
+   "id": "T26",
+   "phase": "M6",
+   "requirements": [
+    "R08"
+   ],
+   "title": "全文论断与结果支持关系",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02",
+    "T18",
+    "T22",
+    "T23"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A32",
+    "A34",
+    "A53",
+    "A56"
+   ],
+   "planned_deliverables": [
+    "claims 及支持/矛盾/未核状态",
+    "数字/方向/单位/范围/因果联查",
+    "编辑后的失效与复核",
+    "稳定内容块/修订/实印文本与多对多支持关系"
+   ],
+   "done_when": "正文、摘要、图注、讨论与结论有可核依据；机器和语义阅读责任明确，错误论断得到实际处置。 文本或支持范围变动使旧审阅失效，连接性文字不强行伪造引用。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "note": "claims：9 类机器核查（方向/极值/分母/单位/时间/因果/文献层次/支持缺失/数字可溯）+ 块指纹 + 实印比对 + 传播。"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "note": "claims：9 类机器核查（方向/极值/分母/单位/时间/因果/文献层次/支持缺失/数字可溯）+ 块指纹 + 实印比对 + 传播。"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "note": "claims：9 类机器核查（方向/极值/分母/单位/时间/因果/文献层次/支持缺失/数字可溯）+ 块指纹 + 实印比对 + 传播。"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "note": "claims：9 类机器核查（方向/极值/分母/单位/时间/因果/文献层次/支持缺失/数字可溯）+ 块指纹 + 实印比对 + 传播。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:14+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "evidence": "tests/test_claims.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:03+08:00"
+  },
+  "T27": {
+   "id": "T27",
+   "phase": "M6",
+   "requirements": [
+    "R08"
+   ],
+   "title": "文献事实与原文支持核验",
+   "planned_status": "planned",
+   "depends_on": [
+    "T26",
+    "T23"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A33",
+    "A34",
+    "A53"
+   ],
+   "planned_deliverables": [
+    "真实参考文献记录",
+    "原文定位及访问范围",
+    "可用时更正/撤稿/版本核查",
+    "访问快照、支持范围及新版本/更正文献的失效事件"
+   ],
+   "done_when": "DOI 不是观点支持证明；摘要访问不冒充全文；服务不可达如实未核；书籍/报告不强制 DOI。 真实来源可访问层次与实际采用版本绑定。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:15+08:00",
+     "note": "claims 能按 access.level 判 abstract/metadata 不支持全文声明；但独立的文献核验（DOI→元数据、原文可得性）尚无生成端。"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "note": "claims 能按 access.level 判 abstract/metadata 不支持全文声明；但独立的文献核验（DOI→元数据、原文可得性）尚无生成端。"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "note": "claims 能按 access.level 判 abstract/metadata 不支持全文声明；但独立的文献核验（DOI→元数据、原文可得性）尚无生成端。"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "note": "claims 能按 access.level 判 abstract/metadata 不支持全文声明；但独立的文献核验（DOI→元数据、原文可得性）尚无生成端。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 refs.py：DOI 元数据核验（Crossref 或本地元数据）、访问层级（full_text/abstract/metadata/unavailable）与证据路径+哈希、逐句支持（verbatim 引文）、摘要不能支撑全文论断、存储文本变化检测。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:15+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/refs.py",
+      "tests/test_refs_manuscript.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:03+08:00"
+  },
+  "T28": {
+   "id": "T28",
+   "phase": "M6",
+   "requirements": [
+    "R08"
+   ],
+   "title": "完整研究叙事和组稿接入",
+   "planned_status": "planned",
+   "depends_on": [
+    "T26",
+    "T27",
+    "T23"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A34",
+    "A53",
+    "A54"
+   ],
+   "planned_deliverables": [
+    "按学科组织的完整论文式内容",
+    "结果/论断/图表 ID 映射",
+    "必要附录和未完成项",
+    "最终实印内容对照和待补稿/正式论断区分"
+   ],
+   "done_when": "Agent 真正写出研究主线、方法、结果、讨论和结论；组稿文件存在不等同于论文完整。 待补事实不能变成确定结论，稿件编辑后实际重核。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:15+08:00",
+     "note": "manuscript_block 记录、指纹、实印文本比对已有；完整论文组稿器未接线。"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "note": "manuscript_block 记录、指纹、实印文本比对已有；完整论文组稿器未接线。"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "note": "manuscript_block 记录、指纹、实印文本比对已有；完整论文组稿器未接线。"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "note": "manuscript_block 记录、指纹、实印文本比对已有；完整论文组稿器未接线。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 manuscript.py：从 manuscript_block 组装完整论文（必需章节、最小篇幅、占位符拒绝、数字必须可溯源到 model_result、图表插注、页码、CJK 字体），真实 Word COM 导出 PDF，回读 DOCX/PDF 实印文本与审核文本比对，不一致即 manuscript_block→stale。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:15+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:44:24+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "evidence": "tests/test_claims.py"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/manuscript.py",
+      "tests/test_refs_manuscript.py",
+      "tests/test_e2e_projects.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:03+08:00"
+  },
+  "T29": {
+   "id": "T29",
+   "phase": "M6",
+   "requirements": [
+    "R09"
+   ],
+   "title": "结果到实际图元的数据联查",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02",
+    "T13",
+    "T18",
+    "T22",
+    "T23"
+   ],
+   "integration_dependencies": [
+    "T21"
+   ],
+   "acceptance_cases": [
+    "A35",
+    "A53",
+    "A56"
+   ],
+   "planned_deliverables": [
+    "图表研究口径与绘图数据",
+    "点/线/系列/误差/矩阵映射",
+    "完整图集和全量结果索引",
+    "公共结果类型、目标参数及图元/文稿依赖边"
+   ],
+   "done_when": "漏系列、错分母、错误排序/变换/误差等有可检测证据；图元数量不冒充样本 N。 描述图/不同模型图可接入同等契约，不强迫所有结果系数化。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:37+08:00",
+     "note": "未开始：figure_spec 只有契约与版面检查，尚无「图元↔数据」生成/核对脚本。"
+    },
+    {
+     "at": "2026-11-14T14:45:03+08:00",
+     "note": "未开始：figure_spec 只有契约与版面检查，尚无「图元↔数据」生成/核对脚本。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 figsematics.py：从真实 artist 读柱高/误差棒/散点/折线/图例/文本，逐项对账数据；60 类密集标签用旋转矩形 SAT 实测重叠；位图/PDF 判不了的项目全部进 unverifiable；记录写 figure_spec。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/figsemantics.py",
+      "tests/test_figure_semantics.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:03+08:00"
+  },
+  "T30": {
+   "id": "T30",
+   "phase": "M6",
+   "requirements": [
+    "R09"
+   ],
+   "title": "密集标签与实际配色版面复核",
+   "planned_status": "planned",
+   "depends_on": [
+    "T29",
+    "T23"
+   ],
+   "integration_dependencies": [
+    "T21"
+   ],
+   "acceptance_cases": [
+    "A36",
+    "A37",
+    "A53"
+   ],
+   "planned_deliverables": [
+    "标题/图例/标签/色标/标注边界",
+    "同图自适应布局",
+    "分类/连续/透明/混合映射诊断",
+    "布局更改后的依赖失效和全图集范围检查"
+   ],
+   "done_when": "保留同图、完整项目、文字和字号；不自动分页；配色建议不被升级为默认硬门槛。 不使用样式推荐或布局调整掩盖数据/项目遗漏。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "note": "未开始：密集横轴/配色版面复核沿用既有 pubfig/qa_outputs，未新增 v2 生成端。"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "note": "未开始：密集横轴/配色版面复核沿用既有 pubfig/qa_outputs，未新增 v2 生成端。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "figsemantics.layout_options 依据实测几何给出 rotate/expand/widen/subplot 方案（不删标签、不截字），palette_report 区分 sequential/diverging/categorical 且仅作建议（mandatory=False，不参与 ok）。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/figsemantics.py",
+      "tests/test_figure_semantics.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:04+08:00"
+  },
+  "T31": {
+   "id": "T31",
+   "phase": "M6",
+   "requirements": [
+    "R09"
+   ],
+   "title": "最终 DOCX/PDF 安置和逐页检查",
+   "planned_status": "planned",
+   "depends_on": [
+    "T28",
+    "T30",
+    "T23"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A38",
+    "A39",
+    "A53",
+    "A54"
+   ],
+   "planned_deliverables": [
+    "实际宽高 dpi/字号报告",
+    "严格图题回填和引用映射",
+    "真实 Word/PDF 与逐页复核记录",
+    "最终实印文本/图题及版本依赖对照"
+   ],
+   "done_when": "双栏缩图、窄图和长图均实际检查；图题表头公式引用正确；没有 Word 不能声称 Word 链路已验。 每轮重要编辑重新核对受影响页面，实际版面不能借源图合格放行。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "note": "layout_check：按最终 DOCX/PDF 实际安置尺寸量 dpi 与字号；图片按解码像素哈希跨格式配对；位图无文字层判 unassessed 不放行。"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "note": "layout_check 实现并 39 项测试通过（含真机 Word→PDF 证据）；但前置 T30（密集标签/配色版面）未接线，组合验收未做，故不标 implemented。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "layout_check 在最终安置尺寸下量有效 dpi/字号/图题/图注并用解码像素哈希配对DOCX/PDF；与 figsematics.check_saved 互补；无文字层/位图项进 unverifiable。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "evidence": "tests/test_layout.py"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "evidence": "tests/test_layout.py"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/layout_check.py",
+      "empirical-research-pipeline/scripts/figsemantics.py",
+      "tests/test_layout.py",
+      "tests/test_figure_semantics.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:04+08:00"
+  },
+  "T32": {
+   "id": "T32",
+   "phase": "M7",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "分项终检与发布完整性报告",
+   "planned_status": "planned",
+   "depends_on": [
+    "T10",
+    "T13",
+    "T18",
+    "T22",
+    "T25",
+    "T27",
+    "T31",
+    "T40"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A40",
+    "A47",
+    "A54"
+   ],
+   "planned_deliverables": [
+    "覆盖分母与范围说明",
+    "完整/受限/未就绪/失败状态",
+    "未完成依赖和结论影响",
+    "完整/部分目标和阶段成功的正式发布判据"
+   ],
+   "done_when": "已注册覆盖、真实复核、执行/方法、论断和产物分别报告；零错误不冒充全部研究完成。 partial 不能绕过正式数据/论断硬约束，0/2 既有语义不被报告导出清零。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "note": "release：四态发布快照 + manifest；空 scope/缺证据/硬闸门未过都不 complete；limited 需显式声明且硬闸门全过。"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "note": "release：四态发布快照 + manifest；空 scope/缺证据/硬闸门未过都不 complete；limited 需显式声明且硬闸门全过。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:04+08:00"
+  },
+  "T33": {
+   "id": "T33",
+   "phase": "M7",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "全链路已知答案项目验收",
+   "planned_status": "planned",
+   "depends_on": [
+    "T07",
+    "T15",
+    "T25",
+    "T31",
+    "T32",
+    "T38",
+    "T39",
+    "T40"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A11",
+    "A13",
+    "A21",
+    "A24",
+    "A29",
+    "A34",
+    "A39",
+    "A43",
+    "A44",
+    "A45",
+    "A46",
+    "A48",
+    "A49",
+    "A50",
+    "A51",
+    "A52",
+    "A53",
+    "A54",
+    "A55",
+    "A56",
+    "A57",
+    "A58",
+    "A59",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "混合资料测试项目",
+    "统计/数学项目",
+    "追加资料和投稿产物项目",
+    "独立已知答案、环境/模态分开和运行证据"
+   ],
+   "done_when": "保留可判断的原件/期望/实际结果；真实提供方与 Word 集成另有实际证据；模拟和 skip 不冒充集成完成。 M7 为综合验证，不能替代各批前置测试。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "note": "未开始：四类端到端已知答案项目未建立；现有测试是模块级真实运行，不是「混合资料→统计→追加→投稿」全链路验收。"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "note": "未开始：四类端到端已知答案项目未建立；现有测试是模块级真实运行，不是「混合资料→统计→追加→投稿」全链路验收。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 tests/test_e2e_projects.py 四个已知答案项目：定量问卷（OLS 斜率 3.0/0.5、160 格全核、独立重算、支持论断、release complete/limited）、定性访谈（主题计数 3/2、真实搜索、真实缺口）、数学规划（LP 目标 -2.8、certified_global、枚举复核）、混合材料（PDF 文本+扫描、XLSX 公式、OCR、审计视图、图、组稿与实印比对）。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "tests/test_e2e_projects.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:04+08:00"
+  },
+  "T34": {
+   "id": "T34",
+   "phase": "M7",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "完整回归、故障与规模测试",
+   "planned_status": "planned",
+   "depends_on": [
+    "T33",
+    "T37",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A01",
+    "A02",
+    "A03",
+    "A41",
+    "A42",
+    "A48",
+    "A49",
+    "A50",
+    "A59",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "最终源码回归记录",
+    "故障注入与大数据对账",
+    "性能与未测范围",
+    "声明测试规模/资源/完整计数的递增规模验证"
+   ],
+   "done_when": "保留既有行为并实测新增场景；C01-C18 与 V-05 不回退；不以删除失败用例或静默 top-N 提速。 故障点和规模预先定义，性能预算到限不缩减真实性标准。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "note": "改动后完整回归 759 项通过、0 跳过（本机真实 OCR/ASR/Word/ffmpeg）；故障注入与规模/预算测试未系统化。"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "note": "改动后完整回归 759 项通过、0 跳过（本机真实 OCR/ASR/Word/ffmpeg）；故障注入与规模/预算测试未系统化。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 faults.py + tests/test_hardening.py：ENOSPC 半写、pointer 替换前杀进程、检查点五层失效、超时只能 cancelled、200k 行分块与 50k 行读回、并发提交幂等；据此修复 txn 先发布后写回执、latest 不容错、checkpoint 不看状态、recover 选错 commit。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:38+08:00",
+     "evidence": "docs/implementation/verification/regression-final.log"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "evidence": "docs/implementation/verification/regression-final.log"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/scripts/faults.py",
+      "tests/test_hardening.py",
+      "empirical-research-pipeline/scripts/txn.py"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:04+08:00"
+  },
+  "T35": {
+   "id": "T35",
+   "phase": "M7",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "更新文档、迁移与插件接入说明",
+   "planned_status": "planned",
+   "depends_on": [
+    "T32",
+    "T33",
+    "T34"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A02",
+    "A40",
+    "A47",
+    "A52",
+    "A54"
+   ],
+   "planned_deliverables": [
+    "精简 SKILL 与按需引用",
+    "可运行 README/CLI/样例",
+    "v1/v2 与第三方状态语义",
+    "新增角色/状态/特性/事务/验收证据说明"
+   ],
+   "done_when": "文档只写已可用能力；所有九项完成证据可查；不擅自修改第三方插件或已安装副本。 兼容文案与运行判据一致，设计状态和真实通过不可混写。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "note": "新增 references/13-contract-v2.md，更新 SKILL.md 入口、README 脚本索引与进一步阅读、CHANGELOG；迁移与第三方插件接入说明只覆盖已有契约字段。"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "note": "已新增 references/13-contract-v2.md 并更新 SKILL/README/CHANGELOG；但 T33（端到端项目）未做，迁移与插件接入说明只能覆盖当前已有字段。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "更新 references/13-contract-v2.md、SKILL.md、README.md、CHANGELOG.md，补充 refs/manuscript/designcheck/figsemantics/faults/acceptance_cards 的用法、迁移与限制；文档只写实际可用能力。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "evidence": "empirical-research-pipeline/references/13-contract-v2.md"
+    },
+    {
+     "at": "2026-11-14T14:45:04+08:00",
+     "evidence": "empirical-research-pipeline/references/13-contract-v2.md"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "empirical-research-pipeline/references/13-contract-v2.md",
+      "README.md",
+      "CHANGELOG.md"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:04+08:00"
+  },
+  "T36": {
+   "id": "T36",
+   "phase": "M7",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "构建、隔离验证与最终交付",
+   "planned_status": "planned",
+   "depends_on": [
+    "T34",
+    "T35",
+    "T37",
+    "T39"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A40",
+    "A42",
+    "A52",
+    "A54",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "源码对应安装包及标准 SHA256",
+    "隔离安装/行为验证记录",
+    "完整交付清单和限制",
+    "最终源码、用例、实际证据和产品/项目范围签收"
+   ],
+   "done_when": "最终源码、文档、实际验证与包一致；不把真实项目数据或开发测试材料装入 skill；缺项保留未完成。 新增能力必须有实际集成证据，未完成模态不靠安装包存在标完成。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "note": "重建 69 文件包、--check 源码一致、整包 SHA256 与 sidecar 一致、隔离目录解包导入 20 模块并跑通 source_units。"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "note": "重建 69 文件包、--check 源码一致、整包 SHA256 与 sidecar 一致、隔离目录解包导入 20 模块并跑通 source_units。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "evidence": "dist/empirical-research-pipeline.skill.sha256"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "evidence": "dist/empirical-research-pipeline.skill.sha256"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:05+08:00"
+  },
+  "T37": {
+   "id": "T37",
+   "phase": "M0",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "事务、并发、取消与恢复基础",
+   "planned_status": "planned",
+   "depends_on": [
+    "T03"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A48",
+    "A49",
+    "A50",
+    "A55"
+   ],
+   "planned_deliverables": [
+    "唯一运行/操作 ID、staging 和不可变提交清单",
+    "父版本/补丁校验及锁协议",
+    "失败/取消/超时/崩溃恢复"
+   ],
+   "done_when": "先核完整结果再更新发布指针；读者不读半成品；原件和上一完整版本可核；恢复只接受匹配输入，不干扰其他运行。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "note": "txn：staging、父版本、输入复验、内容寻址对象、原子指针、幂等、中断恢复、O_EXCL 锁；13 项测试。"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "note": "txn：staging、父版本、输入复验、内容寻址对象、原子指针、幂等、中断恢复、O_EXCL 锁；13 项测试。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "evidence": "tests/test_research_core.py"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "evidence": "tests/test_research_core.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:05+08:00"
+  },
+  "T38": {
+   "id": "T38",
+   "phase": "M1",
+   "requirements": [
+    "R01",
+    "R03"
+   ],
+   "title": "原生审计视图、类型精度与合法空数据",
+   "planned_status": "planned",
+   "depends_on": [
+    "T02",
+    "T04",
+    "T06"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A10",
+    "A43",
+    "A44",
+    "A46",
+    "A58"
+   ],
+   "planned_deliverables": [
+    "独立结构/维度/顺序/内容核对",
+    "大数/前导零/Unicode/缺失/来源类别规则",
+    "空表的范围证据及无 N 输入支持"
+   ],
+   "done_when": "哈希不代替无损核对；原生字段不能丢失；空表和无 N 不伪造 0/0 通过；估计/模拟不写回实测层。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "note": "audit_view：CSV/JSONL/XLSX 与原始 XML 独立对账；JSON 重复键、大数精度、0.10 保真、公式文本、日期序列号；空表范围证据。"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "note": "audit_view：CSV/JSONL/XLSX 与原始 XML 独立对账；JSON 重复键、大数精度、0.10 保真、公式文本、日期序列号；空表范围证据。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "evidence": "tests/test_recovery_layer.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:05+08:00"
+  },
+  "T39": {
+   "id": "T39",
+   "phase": "M0",
+   "requirements": [
+    "foundation"
+   ],
+   "title": "可执行验收卡、独立期望与阶段门检",
+   "planned_status": "planned",
+   "depends_on": [
+    "T01",
+    "T02"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A51",
+    "A52",
+    "A60"
+   ],
+   "planned_deliverables": [
+    "每场景 fixture/步骤/独立期望/负例/环境/实际证据要求",
+    "生产与消费契约验收",
+    "按阶段/模态/提供方的真实结果记录"
+   ],
+   "done_when": "生产实现前建立期望；每批实际运行适用验收；mock、编号、文案、skip、无实际阅览不能当集成通过。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "note": "验收定义已复制进 ACCEPTANCE-RESULTS.json 并有独立期望字段；但「每批先写可执行验收卡」的流程未逐批留档。"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "note": "验收定义已复制进 ACCEPTANCE-RESULTS.json 并有独立期望字段；但「每批先写可执行验收卡」的流程未逐批留档。"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "note": "新增 tools/acceptance_cards.py（validate/render/batch-gate/order-check/drift）并据此补齐 60 张验收卡的 fixture/steps/observed/environment/时间戳/期望哈希；validate 60/60 通过、order-check 60/60 通过、批次门检可执行。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "evidence": "docs/implementation/ACCEPTANCE-RESULTS.json"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "evidence": "docs/implementation/ACCEPTANCE-RESULTS.json"
+    },
+    {
+     "at": "2026-11-14T15:40:00+08:00",
+     "evidence": [
+      "tools/acceptance_cards.py",
+      "tests/test_acceptance_cards.py",
+      "docs/implementation/ACCEPTANCE-CARDS.md"
+     ],
+     "note": "见所列文件；测试实际运行结果写在 IMPLEMENTATION-REPORT"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:05+08:00"
+  },
+  "T40": {
+   "id": "T40",
+   "phase": "M5",
+   "requirements": [
+    "R07",
+    "foundation"
+   ],
+   "title": "开放步骤调度、范围和恢复状态协同",
+   "planned_status": "planned",
+   "depends_on": [
+    "T03",
+    "T13",
+    "T18",
+    "T23",
+    "T24",
+    "T37"
+   ],
+   "integration_dependencies": [],
+   "acceptance_cases": [
+    "A47",
+    "A50",
+    "A53",
+    "A54",
+    "A55"
+   ],
+   "planned_deliverables": [
+    "开放步骤/依赖注册及同等手写流程接入",
+    "缺口/阻塞/取消/恢复事件",
+    "运行范围、产品能力和发布状态联查"
+   ],
+   "done_when": "记录真实步骤和依赖，不替 Agent 决定语义；未核或部分输出不能流入完整发布，模型/数据数量不默认封顶。",
+   "state": "implemented",
+   "changes": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "note": "lifecycle 步骤调度：依赖、预算、超预算标记、失败依赖阻塞后继；工具/引擎由调用方自选。"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "note": "lifecycle 步骤调度：依赖、预算、超预算标记、失败依赖阻塞后继；工具/引擎由调用方自选。"
+    }
+   ],
+   "verification": [
+    {
+     "at": "2026-11-14T14:44:39+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    },
+    {
+     "at": "2026-11-14T14:45:05+08:00",
+     "evidence": "tests/test_lifecycle_release.py"
+    }
+   ],
+   "gaps": [],
+   "updated_at": "2026-11-14T14:45:05+08:00"
+  }
+ }
+}

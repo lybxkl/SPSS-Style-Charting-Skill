@@ -1,0 +1,110 @@
+{
+  "status": "passed",
+  "archive": "dist\\empirical-research-pipeline.skill",
+  "archive_sha256": "4927b6047f314a79e440361f1a4dcc9a4f1f81e365e8396512dd4c475e43cbd5",
+  "archive_files": 78,
+  "bytes": 665954,
+  "dependency_scope": "isolated unpack directory; existing configured Python/dependencies; no fresh-environment or uninstalled-engine claim",
+  "observed": {
+    "imported_modules": [
+      "analysis_utils",
+      "asr_provider",
+      "assemble_manuscript",
+      "audit_corpus",
+      "audit_view",
+      "auto_chart_pack",
+      "auto_stats",
+      "check_decisions",
+      "claims",
+      "contract_v2",
+      "csv_to_spss_syntax",
+      "dedupe_corpus",
+      "depgraph",
+      "designcheck",
+      "discovery",
+      "entities",
+      "evidence",
+      "execution",
+      "export_pdf_hires",
+      "extract_lib",
+      "faults",
+      "figsemantics",
+      "gaps",
+      "layout_check",
+      "lifecycle",
+      "make_coding_sheet",
+      "manuscript",
+      "methods_lib",
+      "methods_pack",
+      "models",
+      "ocr_provider",
+      "paper_figures",
+      "pubfig",
+      "qa_outputs",
+      "refs",
+      "release",
+      "research_gate",
+      "review_pack",
+      "review_workbench",
+      "run_model",
+      "search_index",
+      "source_guard",
+      "source_units",
+      "support_review",
+      "table_recovery",
+      "text_extract",
+      "txn",
+      "validation",
+      "verify_dataset",
+      "verify_numbers"
+    ],
+    "known_answer": {
+      "budget_seconds": 30.0,
+      "certificate": {
+        "dual_bound": 2.0,
+        "integrality_error": 0.0,
+        "mip_gap": 0.0,
+        "primal_residual": 0.0,
+        "solver_status": 0
+      },
+      "constraints": [
+        "x >= 1.5",
+        "x integer"
+      ],
+      "diagnostics": {},
+      "dimensions": 1,
+      "elapsed_s": 1.289,
+      "estimate": 2.0,
+      "execution": {
+        "attempts": [
+          {
+            "elapsed_s": 1.289,
+            "ok": true,
+            "op": "solve",
+            "timed_out": false
+          }
+        ],
+        "conditions_ok": true,
+        "status": "success"
+      },
+      "message": "Optimization terminated successfully. (HiGHS Status 7: Optimal)",
+      "n": null,
+      "n_semantics": "none",
+      "scale": "linear",
+      "solution": [
+        2.0
+      ],
+      "solve_quality": "certified_global",
+      "target_parameter": "objective",
+      "trajectory": null,
+      "type": "mixed_integer_program",
+      "unit": "synthetic units"
+    },
+    "run": {
+      "result": "ISOLATED-MILP",
+      "status": "certified_global",
+      "objective": 2.0,
+      "elapsed_s": 1.289
+    }
+  }
+}

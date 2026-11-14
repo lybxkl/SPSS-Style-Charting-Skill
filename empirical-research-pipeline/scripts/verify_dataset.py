@@ -52,19 +52,20 @@ def _pairs(pairs):
     return out
 
 
-def load_json(path, precise=False):
-    with open(path, encoding="utf-8-sig") as stream:
+def load_json(path, precise=False, encoding="utf-8-sig"):
+    with open(path, encoding=encoding) as stream:
         return json.load(stream, object_pairs_hook=_pairs, parse_float=Decimal if precise else float,
                          parse_constant=lambda x: (_ for _ in ()).throw(
                              VerificationError(f"non-finite JSON number: {x}")))
 
 
-def load_jsonl(path, precise=False):
+def load_jsonl(path, precise=False, encoding="utf-8-sig"):
     rows = []
-    with open(path, encoding="utf-8-sig") as stream:
+    with open(path, encoding=encoding) as stream:
         for i, line in enumerate(stream, 1):
             if line.strip():
-                value = json.loads(line, object_pairs_hook=_pairs, parse_float=Decimal if precise else float)
+                value = json.loads(line, object_pairs_hook=_pairs, parse_float=Decimal if precise else float,
+                                   parse_constant=lambda x: (_ for _ in ()).throw(VerificationError(f"non-finite JSON number: {x}")))
                 if not isinstance(value, dict):
                     raise VerificationError(f"{path}:{i}: expected object")
                 rows.append(value)
@@ -205,9 +206,9 @@ class Verifier:
             value = rows[row - 1][loc["column"]]
         elif kind in {"json", "jsonl"}:
             if kind == "json":
-                value = self.cached((str(full), kind), lambda: load_json(full, precise=True))
+                value = self.cached((str(full), kind,loc.get("encoding")), lambda: load_json(full, precise=True,encoding=loc.get("encoding","utf-8-sig")))
             else:
-                data = self.cached((str(full), kind), lambda: load_jsonl(full, precise=True))
+                data = self.cached((str(full), kind,loc.get("encoding")), lambda: load_jsonl(full, precise=True,encoding=loc.get("encoding","utf-8-sig")))
                 row = loc["row"]
                 if isinstance(row, bool) or not isinstance(row, int) or row < 1 or row > len(data):
                     raise VerificationError("JSONL locator row out of range")
@@ -232,16 +233,32 @@ class Verifier:
                         if isinstance(page, bool) or not isinstance(page, int) or not 1 <= page <= len(pdf):
                             raise VerificationError("PDF page out of range")
                         return pdf[page - 1].get_text()
+                if loc.get("encoding"):
+                    return full.read_bytes().decode(loc["encoding"],errors="strict")
                 from text_extract import extract_text
                 import text_extract
                 self.bind(text_extract.__file__)
                 return extract_text(str(full))
-            text = self.cached((str(full), kind, loc.get("page")), get_text)
+            text = self.cached((str(full), kind, loc.get("page"),loc.get("encoding")), get_text)
             text = text.replace("\r\n", "\n").replace("\r", "\n")
             start, end = loc["start"], loc["end"]
             if any(isinstance(v, bool) or not isinstance(v, int) for v in (start, end)) or not 0 <= start < end <= len(text):
                 raise VerificationError("text span out of range")
             value = text[start:end]
+        elif kind == "ooxml":
+            import zipfile
+            import xml.etree.ElementTree as ET
+            W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+            with zipfile.ZipFile(full) as package:
+                root = ET.fromstring(package.read(loc["part"]))
+            if loc.get("element_id") is not None:
+                candidates = [node for node in root.iter() if node.tag == loc["element"] and node.get(W+"id") == str(loc["element_id"])]
+                if len(candidates) != 1:
+                    raise VerificationError("OOXML native ID is absent or ambiguous")
+                element = candidates[0]
+            else:
+                element = root if root.tag == loc.get("element") else list(root)[loc["index"]]
+            value = "".join(node.text or "" for node in element.iter() if node.tag.endswith("}t"))
         elif kind == "xlsx":
             import openpyxl
             workbook = openpyxl.load_workbook(full, read_only=True, data_only=False)
@@ -333,7 +350,15 @@ class Verifier:
                 self.bind(artifact["path"], artifact.get("sha256", ""))
             header, rows = read_csv(full, spec.get("encoding", "utf-8-sig"), spec.get("delimiter", ","))
             if not rows:
-                raise VerificationError(f"{ident}: empty dataset")
+                # A legally empty table is allowed only with range evidence:
+                # window, denominator, source hash and an actual re-read.
+                evidence = self._empty_evidence(ident)
+                if evidence is None and not self.v2_enabled():
+                    raise VerificationError(f"{ident}: empty dataset")
+                self.datasets[ident] = {"spec": spec, "rows": 0,
+                                        "columns": len(header),
+                                        "empty_evidence": (evidence or {}).get("id")}
+                continue
             keys = spec["key"] if isinstance(spec["key"], list) else [spec["key"]]
             if not keys or len(set(keys)) != len(keys) or any(k not in header for k in keys):
                 raise VerificationError(f"{ident}: invalid key columns")
@@ -375,7 +400,13 @@ class Verifier:
             sources = record.get("sources", [])
             values = [self.source(s) for s in sources]
             inputs = record.get("inputs", [])
-            if kind == "derived":
+            generated = kind in {"estimated", "imputed", "simulated"}
+            if generated:
+                import audit_view
+                obligation = audit_view.value_kind_obligations(kind, record)
+                if not obligation["ok"] or record.get("rule", {}).get("op") != "custom":
+                    raise VerificationError("generated values need method, uncertainty and an explicit recomputation adapter")
+            if kind == "derived" or (generated and inputs):
                 if not inputs or sources:
                     raise VerificationError("derived cells need input cells, not a replacement raw quote")
                 values = []
@@ -387,7 +418,7 @@ class Verifier:
                     if self.records[cell]["kind"] == "missing":
                         raise VerificationError("missing input cannot silently become a computed value")
                     values.append(self.cells[cell][0])
-            elif inputs:
+            elif inputs and not generated:
                 raise VerificationError("only derived cells may declare inputs")
             if kind in {"observed", "missing", "structural"} and not sources:
                 raise VerificationError(f"{kind} cells need at least one source/context anchor")
@@ -399,7 +430,11 @@ class Verifier:
                 if record.get("rule", {}).get("op") != "row_number":
                     raise VerificationError("structural row IDs use row_number; other rules use derived/observed")
                 expected = str(row_no)
-            elif kind in {"observed", "derived"}:
+            elif kind in {"observed", "encoded", "derived", "estimated", "imputed", "simulated", "image_approx"}:
+                if kind == "image_approx":
+                    import audit_view
+                    if not audit_view.value_kind_obligations(kind, record)["ok"]:
+                        raise VerificationError("image approximation needs source, calibration method and uncertainty")
                 expected = self.transform(record.get("rule", {}), values)
             else:
                 raise VerificationError(f"unknown cell kind: {kind}")
@@ -426,6 +461,10 @@ class Verifier:
             self.active.discard(target)
 
     def prepare(self):
+        for name in ("source_unit.jsonl", "audit_view.jsonl", "cell_evidence.jsonl", "units/materials.json"):
+            path = self.root / "output/v2" / name
+            if path.is_file():
+                self.bind(path)
         self.load()
         for target in self.cells:
             try:
@@ -437,6 +476,8 @@ class Verifier:
         for path, old in list(self.bindings.items()):
             if sha256(path) != old:
                 self.issue("changed_during_run", path, "input changed during verification")
+        if self.v2_enabled():
+            self.v2_cells()
         context = digest({"version": VERSION, "bindings": self.bindings})
         for target, (value, _) in self.cells.items():
             ident, key, column = target
@@ -486,6 +527,166 @@ class Verifier:
             for target in expected:
                 if target[0] == ident and target not in seen:
                     self.issue("review_missing", repr(target), "cell was not individually reviewed")
+        if self.v2_enabled():
+            self.v2_review_bound(expected, started)
+
+    # -- optional v2 contract checks -------------------------------------
+    def v2_enabled(self):
+        """v2 checks run only when a v2 ledger exists (old projects unaffected)."""
+        return any((self.root / "output/v2" / name).is_file() for name in
+                   ("source_unit.jsonl", "audit_view.jsonl", "cell_evidence.jsonl", "review_event.jsonl"))
+
+    def _v2(self):
+        import contract_v2
+        return contract_v2.Project(self.root)
+
+    def _empty_evidence(self, dataset: str):
+        if not self.v2_enabled():
+            return None
+        try:
+            for rec in self._v2().read("audit_view"):
+                data = rec["data"]
+                if data.get("dataset") == dataset and \
+                        data.get("cell_coverage") == "not_applicable":
+                    return rec
+        except Exception:                            # noqa: BLE001
+            return None
+        return None
+
+    def v2_cells(self):
+        """Kind obligations, evidence currency and legal-empty-table evidence."""
+        import audit_view
+        project = self._v2()
+        units = {r["id"]: r for r in project.read("source_unit")}
+        for target in self.cells:
+            ident, key, column = target
+            provenance = self.records.get(target)
+            if provenance is None:
+                self.issue("v2_missing_provenance", repr(target),
+                           "cell has no provenance record")
+                continue
+            where = repr(target)
+            kind = provenance.get("kind")
+            if kind not in audit_view.VALUE_KINDS:
+                self.issue("v2_kind", where,
+                           f"unknown cell kind {kind!r}; declare observed/encoded/"
+                           f"derived/structural/missing/estimated/imputed/"
+                           f"simulated/image_approx")
+                continue
+            status = audit_view.value_kind_obligations(kind, provenance)
+            if not status["ok"]:
+                self.issue("v2_obligation", where,
+                           f"{kind} cell lacks {', '.join(status['missing'])}; a "
+                           f"generated value needs method, uncertainty and inputs")
+            for src in provenance.get("sources") or []:
+                unit_id = src.get("unit")
+                if not unit_id:
+                    continue
+                unit = units.get(unit_id)
+                if unit is None:
+                    self.issue("v2_evidence_unit", where,
+                               f"source unit {unit_id} does not exist")
+                    continue
+                if unit["data"].get("source_sha256") != src.get("sha256"):
+                    self.issue("v2_evidence_unit", where,
+                               f"source unit {unit_id} was built from a different "
+                               f"revision than the cell claims")
+                if unit["status"] == "partial":
+                    if kind != "image_approx":
+                        self.issue("v2_partial_evidence", where,
+                                   f"unit {unit_id} is only partial (OCR/ASR or a "
+                                   f"scan) but the cell is declared {kind}; reread "
+                                   f"the original or declare image_approx")
+                    elif not src.get("reread"):
+                        self.issue("v2_partial_evidence", where,
+                                   f"image_approx cell backed by partial unit "
+                                   f"{unit_id} without a recorded re-read")
+        for ident, info in self.datasets.items():
+            if info["rows"]:
+                continue
+            evidence = project.read("audit_view")
+            scoped = [e for e in evidence
+                      if e["data"].get("dataset") == ident
+                      and e["data"].get("cell_coverage") == "not_applicable"]
+            if not scoped:
+                self.issue("v2_empty_table", ident,
+                           "0-row dataset without range evidence "
+                           "(window, denominator, source hash, re-read); an empty "
+                           "table is not automatically 'nothing happened'")
+                continue
+            for rec in scoped:
+                data = rec["data"]
+                if not data.get("window") or not data.get("denominator"):
+                    self.issue("v2_empty_table", ident,
+                               "range evidence lacks window/denominator")
+                if "%" in str(data.get("cell_coverage")):
+                    self.issue("v2_empty_table", ident,
+                               "an empty table cannot be reported as 0/0=100%")
+
+    def v2_review_bound(self, expected, started):
+        """A review event must belong to this cell and really go back to a source."""
+        try:
+            import contract_v2
+        except Exception as exc:                        # pragma: no cover
+            self.issue("v2_contract", "output/v2", exc)
+            return
+        project = self._v2()
+        events = {}
+        for rec in project.read("review_event"):
+            data = rec["data"]
+            if data["dataset"] == "<source-unit>":
+                # Source rereads precede integration; they are not cell reviews
+                # and cannot discharge the post-integration second pass.
+                try:
+                    contract_v2.validate_record(rec)
+                    unit_id = data["key"][0]
+                    unit = project.latest("source_unit", unit_id)
+                    if unit is None or not data.get("reviewer") or not data.get("reread_scope"):
+                        raise VerificationError("source reread lacks an existing source unit/reviewer/locator")
+                    if data.get("source_sha256") and data["source_sha256"] != unit["data"]["source_sha256"]:
+                        # Historical source events remain auditable but do not
+                        # support the current unit version.
+                        continue
+                except Exception as exc:
+                    self.issue("v2_source_review", rec["id"], exc)
+                continue
+            key = (data["dataset"], key_tuple(data["key"]), data["column"])
+            if parse_time(data["checked_at"]) < started:
+                # Historical rows/keys may have been removed. They are retained
+                # in the immutable ledger, but cannot discharge this snapshot.
+                # The current review file still has to cover every current cell.
+                continue
+            if key not in events or (parse_time(data["checked_at"]), parse_time(rec["created_at"]), rec["revision"]) > (parse_time(events[key]["data"]["checked_at"]), parse_time(events[key]["created_at"]), events[key]["revision"]):
+                events[key] = rec
+        for target, rec in events.items():
+            if target not in expected:
+                self.issue("v2_review_event", repr(target),
+                           "review event points at a cell that does not exist")
+                continue
+            try:
+                contract_v2.validate_record(
+                    rec, reader=contract_v2.Reader(
+                        "verify_dataset", VERSION, contract_v2.SCHEMA_VERSION,
+                        set(contract_v2.FEATURES)))
+            except Exception as exc:
+                self.issue("v2_review_event", repr(target), exc)
+                continue
+            if rec["data"]["record_sha256"] != expected[target]["record_sha256"]:
+                self.issue("v2_review_event", repr(target),
+                           "review event belongs to a different revision of the cell")
+            if (rec["data"].get("outcome") != "confirmed" or
+                    str(rec["data"].get("second_pass", {}).get("value")) != str(self.cells[target][0])):
+                self.issue("v2_review_event", repr(target),
+                           "latest second pass is disputed or does not confirm the current value; an older verified line cannot override it")
+            if parse_time(rec["data"]["checked_at"]) < started:
+                self.issue("v2_review_event", repr(target),
+                           "review event precedes the verification snapshot")
+            if rec["data"].get("independence") not in (
+                    "independent_of_first_pass", "same_agent_reread",
+                    "independent_of_ocr", "independent_of_asr"):
+                self.issue("v2_review_event", repr(target),
+                           f"declared independence {rec['data'].get('independence')!r} "
+                           f"does not show how a shared error was avoided")
 
 
 def write_json(path, value):
@@ -513,6 +714,9 @@ def validate_final_report(registry_path, root, report_path, adapters=()):
             raise VerificationError("review changed after final verification")
     if verifier.issues:
         raise VerificationError(f"cell reviews no longer pass: {verifier.issues[:3]}")
+    v2_reviews = verifier.root / "output/v2/review_event.jsonl"
+    if v2_reviews.is_file() and report.get("v2_review_sha256") != sha256(v2_reviews):
+        raise VerificationError("source/cell review events changed after final review")
     return verifier, report
 
 
@@ -558,11 +762,22 @@ def main(argv=None):
         with open(out / "cell_trace.jsonl", "w", encoding="utf-8") as stream:
             for record in verifier.traces:
                 stream.write(json.dumps(record, ensure_ascii=False) + "\n")
-    report = {"script_version": VERSION, "stage": args.stage,
+    report = {"script_version": VERSION, "stage": args.stage, "generated_at": stamp(),
               "status": "verified" if not issues and args.stage == "final" else "prepared" if not issues else "error",
               "error_count": len(issues), "cell_count": len(verifier.cells) if verifier else 0,
               "fingerprint": snapshot["fingerprint"] if snapshot else None,
+              "datasets": snapshot.get("datasets", {}) if snapshot else {},
               "limitations": "Machine matching and review attestations do not establish semantic truth; source context must actually be reread."}
+    if verifier and verifier.v2_enabled():
+        checks: dict[str, int] = {}
+        for item in issues:
+            if item["check"].startswith("v2_") or item["check"] in ("review", "review_missing"):
+                checks[item["check"]] = checks.get(item["check"], 0) + 1
+        report["contract_v2"] = {"enabled": True, "issues_by_check": checks,
+                                 "cells_checked": len(verifier.cells)}
+        v2_reviews = verifier.root / "output/v2/review_event.jsonl"
+        if v2_reviews.is_file():
+            report["v2_review_sha256"] = sha256(v2_reviews)
     if verifier and args.stage == "final" and args.snapshot:
         try:
             report["snapshot_path"] = str(verifier.path(args.snapshot))

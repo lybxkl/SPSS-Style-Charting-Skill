@@ -21,3 +21,5 @@ _duplicates/
 *.docx
 *.pdf
 *.log
+.dsh-meow
+docs

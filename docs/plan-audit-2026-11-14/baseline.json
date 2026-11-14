@@ -1,0 +1,21 @@
+{
+  "recorded_at_utc": "2026-11-14T05:08:09.333937+00:00",
+  "git_head": "f0c45b4b5eafb86211640e2557ef013f066ef8c3",
+  "original_plan_objects": {
+    "requirements": 9,
+    "tasks": 36,
+    "acceptance_cases": 42
+  },
+  "files": {
+    "before-plan.md": {
+      "original_path": "docs/RESEARCH-PIPELINE-ENHANCEMENT-PLAN-2026-11-14.md",
+      "sha256": "bf4875cc101a9c9d0094fce44795d466385e5fa83c6e5802f06ab9ab5ab9e814",
+      "bytes": 46962
+    },
+    "before-backlog.json": {
+      "original_path": "docs/research-pipeline-enhancement-2026-11-14.json",
+      "sha256": "2962deac4604e71d89c2f3f765b97cdbdb358ff6116e6f5f80800d375cd2cf87",
+      "bytes": 28681
+    }
+  }
+}

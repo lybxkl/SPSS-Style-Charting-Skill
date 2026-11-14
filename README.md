@@ -1,5 +1,9 @@
 # SPSS-Style-Charting-Skill
 
+当前流程见 [v2 维护与交付流程](empirical-research-pipeline/references/14-reviewed-workflow.md)。[原独立审计](docs/audit-implementation-2026-11-14/AUDIT-REPORT.md)保留修复前反例；[跨功能审计](docs/comprehensive-audit-2026-11-14/AUDIT-REPORT.md)与[完整模块矩阵](docs/comprehensive-audit-2026-11-14/MODULE-AUDIT.md)记录进一步的核查范围。当前执行证据以[实现报告](docs/implementation/IMPLEMENTATION-REPORT.md)为准，不沿用旧版验收卡的自报结论。
+
+当前修复快照：924 项完整回归通过，0 失败、0 跳过；本轮新增 36 项跨功能回归。安装包已与源码核对，并在独立临时目录导入全部 50 个脚本、实际求解整数规划。范围、函数入口观测与 A60 历史证据限制见[当前审计报告](docs/comprehensive-audit-2026-11-14/AUDIT-REPORT.md)。
+
 将混合研究资料整理成可追溯的数据集，由 Agent 选择数学与统计模型，产出论文级图集、配套分析报告和完整论文式 DOCX/PDF。
 
 本仓库交付可复用的 Agent Skill：[`empirical-research-pipeline`](empirical-research-pipeline/SKILL.md)。名称保留了早期“SPSS 风格制图”的来源；实际范围已覆盖资料发现、审计、抽取、数据整合、逐格复核、模型补数、分析、制图、文稿与终检。
@@ -81,13 +85,17 @@ python -m pip install -r requirements.txt
 | DOCX / DOCM | 正文、表格文本、页眉页脚、脚注尾注、批注文字 | 图片、嵌入对象、修订语义等仍需专门读取与上下文判断 |
 | ODT / PPTX / PPTM | 文档文字；幻灯片及讲者备注文字 | 图中数值、嵌入工作簿和其他非文字对象按需要额外提取 |
 | XLSX / XLSM | 文件/工作表审计、精确工作表单元格定位 | 转为分析数据；公式格需独立复算，不能仅信可能过期的缓存 |
-| CSV / TSV | 编码读取、严格行列检查、原始行/列定位 | 分析入口主要读取 CSV；非 CSV 表格先做可追溯转换 |
+| CSV / TSV | 编码读取、严格行列检查、原始行/列定位；v2 模型直接支持 CSV/TSV | 其他分析入口按实际支持格式选择；需要转换时保留原生文件和映射 |
 | JSON / JSONL | 指针/记录定位、重复键检查 | 按实际嵌套结构生成审计视图；高精度数值须保留精度 |
 | TXT / MD / HTML / XML / YAML / RTF | 文本抽取与字符位置；HTML 去除脚本/样式 | 网页存档不等于自动联网采集；RTF、表格和正文结构要复核 |
 | 图片、音视频 | 文件清单与状态 | 外部 OCR、转写或逐图读取；技能不自带 OCR/ASR 引擎 |
 | 压缩包、旧版 Office、未知格式 | 纳入清单并记录不可直接解析的原因 | 解压、转换、专用读取；恢复产物继续保留到原件的映射 |
 
 文件审计证明“看见并检查了哪些文件”，不自动证明“所有字段、表格和附件均已完整抽取”。原生数据可以是任何形态；CSV 审计视图是验证接口，不能为了符合接口而丢字段、丢关系或强行变成唯一宽表。
+
+v2 恢复入口严格解码，自动识别 BOM/UTF-8，其他编码通过 `source_units.py --root . build --materials materials --encodings encodings.json` 明确选择；JSON 重复键、非有限常量和不可解码字节不会静默替换。活跃恢复代次与历史分别统计，中间表示也核对哈希。PPTX 原生文字/表格/讲者备注已接入 v2，视觉内容保留待核范围；旧格式及其他入口的实际能力以上表和脚本诊断为准。
+
+整页/整段仍有未恢复范围时，先真实回读并写范围报告，再用 `SourceUnits.review_scope` 登记剩余范围及报告哈希。它不能代替数据集整合后的全格第二遍。具体 API、编码、模型条件适配器、JSON Pointer、缓存与发布升级步骤见[当前维护流程](empirical-research-pipeline/references/14-reviewed-workflow.md)。
 
 ## 使用方式
 
@@ -203,6 +211,16 @@ python "$SkillRoot/scripts/review_pack.py" --research-gate output/research_gate.
 
 | 工具 | 职责 |
 |---|---|
+| `contract_v2.py` / `depgraph.py` / `txn.py` | v2 记录信封与状态机、依赖图与失效传播、staging/不可变发布指针与锁 |
+| `execution.py` / `evidence.py` | 执行器与原件保护、输入/代码/环境绑定；发布和文稿共用当前来源与全表复核检查 |
+| `source_units.py` / `ocr_provider.py` / `asr_provider.py` / `table_recovery.py` / `audit_view.py` | 物理文件→逻辑单元→独立观察；真实 OCR/ASR（可替换提供方）与回原件复核；跨页表/合并单元格/公式缓存；原生数据与原始 XML/JSON 独立对账 |
+| `discovery.py` / `search_index.py` / `gaps.py` | 材料优先与问题优先两条发现路径、可重建索引与真实执行检索回执、缺数闭环（found/unavailable/exhausted） |
+| `review_workbench.py` | 离线逐格复核页、盲第二次抽取、冲突裁决、带父版本校验的补丁 |
+| `entities.py` / `models.py` / `validation.py` | 实体/关系/合并审计与单位统一；开放模型注册表（多输入角色、无样本 N、四态、求解质量）；独立数值校核与规格稳定性 |
+| `claims.py` / `support_review.py` / `layout_check.py` / `release.py` / `lifecycle.py` | 论断机械筛查与实际语境复读的版本绑定；最终 DOCX/PDF 实际安置检查；四态发布快照；环境快照/缓存复用/步骤调度 |
+| `refs.py` / `manuscript.py` | 文献身份、访问范围、逐句支持与撤稿/更正查核；自选章节组装完整论文、同命令导出 PDF、实印数字和附录完整性检查 |
+| `designcheck.py` / `figsemantics.py` | 研究设计→必须报告的诊断、角色 N 与训练/测试泄漏；图元与数据逐项对账、密集标签实测几何与配色用途报告（只建议不强制） |
+| `faults.py` / `tools/acceptance_cards.py` | 磁盘满/半写/杀进程/超时/规模注入；验收卡可执行校验、先期望后实现检查与批次门检 |
 | `audit_corpus.py` / `dedupe_corpus.py` | 全文件状态、保守文本/字节重复组、统一去重计划与工作副本回滚 |
 | `text_extract.py` | 多格式文字/结构检查；严格处理部分读取失败 |
 | `make_coding_sheet.py` / `extract_lib.py` | 文档工作表、配置化字段候选、证据和歧义 |
@@ -234,6 +252,12 @@ python tools/build_skill.py --check
 
 测试含已知答案、独立公式、故障反例、跨脚本契约和实际 CLI 行为。源码审计、隔离行为验证、数值校核和真实 Word/PDF 验证的具体范围见 [本轮审计报告](docs/AUDIT-2026-11-13.md)，历史变化见 [CHANGELOG](CHANGELOG.md)。测试通过不等于验证所有领域、所有引擎或所有语义。
 
+维护验收使用 `python tools/run_acceptance.py --map docs/comprehensive-audit-2026-11-14/acceptance-test-map.json --out <本次证据目录>` 保留逐项结果、原始日志及执行前后代码/测试哈希。真实 ASR 集成需配置 `VOSK_MODEL` 指向已安装的模型目录；缺引擎而跳过不算该能力集成通过。函数入口观测另列未观察到的定义，不能把入口命中率写成分支覆盖率。
+
+独立校核逐字段生效：系数和实际 N 通过，不代表标准误、区间或 p 值已核。原始 beta 不能只换标签变成 OR/IRR；新参数由实际适配器计算并校核。阶段交付 complete 仅限声明范围；完整研究用 `full_research`、实际分析报告与 DOCX/PDF，并检查 `project_ready`。`release show` 会重读当前依据，更新后须重新发布。
+
+接入 API 时，`evaluate/build` 的就绪字段是根层 `project_ready`，`show/current` 则读取 `evaluation.project_ready`；缺少 evaluation 时不视为就绪。状态、覆盖范围和原件复核依据一起展示，不能只显示退出码或历史 complete。
+
 `build_skill.py` 将 SKILL、scripts、references、assets、profiles 打入安装包，排除 evals、测试、字节码与真实项目数据。构建采用固定 ZIP 元数据，可重复产出相同字节。`.skill.sha256` 记录**整个安装包文件的标准 SHA256**；构建输出另列内部内容摘要，两者用途不同。
 
 ```powershell
@@ -245,6 +269,8 @@ Get-Content -LiteralPath ./dist/empirical-research-pipeline.skill.sha256
 
 ## 进一步阅读
 
+- [强化实施方案（设计与实施台账）](docs/RESEARCH-PIPELINE-ENHANCEMENT-PLAN-2026-11-14.md)：覆盖九项能力、模块/契约设计、实施批次、60 个验收场景和发布标准；[40 项任务与依赖](docs/research-pipeline-enhancement-2026-11-14.json) 仍是冻结的规划快照，实际进展与证据见 [实施台账](docs/implementation/TASK-STATUS.json) 与 [实施报告](docs/implementation/IMPLEMENTATION-REPORT.md)。[逐项方案审计](docs/AUDIT-RESEARCH-PLAN-2026-11-14.md)保留原 36 项任务、42 个场景的逐条意见与修订依据。
+- [v2 契约层](empirical-research-pipeline/references/13-contract-v2.md)：资料恢复/发现回查/逐格复核/模型校核/发布范围的记录种类、命令与硬性拒绝
 - [技能入口](empirical-research-pipeline/SKILL.md)
 - [开放研究与全格复核契约](empirical-research-pipeline/references/12-exhaustive-research.md)
 - [跨脚本数据契约](empirical-research-pipeline/references/10-contracts.md)

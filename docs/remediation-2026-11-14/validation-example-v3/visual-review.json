@@ -1,0 +1,31 @@
+{
+  "renderer": "C:\\Users\\20182\\.codex\\plugins\\cache\\openai-primary-runtime\\documents\\26.1112.11217\\skills\\documents\\render_docx.py",
+  "adapter": "actual current Word-exported PDF; no LibreOffice substitution",
+  "docx_sha256": "b4b643c3a9f283622e907d62ad0b2d353e4bd08cbfb7e097b90b9286fb72b699",
+  "pdf_sha256": "ea89f2d83ebba587198080e92ae1e0bbb80753ecdd1ef522a9d066e236e70142",
+  "pages": [
+    "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\remediation-2026-11-14\\validation-example-v3\\page-renders\\page-1.png",
+    "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\remediation-2026-11-14\\validation-example-v3\\page-renders\\page-2.png",
+    "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\remediation-2026-11-14\\validation-example-v3\\page-renders\\page-3.png"
+  ],
+  "page_sha256": {
+    "page-1.png": "02050ee7c4770ecffb7251d7055bd8bc3c8fd004188dcb98f98f7be6bae71cb9",
+    "page-2.png": "59be8fb0be5a96a7ef9a2c0d9f1b2dd18e5e6ad5eee4c61f0bc1dcb707e58efc",
+    "page-3.png": "208a7fab62cb113d6e05f9935fb43af2e709cae7387cb4c543a8dcc259d00a58"
+  },
+  "identical_to_previously_viewed_pages": true,
+  "reviewed_at": "2026-11-14T17:12:34.044864+00:00",
+  "reviewer": "Codex actual reinspection of all three current rendered page images",
+  "reviewed_pages": [
+    1,
+    2,
+    3
+  ],
+  "findings": [
+    "All twenty Chinese project labels remain in a single chart at 45 degrees, with no visible collisions or clipping.",
+    "Black title, no inherited blue rule; section headings remain attached to body text.",
+    "All twenty source records remain in the table and the header repeats on the third page.",
+    "The figure and caption remain together. No missing glyphs, overlapped body text or cropped content were observed."
+  ],
+  "scope": "Synthetic software validation only; no empirical population or causal claim."
+}

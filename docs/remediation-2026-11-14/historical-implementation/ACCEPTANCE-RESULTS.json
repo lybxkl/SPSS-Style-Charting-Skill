@@ -1,0 +1,3011 @@
+{
+ "schema_version": 1,
+ "kind": "acceptance_results_not_design_cards",
+ "plan_revision": "1.1",
+ "created_at": "2026-11-14T14:09:30+08:00",
+ "note": "Design cards live in docs/plan-audit-2026-11-14/acceptance_cards.json.  This file records what was actually executed; unassessed is not a pass. 2026-11-14: A52/A60 要求的 fixture/steps/observed/environment/时间戳/期望哈希已按真实执行记录补齐；未通过场景保留 gap。 2026-11-14: A52/A60 要求的 fixture/steps/observed/environment/时间戳/期望哈希已按真实执行记录补齐；未通过场景保留 gap。",
+ "cases": {
+  "A01": {
+   "id": "A01",
+   "scenario": "原件改写/删除、硬链接/输出重叠被发现；原件保护保留，失败不出成功回执",
+   "primary_task": "T01",
+   "linked_tasks": [
+    "T01",
+    "T34"
+   ],
+   "fixture_spec": "已知哈希原件，注入写入/删除/硬链接/输出重叠",
+   "expectation": "真实错误与原件恢复范围明确，失败不发布成功回执",
+   "negative_control": "只查目录存在，恢复后仍称本次成功",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:29:35.195459+08:00",
+     "command": "cd tests; python -m unittest test_guard_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_guard_entities.py"
+   ],
+   "note": "改写/删除原件后 finish() 恢复 2 个文件且 errors=[]；硬链接 forbidden=True；项目根与源目录重叠抛 ValueError；备份删除后 restore 记 errors 且不列 restored。",
+   "updated_at": null,
+   "fixture": "synthetic：已知哈希原件，注入写入/删除/硬链接/输出重叠；实际 fixture 由 tests/test_guard_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_guard_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_guard_entities -v",
+   "observed": "改写/删除原件后 finish() 恢复 2 个文件且 errors=[]；硬链接 forbidden=True；项目根与源目录重叠抛 ValueError；备份删除后 restore 记 errors 且不列 restored。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:29:35.195459+08:00",
+   "expectation_sha256": "f396496a2878735b30c8b1a46d82214a9d153062809cd779c5b1ce173d89c169"
+  },
+  "A02": {
+   "id": "A02",
+   "scenario": "v1 正常使用；v2 关键能力不能被旧读取器静默忽略；迁移不继承旧 verified",
+   "primary_task": "T02",
+   "linked_tasks": [
+    "T02",
+    "T34",
+    "T35"
+   ],
+   "fixture_spec": "合法v1、必需视觉语义v2及其迁移副本",
+   "expectation": "旧能力不能消费新语义，迁移后重新核对",
+   "negative_control": "剥关键字段或续用旧verified",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "JSON 重复键被独立校验拒绝，大数与 0.10 保真。",
+   "updated_at": "2026-11-14T14:45:05+08:00",
+   "fixture": "synthetic：合法v1、必需视觉语义v2及其迁移副本；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "JSON 重复键被独立校验拒绝，大数与 0.10 保真。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "eb222222fc2d577f763b4b06d4430e6913aa6536d1aa97f32bb8505994a2d274"
+  },
+  "A03": {
+   "id": "A03",
+   "scenario": "数字精度、重复 JSON 键、缺失/0、非法值和容差规则保持正确",
+   "primary_task": "T02",
+   "linked_tasks": [
+    "T01",
+    "T02",
+    "T13",
+    "T34"
+   ],
+   "fixture_spec": "长十进制、大整数、重复JSON键、空值/0/非法值",
+   "expectation": "按独立原值/有理数真值核对，非法容差拒绝",
+   "negative_control": "先转float舍入或缺失转0",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "字典型与结构化资料进入发现与结构覆盖。",
+   "updated_at": "2026-11-14T14:45:06+08:00",
+   "fixture": "synthetic：长十进制、大整数、重复JSON键、空值/0/非法值；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "字典型与结构化资料进入发现与结构覆盖。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "375e4b50e27660eb8997353eafc1764b90ceddfdb682a133dfaddde0ae3b414c"
+  },
+  "A04": {
+   "id": "A04",
+   "scenario": "局部扫描 PDF：文字层和扫描区域均有真实读取范围，不把局部成功写成全文成功",
+   "primary_task": "T05",
+   "linked_tasks": [
+    "T04",
+    "T05"
+   ],
+   "fixture_spec": "同页PDF有文字层与扫描表格，预先列两区域",
+   "expectation": "两区读取范围真实，未恢复不称全页已读",
+   "negative_control": "有文字层即跳过扫描区",
+   "environment_profiles": [
+    "local_core",
+    "selected_ocr_or_table_provider"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "混合 PDF 文本/扫描/混合三态，扫描页 partial + preview + unrecovered。",
+   "updated_at": "2026-11-14T14:45:06+08:00",
+   "fixture": "synthetic：同页PDF有文字层与扫描表格，预先列两区域；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "混合 PDF 文本/扫描/混合三态，扫描页 partial + preview + unrecovered。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "2ff72f0bbd17639071208ea9943e025928962e8d6e3af895a125477608baf30b"
+  },
+  "A05": {
+   "id": "A05",
+   "scenario": "旋转/缩放图：bbox、裁片与原页可准确互相定位，错误页/坐标被拒绝",
+   "primary_task": "T05",
+   "linked_tasks": [
+    "T04",
+    "T05"
+   ],
+   "fixture_spec": "原页90度旋转/缩放裁片，并加入错误页号",
+   "expectation": "几何真值可回原页，错页/越界拒绝",
+   "negative_control": "仅有bbox或图片即通过",
+   "environment_profiles": [
+    "local_core",
+    "selected_ocr_or_table_provider"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "旋转页 OCR bbox 回映射与文本层 IoU>0.55；越界映射 ValueError。",
+   "updated_at": "2026-11-14T14:45:06+08:00",
+   "fixture": "synthetic：原页90度旋转/缩放裁片，并加入错误页号；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "旋转页 OCR bbox 回映射与文本层 IoU>0.55；越界映射 ValueError。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "e854b397403a29d06a05380ec15d245f2238ec42d33887ef039cff7df3491494"
+  },
+  "A06": {
+   "id": "A06",
+   "scenario": "OCR 将字符错读：转写一致仍不能冒充原图已核，原图复核能纠正并使旧值失效",
+   "primary_task": "T13",
+   "linked_tasks": [
+    "T05",
+    "T13"
+   ],
+   "fixture_spec": "原图18，故障注入OCR文本81且候选81",
+   "expectation": "实际回看能更正并使旧81失效",
+   "negative_control": "文本相等或高confidence就verified",
+   "environment_profiles": [
+    "local_core",
+    "selected_ocr_or_table_provider"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "OCR 转写不判 verified；adjudicate 后为 recovered 且保留原转写。",
+   "updated_at": "2026-11-14T14:45:06+08:00",
+   "fixture": "synthetic：原图18，故障注入OCR文本81且候选81；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "OCR 转写不判 verified；adjudicate 后为 recovered 且保留原转写。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "c20039dd23168b038ba70716ee495ec4ce430a790b3efca46019fb294aeba61b"
+  },
+  "A07": {
+   "id": "A07",
+   "scenario": "跨页表、多级表头、单位与脚注正确对应；续表连接不丢观测、不重复计数",
+   "primary_task": "T06",
+   "linked_tasks": [
+    "T06"
+   ],
+   "fixture_spec": "两页续表、多级单位、重复表头和分母脚注",
+   "expectation": "独立观察/表头/脚注真值对账，不丢合法重复",
+   "negative_control": "第二页全删或表头当观察",
+   "environment_profiles": [
+    "local_core",
+    "selected_ocr_or_table_provider"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "跨页续表观测数=3、重复表头不重复计数、单位与脚注识别。",
+   "updated_at": "2026-11-14T14:45:06+08:00",
+   "fixture": "synthetic：两页续表、多级单位、重复表头和分母脚注；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "跨页续表观测数=3、重复表头不重复计数、单位与脚注识别。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "7c5a2c892b9cde8c2a5d1dd60e4e1293b1217f9597085c7313bcca2bff008655"
+  },
+  "A08": {
+   "id": "A08",
+   "scenario": "合并格、公式过期缓存、日期纪元和原始空格不造成假观测或假日期",
+   "primary_task": "T06",
+   "linked_tasks": [
+    "T06"
+   ],
+   "fixture_spec": "合并表头/空格/过期公式缓存/不同日期纪元",
+   "expectation": "独立复算和日期真值一致，空格保留",
+   "negative_control": "填满合并格或直接信缓存",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "合并单元格不复制、公式缓存 999 与复算 42 不一致被判 mismatch、日期序列号与前导零。",
+   "updated_at": "2026-11-14T14:45:07+08:00",
+   "fixture": "synthetic：合并表头/空格/过期公式缓存/不同日期纪元；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "合并单元格不复制、公式缓存 999 与复算 42 不一致被判 mismatch、日期序列号与前导零。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "01219539137716f363593da5e549dda9db03f3fe41ff92f1e12a0dd74c98cfd1"
+  },
+  "A09": {
+   "id": "A09",
+   "scenario": "音视频转写有真实时间定位，错误词/说话身份可标争议；缺引擎和实际失败不写成功",
+   "primary_task": "T07",
+   "linked_tasks": [
+    "T07"
+   ],
+   "fixture_spec": "有原稿/时间段的短音频，模糊身份和缺引擎变体",
+   "expectation": "真实引擎运行与回听有证据，未知身份留疑",
+   "negative_control": "mock当ASR或臆认身份",
+   "environment_profiles": [
+    "local_core",
+    "selected_asr_provider"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "真实 Vosk 转写含词级时间戳，片段可回放，说话人未定留在 unrecovered。",
+   "updated_at": "2026-11-14T14:45:07+08:00",
+   "fixture": "synthetic：有原稿/时间段的短音频，模糊身份和缺引擎变体；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "真实 Vosk 转写含词级时间戳，片段可回放，说话人未定留在 unrecovered。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "b281162853c3c2fab19ecd96c27156d9c1594deb93db1b6a8be5ff25a5bca504"
+  },
+  "A10": {
+   "id": "A10",
+   "scenario": "图像读数单列近似精度，专有/多维格式原生文件与审计视图可对账",
+   "primary_task": "T38",
+   "linked_tasks": [
+    "T04",
+    "T07",
+    "T38"
+   ],
+   "fixture_spec": "合成图有标尺，另给多维原生文件及审计视图",
+   "expectation": "近似精度单列，原生结构/内容独立对账",
+   "negative_control": "近似充实测或哈希证明无损",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "xlsx 缓存值被改成 999 时 status=mismatch、computed=42；image_approx 必须带 method/uncertainty/sources，且 observed_layer=False。",
+   "updated_at": null,
+   "fixture": "synthetic：合成图有标尺，另给多维原生文件及审计视图；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "xlsx 缓存值被改成 999 时 status=mismatch、computed=42；image_approx 必须带 method/uncertainty/sources，且 observed_layer=False。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "b8231628dc87cd836c36ccbb04f7b4af389f7bd70226e509d492d59c8371f5e1"
+  },
+  "A11": {
+   "id": "A11",
+   "scenario": "埋在表格/脚注/附件和同义表述的字段能进入发现与处置；额外数据集形式被保留",
+   "primary_task": "T08",
+   "linked_tasks": [
+    "T08",
+    "T33"
+   ],
+   "fixture_spec": "表/脚注/附件/同义句埋字段，另指定长表",
+   "expectation": "预先人工真值中的候选有真实处置，新形态保留",
+   "negative_control": "只分析CSV或仅做指定表",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "表头/键值/度量/日期候选被发现，且每个结构有覆盖处置。",
+   "updated_at": "2026-11-14T14:45:07+08:00",
+   "fixture": "synthetic：表/脚注/附件/同义句埋字段，另指定长表；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "表头/键值/度量/日期候选被发现，且每个结构有覆盖处置。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "5663409dd2f2746f594cbe0d82d8ceb6d62d4d568f94b6093b0b36c50751d548"
+  },
+  "A12": {
+   "id": "A12",
+   "scenario": "搜索回执确实对应执行和当前来源；旧索引、虚假逐文件记录或关键词未命中冒充无数据不可通过",
+   "primary_task": "T09",
+   "linked_tasks": [
+    "T09"
+   ],
+   "fixture_spec": "真实查询后改原件保留旧索引，另设无命中查询",
+   "expectation": "执行/来源/上下文可追，旧索引重建",
+   "negative_control": "假搜索日志或无命中当不存在",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "索引过期拒绝回答未找到；重建后新行可检索；回执含上下文。",
+   "updated_at": "2026-11-14T14:45:07+08:00",
+   "fixture": "synthetic：真实查询后改原件保留旧索引，另设无命中查询；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "索引过期拒绝回答未找到；重建后新行可检索；回执含上下文。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "659e545171d5480cedfb5a3ca7f4517743cb4d4cc190fbcecdcb9afa9a195fd9"
+  },
+  "A13": {
+   "id": "A13",
+   "scenario": "模型缺数找到真实值后，实际补表、重整合、全格复核和重评模型形成闭环",
+   "primary_task": "T10",
+   "linked_tasks": [
+    "T10",
+    "T33"
+   ],
+   "fixture_spec": "模型缺字段而附件真实有值，执行回查闭环",
+   "expectation": "实际补表/整表重核/重评均可追",
+   "negative_control": "只把gap改found",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "gap 从 open 到 resolved 必须有 found 检索并写入数据集。",
+   "updated_at": "2026-11-14T14:45:07+08:00",
+   "fixture": "synthetic：模型缺字段而附件真实有值，执行回查闭环；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "gap 从 open 到 resolved 必须有 found 检索并写入数据集。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "d310767fe800e1526e01e9ea44dd09ed561b3e0bb3dd52f70fdc8908de5bd042"
+  },
+  "A14": {
+   "id": "A14",
+   "scenario": "仍无法取得的数据留真实缺失与搜索范围，不能默认 0 或用其他实体值替代",
+   "primary_task": "T10",
+   "linked_tasks": [
+    "T10"
+   ],
+   "fixture_spec": "字段未提供，但不同实体有同名字段值",
+   "expectation": "真实缺失及搜索范围保留",
+   "negative_control": "填0或借另实体数值",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "找不到只写 searching/unavailable，不写 0；exhausted 需覆盖全部来源。",
+   "updated_at": "2026-11-14T14:45:07+08:00",
+   "fixture": "synthetic：字段未提供，但不同实体有同名字段值；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "找不到只写 searching/unavailable，不写 0；exhausted 需覆盖全部来源。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "34690e772432f7099184e6e16034008056177bc3cdc3b2de38da74860fb9be3a"
+  },
+  "A15": {
+   "id": "A15",
+   "scenario": "两遍抽取对不同实体的同数值、否定/转述、时间/单位冲突能够暴露并裁决",
+   "primary_task": "T12",
+   "linked_tasks": [
+    "T11",
+    "T12"
+   ],
+   "fixture_spec": "两个实体同为42，但有否定/建议/日期/单位冲突",
+   "expectation": "独立语义真值区分并裁决",
+   "negative_control": "只匹配42或多数投票",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "盲第二次抽取暴露冲突并记 differs，不自动投票。",
+   "updated_at": "2026-11-14T14:45:08+08:00",
+   "fixture": "synthetic：两个实体同为42，但有否定/建议/日期/单位冲突；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "盲第二次抽取暴露冲突并记 differs，不自动投票。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "9d4b0ebf9da36b8f85323f7786ae4bd0b157d94e68cc820af5a30def08a95232"
+  },
+  "A16": {
+   "id": "A16",
+   "scenario": "更新后全表包含键/空值/派生格再次复核；旧页面和旧记录无法自动续签",
+   "primary_task": "T13",
+   "linked_tasks": [
+    "T11",
+    "T12",
+    "T13"
+   ],
+   "fixture_spec": "已核表含键/空值/派生，更新后保留旧页面",
+   "expectation": "新整表逐格复核，旧补丁/签名拒绝",
+   "negative_control": "只查变化格或自动盖章",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "数据集改动后旧复核签名失效；补丁应用后声明全部复核作废。",
+   "updated_at": "2026-11-14T14:45:08+08:00",
+   "fixture": "synthetic：已核表含键/空值/派生，更新后保留旧页面；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "数据集改动后旧复核签名失效；补丁应用后声明全部复核作废。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "83723f8d2ea9137cf0a59ea751ec2f9ea8a381edcf2704110ece6fccd3ca2123"
+  },
+  "A17": {
+   "id": "A17",
+   "scenario": "缺失格的证据只证明上下文可访问，不自动宣称“全篇未记载”",
+   "primary_task": "T12",
+   "linked_tasks": [
+    "T11",
+    "T12",
+    "T13"
+   ],
+   "fixture_spec": "正文无值但附件有值，另设真正未记载字段",
+   "expectation": "真实全范围回查区分两者",
+   "negative_control": "只看片段或无关键词即缺失",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "缺证据的格被拒绝接受，不是默认通过。",
+   "updated_at": "2026-11-14T14:45:08+08:00",
+   "fixture": "synthetic：正文无值但附件有值，另设真正未记载字段；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "缺证据的格被拒绝接受，不是默认通过。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "386183061fea5212e5056b86c74a9da6de6e8c6f29e638ab141d45f75ff55378"
+  },
+  "A18": {
+   "id": "A18",
+   "scenario": "同名异人、别名、脱敏标识有正确匹配/未匹配结果，不凭相似度强行合并",
+   "primary_task": "T14",
+   "linked_tasks": [
+    "T14"
+   ],
+   "fixture_spec": "同名异编号、别名同体、重复脱敏名",
+   "expectation": "已知匹配与未匹配按证据核对",
+   "negative_control": "字符串相似即合并",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:29:35.195459+08:00",
+     "command": "cd tests; python -m unittest test_guard_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_guard_entities.py"
+   ],
+   "note": "不同工号的同名者得到两个 entity id；同工号+别名为同一条并合并 aliases；同名不同名记录 conflicts；脱敏编号不被相似度合并、relation 为空。",
+   "updated_at": null,
+   "fixture": "synthetic：同名异编号、别名同体、重复脱敏名；实际 fixture 由 tests/test_guard_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_guard_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_guard_entities -v",
+   "observed": "不同工号的同名者得到两个 entity id；同工号+别名为同一条并合并 aliases；同名不同名记录 conflicts；脱敏编号不被相似度合并、relation 为空。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:29:35.195459+08:00",
+   "expectation_sha256": "56a64e589794f3673577e9f7174267daa4cfb41ec0878e55b19759c8cb03c909"
+  },
+  "A19": {
+   "id": "A19",
+   "scenario": "一对多/多对多连接行数、键与分母可对账；无依据笛卡尔积被发现",
+   "primary_task": "T15",
+   "linked_tasks": [
+    "T15"
+   ],
+   "fixture_spec": "合法重复测量及多对多缺关联键的连接",
+   "expectation": "独立关系真值/行数/分母对账",
+   "negative_control": "机械去重或无依据扩行",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "join 审计记录一对多与口径冲突；万元→元 因子 10000 且留痕。",
+   "updated_at": "2026-11-14T14:45:08+08:00",
+   "fixture": "synthetic：合法重复测量及多对多缺关联键的连接；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "join 审计记录一对多与口径冲突；万元→元 因子 10000 且留痕。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "5e6283ed46d815edff7534b7784a4f003e4a4720778c9564ac44c3b60ac52074"
+  },
+  "A20": {
+   "id": "A20",
+   "scenario": "单位/量纲/口径和有效时间变化有明确变换或冲突，不能错误合并",
+   "primary_task": "T15",
+   "linked_tasks": [
+    "T15"
+   ],
+   "fixture_spec": "0.5万元/5000元、不同分母及不重叠有效期",
+   "expectation": "精确换算正确，不相容量明确冲突",
+   "negative_control": "数值同型相加或未知时区补时刻",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "fit/validate 分角色绑定版本，N 只取 fit 输入。",
+   "updated_at": "2026-11-14T14:45:08+08:00",
+   "fixture": "synthetic：0.5万元/5000元、不同分母及不重叠有效期；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "fit/validate 分角色绑定版本，N 只取 fit 输入。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "cc8097069af0873dd20edfb05af2bc9c40b7caeb26eb5fdc1c324a4ba6674b8e"
+  },
+  "A21": {
+   "id": "A21",
+   "scenario": "内置目录以外的数学/统计实现可接入；没有默认数据集/模型/系列数量封顶",
+   "primary_task": "T17",
+   "linked_tasks": [
+    "T16",
+    "T17",
+    "T33"
+   ],
+   "fixture_spec": "内置目录外数学/统计脚本，规模超过旧展示限",
+   "expectation": "实际执行接入、不封顶，仅宣称实测引擎",
+   "negative_control": "只有family名字而不能运行",
+   "environment_profiles": [
+    "local_core",
+    "selected_model_engine"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "数学模型 sample_scope=none，不允许 sample 声明。",
+   "updated_at": "2026-11-14T14:45:09+08:00",
+   "fixture": "synthetic：内置目录外数学/统计脚本，规模超过旧展示限；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "数学模型 sample_scope=none，不允许 sample 声明。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "8b107affd5b5f7b3cb321e0a3d402675a2a1a986fb34d7b41397f70f2f4c4f8e"
+  },
+  "A22": {
+   "id": "A22",
+   "scenario": "多数据集样本键、事件/配对/时点/组数分别正确；n_dropna 不作估计 N",
+   "primary_task": "T18",
+   "linked_tasks": [
+    "T16",
+    "T17",
+    "T18"
+   ],
+   "fixture_spec": "同人多时点/多表，真实n=5且n_dropna=2",
+   "expectation": "按角色计数且n=5，独立个体不膨胀",
+   "negative_control": "跨表累加或优先取剔除数",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "infeasible 与 unbounded 是不同状态。",
+   "updated_at": "2026-11-14T14:45:09+08:00",
+   "fixture": "synthetic：同人多时点/多表，真实n=5且n_dropna=2；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "infeasible 与 unbounded 是不同状态。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "147a4ce03150e7c3aac8b73c09b2a6ea92bedcba0fd396e68c0a3493489cc8ee"
+  },
+  "A23": {
+   "id": "A23",
+   "scenario": "成功退出且存在输出，但数值/方法未核的模型不获得正式推断状态",
+   "primary_task": "T18",
+   "linked_tasks": [
+    "T18"
+   ],
+   "fixture_spec": "退出0且写系数，但无数值/方法校核",
+   "expectation": "execution完成，其余未核，不能正式推断",
+   "negative_control": "completed等于ready",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "非线性超时记 timeout 而非崩溃。",
+   "updated_at": "2026-11-14T14:45:09+08:00",
+   "fixture": "synthetic：退出0且写系数，但无数值/方法校核；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "非线性超时记 timeout 而非崩溃。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "4204b4981b82bd676c3093aace5cfe8944d28c20ccf60057da49973635b6b71a"
+  },
+  "A24": {
+   "id": "A24",
+   "scenario": "不可行优化、不可识别逆问题、动态方程参数/边界缺失被记录；可行实例有独立可核数值",
+   "primary_task": "T19",
+   "linked_tasks": [
+    "T16",
+    "T19",
+    "T33"
+   ],
+   "fixture_spec": "min(x-2)^2,x>=0；互斥约束；秩不足逆问题",
+   "expectation": "解析真值x=2，不可行/不可识别如实记录",
+   "negative_control": "有数字解即现实有效",
+   "environment_profiles": [
+    "local_core",
+    "selected_model_engine"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "N 取独立观测单位（去重键），不跨表相加。",
+   "updated_at": "2026-11-14T14:45:09+08:00",
+   "fixture": "synthetic：min(x-2)^2,x>=0；互斥约束；秩不足逆问题；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "N 取独立观测单位（去重键），不跨表相加。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "3fd24aea331a671b3588149752d85f0a279a003c6109a41596532b67dc312436"
+  },
+  "A25": {
+   "id": "A25",
+   "scenario": "不收敛、分离、相关结构、缺失策略等按相应统计设计评估，不能填空 diagnostics 放行",
+   "primary_task": "T20",
+   "linked_tasks": [
+    "T16",
+    "T20"
+   ],
+   "fixture_spec": "完全分离、不收敛、聚类相关、不同缺失策略",
+   "expectation": "实际设计相应诊断及结论范围正确",
+   "negative_control": "空diagnostics或统一N阈值放行",
+   "environment_profiles": [
+    "local_core",
+    "selected_model_engine"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "n 为实际估计样本，n_dropna 仅缺失剔除数（V-05 语义）。",
+   "updated_at": "2026-11-14T14:45:09+08:00",
+   "fixture": "synthetic：完全分离、不收敛、聚类相关、不同缺失策略；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "n 为实际估计样本，n_dropna 仅缺失剔除数（V-05 语义）。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "f5a8dc2baafbfe596589b8010f8e35211e7f0e541e27923e0bc445e824397e1d"
+  },
+  "A26": {
+   "id": "A26",
+   "scenario": "规格差异引起结论变化时如实呈现；不显著、失败和未运行规格保留",
+   "primary_task": "T21",
+   "linked_tasks": [
+    "T21"
+   ],
+   "fixture_spec": "预列合理正/负/未显著/失败/未运行规格",
+   "expectation": "全量保留，差异来源及待办可追",
+   "negative_control": "只留显著或同向规格",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "数据版本变化后 conditions 报 input_version 失败。",
+   "updated_at": "2026-11-14T14:45:10+08:00",
+   "fixture": "synthetic：预列合理正/负/未显著/失败/未运行规格；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "数据版本变化后 conditions 报 input_version 失败。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "9c4ec9d6e2f42e6a4596a55f8b2eaec12ce8033e8cb6ec26dd093872e5b81712"
+  },
+  "A27": {
+   "id": "A27",
+   "scenario": "检验族/多重比较、按组/时间划分、训练内预处理和样本外表现有正确区分",
+   "primary_task": "T21",
+   "linked_tasks": [
+    "T20",
+    "T21"
+   ],
+   "fixture_spec": "同人跨组/有时间顺序，注入全样本预处理",
+   "expectation": "训练内拟合、设计留出、多重比较真实",
+   "negative_control": "训练分数当样本外或预处理泄漏",
+   "environment_profiles": [
+    "local_core",
+    "selected_model_engine"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "独立实现与主结果一致判 passed，篡改被检出 failed。",
+   "updated_at": "2026-11-14T14:45:10+08:00",
+   "fixture": "synthetic：同人跨组/有时间顺序，注入全样本预处理；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "独立实现与主结果一致判 passed，篡改被检出 failed。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "a74ab7ee5bb9171ec5ee5364665070d148765549e1094ae950c87d1729143988"
+  },
+  "A28": {
+   "id": "A28",
+   "scenario": "独立实现不一致时失败或未核；合理浮点/随机/等价解差异按预设标准比较",
+   "primary_task": "T22",
+   "linked_tasks": [
+    "T19",
+    "T22"
+   ],
+   "fixture_spec": "独立公式与引擎一致/真错及符号等价变体",
+   "expectation": "按预设标准接受等价、拒绝真实差异",
+   "negative_control": "抄结果或事后放宽容差",
+   "environment_profiles": [
+    "local_core",
+    "selected_model_engine"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "共享预处理只算 agrees_but_not_independent，状态 failed。",
+   "updated_at": "2026-11-14T14:45:10+08:00",
+   "fixture": "synthetic：独立公式与引擎一致/真错及符号等价变体；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "共享预处理只算 agrees_but_not_independent，状态 failed。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "41f08b6b9f5de645bca7af214e1b2228e81f911e70648e8c4560a545fb17ea15"
+  },
+  "A29": {
+   "id": "A29",
+   "scenario": "原件改动及仅新增材料触发正向供值、缺失判断、发现和适用性依赖失效",
+   "primary_task": "T23",
+   "linked_tasks": [
+    "T03",
+    "T23",
+    "T33"
+   ],
+   "fixture_spec": "改供值文件，再单独增加含缺失字段的附件",
+   "expectation": "正向/否定/发现/适用性均按依赖失效",
+   "negative_control": "新增材料不触发复评",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "无通过校核时 stability 拒绝运行。",
+   "updated_at": "2026-11-14T14:45:10+08:00",
+   "fixture": "synthetic：改供值文件，再单独增加含缺失字段的附件；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "无通过校核时 stability 拒绝运行。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "1bd2f850088664580c3a8710b0036df63641c691f9fb1cdb908338b6c6e61db1"
+  },
+  "A30": {
+   "id": "A30",
+   "scenario": "受影响数据集整表重新复核；未知依赖保守失效，缓存不伪造本次验证",
+   "primary_task": "T24",
+   "linked_tasks": [
+    "T23",
+    "T24"
+   ],
+   "fixture_spec": "表有未改格、未知依赖与旧缓存/复核",
+   "expectation": "受影响整表重核，未知保守失效",
+   "negative_control": "只改格或旧签名绑新快照",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py",
+    "tests/test_models_entities.py"
+   ],
+   "note": "符号翻转/CI 跨零进入 fragile 并落库。",
+   "updated_at": "2026-11-14T14:45:10+08:00",
+   "fixture": "synthetic：表有未改格、未知依赖与旧缓存/复核；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "符号翻转/CI 跨零进入 fragile 并落库。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "33537e6f3236e548fb9a692657b495e75df1705b124116bbf37f54c159e53aba"
+  },
+  "A31": {
+   "id": "A31",
+   "scenario": "仅变图/正文与仅变计算环境的影响范围可解释；干净目录与环境可重跑",
+   "primary_task": "T25",
+   "linked_tasks": [
+    "T03",
+    "T24",
+    "T25"
+   ],
+   "fixture_spec": "分开只改图例/正文/环境并隔离重跑",
+   "expectation": "影响解释明确，环境前后绑定，适当标准比较",
+   "negative_control": "只查文件名或事后收集版本",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "环境快照前后对比能发现规则文件变化。",
+   "updated_at": "2026-11-14T14:45:11+08:00",
+   "fixture": "synthetic：分开只改图例/正文/环境并隔离重跑；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "环境快照前后对比能发现规则文件变化。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "b69944d388a73eb53405812c44327ea398cb9b96eb198b5c019a4925309e9121"
+  },
+  "A32": {
+   "id": "A32",
+   "scenario": "数字相同但最高/最低、方向、时间、分母或关联/因果写错的论断被提出复核并正确处置",
+   "primary_task": "T26",
+   "linked_tasks": [
+    "T26"
+   ],
+   "fixture_spec": "A=10/B=20但正文称A最高，关联改写导致",
+   "expectation": "语义错被实际复核处置，数字相同不豁免",
+   "negative_control": "数字出现过即支持论断",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:28:08.338738+08:00",
+     "command": "cd tests; python -m unittest test_claims -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_claims.py",
+    "tests/test_claims.py"
+   ],
+   "note": "方向写反、把关联写成因果被 contradicted。",
+   "updated_at": "2026-11-14T14:45:11+08:00",
+   "fixture": "synthetic：A=10/B=20但正文称A最高，关联改写导致；实际 fixture 由 tests/test_claims.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_claims -v"
+   ],
+   "command": "cd tests; python -m unittest test_claims -v",
+   "observed": "方向写反、把关联写成因果被 contradicted。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:28:08.338738+08:00",
+   "expectation_sha256": "2b9bcb0032445c4444dfcf04f913830ae406300818f70a6378cc8e45c38181bd"
+  },
+  "A33": {
+   "id": "A33",
+   "scenario": "真实 DOI 配不支持原文、仅元数据/摘要访问、撤稿/更正信息缺查均不冒充全文支持",
+   "primary_task": "T27",
+   "linked_tasks": [
+    "T27"
+   ],
+   "fixture_spec": "真实元数据配错误观点，另有仅摘要访问",
+   "expectation": "观点支持/访问范围/更正状态分开核",
+   "negative_control": "DOI存在即全文支持",
+   "environment_profiles": [
+    "local_core",
+    "metadata_and_source_access"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:28:08.338738+08:00",
+     "command": "cd tests; python -m unittest test_claims -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_claims.py",
+    "tests/test_claims.py"
+   ],
+   "note": "只读摘要却声明全文支持被 contradicted。",
+   "updated_at": "2026-11-14T14:45:11+08:00",
+   "fixture": "synthetic：真实元数据配错误观点，另有仅摘要访问；实际 fixture 由 tests/test_claims.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_claims -v"
+   ],
+   "command": "cd tests; python -m unittest test_claims -v",
+   "observed": "只读摘要却声明全文支持被 contradicted。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:28:08.338738+08:00",
+   "expectation_sha256": "2728aee63a3d2f79ff100928f66550f1a83edc5ccd68ae31cc25c00623e9ba3a"
+  },
+  "A34": {
+   "id": "A34",
+   "scenario": "摘要/正文/讨论/结论/附录的结果和引用版本一致，形成完整论文而非结果日志",
+   "primary_task": "T28",
+   "linked_tasks": [
+    "T26",
+    "T27",
+    "T28",
+    "T33"
+   ],
+   "fixture_spec": "完整合成研究稿，更新一个结果版本",
+   "expectation": "各部分可读且版本支持一致，测试身份明确",
+   "negative_control": "空标题或技术日志当论文",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "环境前后快照与 drift 判定。",
+   "updated_at": "2026-11-14T14:45:11+08:00",
+   "fixture": "synthetic：完整合成研究稿，更新一个结果版本；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "环境前后快照与 drift 判定。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "c1487d32152bd2e1510ebf3181e84e2c87765277817b3539e4f8e42956b224a8"
+  },
+  "A35": {
+   "id": "A35",
+   "scenario": "绘图数据与实际点/线/类别/矩阵/误差范围一致，隐藏系列或不同分母可发现",
+   "primary_task": "T29",
+   "linked_tasks": [
+    "T29"
+   ],
+   "fixture_spec": "图注入漏系列、错误差、矩阵列或分母",
+   "expectation": "实际绘图数据/图元与结果的差异可定位",
+   "negative_control": "只验图片存在或图元数量",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "缓存复用写新运行记录且 ran_again=false，不 re-date。",
+   "updated_at": "2026-11-14T14:45:11+08:00",
+   "fixture": "synthetic：图注入漏系列、错误差、矩阵列或分母；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "缓存复用写新运行记录且 ran_again=false，不 re-date。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "878643dd74569a2112d5cb7caf4cb5162d2b8626ef085365aa539814db9b012a"
+  },
+  "A36": {
+   "id": "A36",
+   "scenario": "多类别中文标签、多行图例和标注按实际边界检查；保留同图、完整文本和字号",
+   "primary_task": "T30",
+   "linked_tasks": [
+    "T30"
+   ],
+   "fixture_spec": "长中文标签/多行图例/标题/数值标注实渲染",
+   "expectation": "真实边界与目视核查，同图全项不缩字",
+   "negative_control": "自动分页/截字/删类",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "步骤依赖与预算：超预算标记、失败依赖阻塞后继。",
+   "updated_at": "2026-11-14T14:45:11+08:00",
+   "fixture": "synthetic：长中文标签/多行图例/标题/数值标注实渲染；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "步骤依赖与预算：超预算标记、失败依赖阻塞后继。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "66ee6f886397bca0a2bdf8ede16613139388a42165dac5f8fa0d73f858286f44"
+  },
+  "A37": {
+   "id": "A37",
+   "scenario": "连续色图、透明度、点形/边色与分类色按真实用途报告；建议不变成默认强制样式",
+   "primary_task": "T30",
+   "linked_tasks": [
+    "T30"
+   ],
+   "fixture_spec": "分类/连续/透明/点边色及旧用途清单",
+   "expectation": "实际用途和未核范围真实，建议不默认阻断",
+   "negative_control": "默认色环填补实际色或分类阈值验连续图",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:33:57.346072+08:00",
+     "command": "cd tests; python -m unittest test_figure_semantics -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_figure_semantics.py"
+   ],
+   "note": "60 类真实渲染标签 overlap>0，rotate 30° 后 overlap 下降且标签数仍为 60；配色 role 只出现在 suggestion，mandatory=False 且不影响 ok。",
+   "updated_at": null,
+   "fixture": "synthetic：分类/连续/透明/点边色及旧用途清单；实际 fixture 由 tests/test_figure_semantics.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_figure_semantics -v"
+   ],
+   "command": "cd tests; python -m unittest test_figure_semantics -v",
+   "observed": "60 类真实渲染标签 overlap>0，rotate 30° 后 overlap 下降且标签数仍为 60；配色 role 只出现在 suggestion，mandatory=False 且不影响 ok。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:33:57.346072+08:00",
+   "expectation_sha256": "1009b987141e7ce99298dcdabf032d0714ba3cc267b85fefbfc2fdf831a20791"
+  },
+  "A38": {
+   "id": "A38",
+   "scenario": "双栏缩图、合法窄图、长图在最终 DOCX/PDF 中检查真实 dpi/字号，源图合格不等于安置合格",
+   "primary_task": "T31",
+   "linked_tasks": [
+    "T31"
+   ],
+   "fixture_spec": "同源图最终放双栏、窄图、长图",
+   "expectation": "按实际宽高/哈希/矢量字核dpi与字号",
+   "negative_control": "统一15cm或只看像素",
+   "environment_profiles": [
+    "local_core",
+    "word_pdf_actual_integration"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:33:18.300627+08:00",
+     "command": "cd tests; python -m unittest test_layout -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_layout.py",
+    "tests/test_layout.py"
+   ],
+   "note": "源图合格但安置过小/过大被判失败（源图≠版面）。",
+   "updated_at": "2026-11-14T14:45:12+08:00",
+   "fixture": "synthetic：同源图最终放双栏、窄图、长图；实际 fixture 由 tests/test_layout.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_layout -v"
+   ],
+   "command": "cd tests; python -m unittest test_layout -v",
+   "observed": "源图合格但安置过小/过大被判失败（源图≠版面）。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:33:18.300627+08:00",
+   "expectation_sha256": "28e5a5f2525f9bf8601cbfa5a4978c7a387bce7eae202fdc6c4216c6f50b16d8"
+  },
+  "A39": {
+   "id": "A39",
+   "scenario": "Word 表头/续表、图题/图注、公式、交叉引用、字体/缺图和高清回填实际验证",
+   "primary_task": "T31",
+   "linked_tasks": [
+    "T31",
+    "T33"
+   ],
+   "fixture_spec": "真实Word稿含续表/图题/公式/引用并高清回填",
+   "expectation": "真实DOCX/PDF逐页核，缺字/缺图/错回填拒绝",
+   "negative_control": "替代导出冒充Word已验",
+   "environment_profiles": [
+    "local_core",
+    "word_pdf_actual_integration"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:33:18.300627+08:00",
+     "command": "cd tests; python -m unittest test_layout -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_layout.py",
+    "tests/test_layout.py"
+   ],
+   "note": "最终 PDF 位图无文字层 → unassessed，不放行。",
+   "updated_at": "2026-11-14T14:45:12+08:00",
+   "fixture": "synthetic：真实Word稿含续表/图题/公式/引用并高清回填；实际 fixture 由 tests/test_layout.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_layout -v"
+   ],
+   "command": "cd tests; python -m unittest test_layout -v",
+   "observed": "最终 PDF 位图无文字层 → unassessed，不放行。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:33:18.300627+08:00",
+   "expectation_sha256": "eca838d1024b7c8c19a18f59d24fc145a4ccd1bafc2598ff2815962213d84f62"
+  },
+  "A40": {
+   "id": "A40",
+   "scenario": "发布报告区分覆盖/未恢复/未核/失败，0 错误不冒充全研究完成；包与源码/标准 SHA256 对应",
+   "primary_task": "T32",
+   "linked_tasks": [
+    "T32",
+    "T35",
+    "T36"
+   ],
+   "fixture_spec": "完整/受限/未就绪/失败及源码包失配变体",
+   "expectation": "范围/状态/SHA分别核，阶段成功不等完整",
+   "negative_control": "zero-error或包存在即全完成",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "release 空范围返回 empty_scope 而非 complete；未覆盖的注册项使状态为 not_ready；limited 需要 allow_limited 且全部硬闸门通过；tamper 状态为 failed。",
+   "updated_at": null,
+   "fixture": "synthetic：完整/受限/未就绪/失败及源码包失配变体；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "release 空范围返回 empty_scope 而非 complete；未覆盖的注册项使状态为 not_ready；limited 需要 allow_limited 且全部硬闸门通过；tamper 状态为 failed。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "40f43dec579e85e84d3dd294ec4ad5d5b5092c70f11c57934439feaaa492afa4"
+  },
+  "A41": {
+   "id": "A41",
+   "scenario": "大文件、长表、大量数据集/模型/证据采用流式/分批处理仍对账完整，不因性能静默截断",
+   "primary_task": "T34",
+   "linked_tasks": [
+    "T24",
+    "T34"
+   ],
+   "fixture_spec": "预声明递增表/格/候选/模型及计数真值",
+   "expectation": "全范围对账，到限留恢复点，不称语义复读已验",
+   "negative_control": "隐形top-N或超时写成功",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:23:47.186947+08:00",
+     "command": "cd tests; python -m unittest test_hardening -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_hardening.py"
+   ],
+   "note": "200k 行 CSV 分 8 块读取合计 200000 行、末行 C0199999；分块峰值 6.98MB < 阈值；50k 行 verify_dataset 读回 50000 行无截断。",
+   "updated_at": null,
+   "fixture": "synthetic：预声明递增表/格/候选/模型及计数真值；实际 fixture 由 tests/test_hardening.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_hardening -v"
+   ],
+   "command": "cd tests; python -m unittest test_hardening -v",
+   "observed": "200k 行 CSV 分 8 块读取合计 200000 行、末行 C0199999；分块峰值 6.98MB < 阈值；50k 行 verify_dataset 读回 50000 行无截断。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:23:47.186947+08:00",
+   "expectation_sha256": "af78089b1f3fc82583aab3965c3eb162734a7a58067971b68150e4633191425a"
+  },
+  "A42": {
+   "id": "A42",
+   "scenario": "C01–C18、V-05、已有完整性/统计/数字/Word-PDF 用例保持，无以删除失败测试处理回归",
+   "primary_task": "T34",
+   "linked_tasks": [
+    "T01",
+    "T34",
+    "T36"
+   ],
+   "fixture_spec": "最终源码重跑C01-C18/V-05及既有回归",
+   "expectation": "新实际结果与历史585记录分开，失败保留",
+   "negative_control": "删反例或以旧日志冒充新增验收",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:35:15.478603+08:00",
+     "command": "python tools/acceptance_cards.py validate  # evidence: docs/implementation/verification/final/regression-v3.log",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "docs/implementation/verification/final/regression-v4.log"
+   ],
+   "note": "同一入口完整回归 Ran 842 tests in 508.423s / OK；既有 C01–C18、V-05 与 585 项基线用例全部保留并通过，无删除或跳过既有失败用例。",
+   "updated_at": null,
+   "fixture": "synthetic：最终源码重跑C01-C18/V-05及既有回归；实际 fixture 由 docs/implementation/verification/final/regression-v3.log 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest discover -s . -p \"test_*.py\" -v"
+   ],
+   "command": "cd tests; python -m unittest discover -s . -p \"test_*.py\" -v",
+   "observed": "同一入口完整回归 Ran 842 tests in 508.423s / OK；既有 C01–C18、V-05 与 585 项基线用例全部保留并通过，无删除或跳过既有失败用例。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:35:15.478603+08:00",
+   "expectation_sha256": "a290cec9a03431e82468775fb822ad8ed57bd78ccc2ec8df1b7271c69d1a4d7e"
+  },
+  "A43": {
+   "id": "A43",
+   "scenario": "压缩/内嵌子资源逐项登记并定位到父原件；物理文件数、逻辑单元数和独立观察数不混算，未知成员有处置",
+   "primary_task": "T04",
+   "linked_tasks": [
+    "T04",
+    "T07",
+    "T08",
+    "T33",
+    "T38"
+   ],
+   "fixture_spec": "嵌套压缩/Office/PDF附件含可读与不可读成员",
+   "expectation": "父子/hash/范围对账，三种计数分开",
+   "negative_control": "仅记容器或副本当新样本",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "zip 3 个成员逐项登记，重复成员计 duplicate_representation_units≥1；physical_files=6、logical_units>observations；未知成员有处置记录。",
+   "updated_at": null,
+   "fixture": "synthetic：嵌套压缩/Office/PDF附件含可读与不可读成员；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "zip 3 个成员逐项登记，重复成员计 duplicate_representation_units≥1；physical_files=6、logical_units>observations；未知成员有处置记录。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "7a5bc00ec2aa96cd013517f5fbdf4b12d9801ecb62b7cd0ac9d8808154a04f0b"
+  },
+  "A44": {
+   "id": "A44",
+   "scenario": "原生到审计视图的维度、顺序、精确数值、前导零、Unicode、缺失与嵌套路径可独立核验；有哈希但丢字段仍失败",
+   "primary_task": "T38",
+   "linked_tasks": [
+    "T02",
+    "T04",
+    "T33",
+    "T38"
+   ],
+   "fixture_spec": "数组/嵌套对象含长整数/前导零/Unicode/有序轴",
+   "expectation": "独立解析/重建核路径类型维度顺序内容",
+   "negative_control": "丢轴/字段仍以hash称无损",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "审计视图与原始 XML 独立对账。",
+   "updated_at": "2026-11-14T14:45:12+08:00",
+   "fixture": "synthetic：数组/嵌套对象含长整数/前导零/Unicode/有序轴；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "审计视图与原始 XML 独立对账。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "20f8f199198161ac6c728c5d1d7b1983922629f1c44260b61ac06e202c5e21ed"
+  },
+  "A45": {
+   "id": "A45",
+   "scenario": "多输入按拟合/校准/约束/训练/验证/测试等角色逐键核算；重复测量与泄漏分别检查，不能跨表累加为独立 N",
+   "primary_task": "T17",
+   "linked_tasks": [
+    "T02",
+    "T16",
+    "T17",
+    "T18",
+    "T33"
+   ],
+   "fixture_spec": "拟合/参数/约束/训练/验证/测试及重复时点多表",
+   "expectation": "角色独立核算与泄漏检查，消费者同步支持",
+   "negative_control": "所有表行数相加成N",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:18:59.310689+08:00",
+     "command": "cd tests; python -m unittest test_design_v2 -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_design_v2.py"
+   ],
+   "note": "同一单元同时出现在 fit 与 test 时 split_leakage/train_test_overlap 报错；N 按角色与观测单位计（fit=2,test=2），重复测量只报 rows=3/units=2，不跨表相加。",
+   "updated_at": null,
+   "fixture": "synthetic：拟合/参数/约束/训练/验证/测试及重复时点多表；实际 fixture 由 tests/test_design_v2.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_design_v2 -v"
+   ],
+   "command": "cd tests; python -m unittest test_design_v2 -v",
+   "observed": "同一单元同时出现在 fit 与 test 时 split_leakage/train_test_overlap 报错；N 按角色与观测单位计（fit=2,test=2），重复测量只报 rows=3/units=2，不跨表相加。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:18:59.310689+08:00",
+   "expectation_sha256": "fd1f6c3c6c2b85ba64b4140f8dee4cfe65af45401843d4048c450a945bd16a3b"
+  },
+  "A46": {
+   "id": "A46",
+   "scenario": "有范围证据的合法空表与没有统计 N 的数学输入得到正确状态；无单元格不报 0/0=100%，无记录不默认事件数 0",
+   "primary_task": "T38",
+   "linked_tasks": [
+    "T02",
+    "T13",
+    "T16",
+    "T17",
+    "T33",
+    "T38"
+   ],
+   "fixture_spec": "原件明确观察10人0事件与空表；只含约束的模型",
+   "expectation": "空表有范围依据，格率不适用，无N记录维度",
+   "negative_control": "无命中当0、0/0=100%或补虚构行",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "空表只给范围证据，不报 0/0=100%。",
+   "updated_at": "2026-11-14T14:45:12+08:00",
+   "fixture": "synthetic：原件明确观察10人0事件与空表；只含约束的模型；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "空表只给范围证据，不报 0/0=100%。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "f1966ac2e8d9a490b4a576699cdc81fa10649989a336fa7be7266b38fe345465"
+  },
+  "A47": {
+   "id": "A47",
+   "scenario": "v2 特性/类型/签名及状态转移检查能拒绝缺证据、旧版回执、非法迁移和自报 ready，必需未知语义不静默消费",
+   "primary_task": "T02",
+   "linked_tasks": [
+    "T02",
+    "T13",
+    "T18",
+    "T32",
+    "T35",
+    "T40"
+   ],
+   "fixture_spec": "非法状态/未知必需特性/旧读取器/自报ready",
+   "expectation": "维护入口及新闸门拒绝不支持，扩展无损保留",
+   "negative_control": "忽略新语义或信自报版本",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:11:55.193366+08:00",
+     "command": "cd tests; python -m unittest test_contract_v2 -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_contract_v2.py"
+   ],
+   "note": "v1 schema_version 被拒绝；未知 feature 被拒绝；prepared→verified 与 stale→verified 均非法；篡改 content_hash 抛 IntegrityError；缺证据的 review_event 被 v2 检查拒绝。",
+   "updated_at": null,
+   "fixture": "synthetic：非法状态/未知必需特性/旧读取器/自报ready；实际 fixture 由 tests/test_contract_v2.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_contract_v2 -v"
+   ],
+   "command": "cd tests; python -m unittest test_contract_v2 -v",
+   "observed": "v1 schema_version 被拒绝；未知 feature 被拒绝；prepared→verified 与 stale→verified 均非法；篡改 content_hash 抛 IntegrityError；缺证据的 review_event 被 v2 检查拒绝。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:11:55.193366+08:00",
+   "expectation_sha256": "e00251dfad92b364405777910390b4d8479dfbd202d444ec4a865f457105f656"
+  },
+  "A48": {
+   "id": "A48",
+   "scenario": "任意关键写入点中断或磁盘写入失败后，发布指针不指向半成品，旧完整版本仍可读，新运行保留真实失败状态",
+   "primary_task": "T37",
+   "linked_tasks": [
+    "T24",
+    "T33",
+    "T34",
+    "T37"
+   ],
+   "fixture_spec": "写文件/校核/提交清单/发布指针各点注入失败",
+   "expectation": "旧完整版本可读，半成品不发布，本次失败真实",
+   "negative_control": "逐个覆盖正式文件后completed",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:23:47.186947+08:00",
+     "command": "cd tests; python -m unittest test_hardening -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_hardening.py"
+   ],
+   "note": "objects 写入时 ENOSPC：pointer 仍指向 v1 且 verify_commit(v1)=True；半写对象存在但无任何 manifest 引用；pointer 替换前杀进程后旧版本可读。",
+   "updated_at": null,
+   "fixture": "synthetic：写文件/校核/提交清单/发布指针各点注入失败；实际 fixture 由 tests/test_hardening.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_hardening -v"
+   ],
+   "command": "cd tests; python -m unittest test_hardening -v",
+   "observed": "objects 写入时 ENOSPC：pointer 仍指向 v1 且 verify_commit(v1)=True；半写对象存在但无任何 manifest 引用；pointer 替换前杀进程后旧版本可读。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:23:47.186947+08:00",
+   "expectation_sha256": "98252eeba98ce7ee2e0ae1fd73b6ffd2ed0b1370af1b617324370de972bf4e07"
+  },
+  "A49": {
+   "id": "A49",
+   "scenario": "两次运行或两位复核者同时写同一版本时，不覆盖其他结果、不丢复核事件；过期父版本和重复补丁可识别",
+   "primary_task": "T37",
+   "linked_tasks": [
+    "T11",
+    "T24",
+    "T33",
+    "T34",
+    "T37"
+   ],
+   "fixture_spec": "两运行或复核同父版本并发提交并重放操作ID",
+   "expectation": "锁/父版本/幂等防丢失覆盖，冲突明确",
+   "negative_control": "最后写覆盖或重复应用",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:25:09.904631+08:00",
+     "command": "cd tests; python -m unittest test_discovery_review -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_discovery_review.py",
+    "tests/test_discovery_review.py"
+   ],
+   "note": "并发/过期补丁被拒绝（父版本不符转 conflict）。",
+   "updated_at": "2026-11-14T14:45:12+08:00",
+   "fixture": "synthetic：两运行或复核同父版本并发提交并重放操作ID；实际 fixture 由 tests/test_discovery_review.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_discovery_review -v"
+   ],
+   "command": "cd tests; python -m unittest test_discovery_review -v",
+   "observed": "并发/过期补丁被拒绝（父版本不符转 conflict）。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:25:09.904631+08:00",
+   "expectation_sha256": "d0d17a972eb71950bd0ab07164bd4bc70f5f0db36c97302cee6612cacb487f28"
+  },
+  "A50": {
+   "id": "A50",
+   "scenario": "取消/超时/崩溃恢复时只续用输入与代码仍匹配的检查点，源变化使检查点失效，不能恢复成虚构完成",
+   "primary_task": "T37",
+   "linked_tasks": [
+    "T11",
+    "T24",
+    "T25",
+    "T33",
+    "T34",
+    "T37",
+    "T40"
+   ],
+   "fixture_spec": "取消/超时/崩溃后保持或更改原件代码再恢复",
+   "expectation": "只恢复匹配上下文，只处理本运行资源",
+   "negative_control": "失配检查点verified或关闭其他用户任务",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:23:47.186947+08:00",
+     "command": "cd tests; python -m unittest test_hardening -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_hardening.py"
+   ],
+   "note": "检查点五层（inputs/code/rules/environment/review_version）逐层失配即 invalid；status 被置 invalid 时 checkpoint_state 直接拒绝；超时被杀的步骤只能记为 cancelled。",
+   "updated_at": null,
+   "fixture": "synthetic：取消/超时/崩溃后保持或更改原件代码再恢复；实际 fixture 由 tests/test_hardening.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_hardening -v"
+   ],
+   "command": "cd tests; python -m unittest test_hardening -v",
+   "observed": "检查点五层（inputs/code/rules/environment/review_version）逐层失配即 invalid；status 被置 invalid 时 checkpoint_state 直接拒绝；超时被杀的步骤只能记为 cancelled。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:23:47.186947+08:00",
+   "expectation_sha256": "8c056888db1c3481897aeaf57b05b65d7db3767b4e9480f62f65b3c6fc5133ad"
+  },
+  "A51": {
+   "id": "A51",
+   "scenario": "已知答案和独立校核不依赖待测抽取/预处理实现；两种计算共享错误预处理时不会仅凭一致判正确",
+   "primary_task": "T22",
+   "linked_tasks": [
+    "T01",
+    "T21",
+    "T22",
+    "T33",
+    "T39"
+   ],
+   "fixture_spec": "两计算共享错误单位换算，另有预先独立真值",
+   "expectation": "分层校核发现预处理错，期望不来自待测程序",
+   "negative_control": "错误结果一致即正确",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:32:09.916008+08:00",
+     "command": "cd tests; python -m unittest test_models_entities -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_models_entities.py"
+   ],
+   "note": "独立 OLS（numpy lstsq）与 statsmodels 系数相对误差 <1e-6 判 passed；共享预处理时返回 agrees_but_not_independent 且记录 status=failed。",
+   "updated_at": null,
+   "fixture": "synthetic：两计算共享错误单位换算，另有预先独立真值；实际 fixture 由 tests/test_models_entities.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_models_entities -v"
+   ],
+   "command": "cd tests; python -m unittest test_models_entities -v",
+   "observed": "独立 OLS（numpy lstsq）与 statsmodels 系数相对误差 <1e-6 判 passed；共享预处理时返回 agrees_but_not_independent 且记录 status=failed。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:32:09.916008+08:00",
+   "expectation_sha256": "852e5cbe767994a58241ae7021dde7dfd2ff3b6eda04d0fb7b4d38d10f482a42"
+  },
+  "A52": {
+   "id": "A52",
+   "scenario": "每个验收卡有原件/步骤/独立期望/实际结果/环境/证据路径；仅编号、说明、mock 或 skip 不能计作实际集成通过",
+   "primary_task": "T39",
+   "linked_tasks": [
+    "T33",
+    "T35",
+    "T36",
+    "T39"
+   ],
+   "fixture_spec": "真实完整验收卡与仅编号/mock/skip卡比较",
+   "expectation": "真实执行与判定后才可集成passed，设计仍待执行",
+   "negative_control": "字段齐全或skip当真提供方已验",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:18:33.321125+08:00",
+     "command": "cd tests; python -m unittest test_acceptance_cards -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_acceptance_cards.py"
+   ],
+   "note": "验收卡缺 fixture/steps/expectation/observed/environment 或 evidence 不存在时 validate 退出 2；完整卡通过；render 为 60 张卡生成含独立期望与证据的 markdown。",
+   "updated_at": null,
+   "fixture": "synthetic：真实完整验收卡与仅编号/mock/skip卡比较；实际 fixture 由 tests/test_acceptance_cards.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_acceptance_cards -v"
+   ],
+   "command": "cd tests; python -m unittest test_acceptance_cards -v",
+   "observed": "验收卡缺 fixture/steps/expectation/observed/environment 或 evidence 不存在时 validate 退出 2；完整卡通过；render 为 60 张卡生成含独立期望与证据的 markdown。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:18:33.321125+08:00",
+   "expectation_sha256": "b45b9f4b106a515d60704231dd8414403b08ffcadd7b348d37231dcd8c113081"
+  },
+  "A53": {
+   "id": "A53",
+   "scenario": "后加的论断、文献、图、图注和文稿都注册依赖；编辑/重排/更换来源使相应审阅失效，旧文本支持不被沿用",
+   "primary_task": "T23",
+   "linked_tasks": [
+    "T03",
+    "T23",
+    "T26",
+    "T27",
+    "T28",
+    "T29",
+    "T30",
+    "T31",
+    "T33",
+    "T40"
+   ],
+   "fixture_spec": "后加图文节点换来源/改句子/重排/改图注",
+   "expectation": "依赖注册且旧审阅失效，实印内容匹配",
+   "negative_control": "框架存在即自动接入或只看句子ID",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:28:08.338738+08:00",
+     "command": "cd tests; python -m unittest test_claims -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_claims.py",
+    "tests/test_claims.py"
+   ],
+   "note": "编辑后未重登记的 claim/block 变 stale；实印文本不符也 stale。",
+   "updated_at": "2026-11-14T14:45:13+08:00",
+   "fixture": "synthetic：后加图文节点换来源/改句子/重排/改图注；实际 fixture 由 tests/test_claims.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_claims -v"
+   ],
+   "command": "cd tests; python -m unittest test_claims -v",
+   "observed": "编辑后未重登记的 claim/block 变 stale；实印文本不符也 stale。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:28:08.338738+08:00",
+   "expectation_sha256": "b4f6e49abe0c531d0dede5f12c316b61cea0b6f48be888367e806d47808780bc"
+  },
+  "A54": {
+   "id": "A54",
+   "scenario": "产品能力、用户要求范围、阶段命令成功和正式发布就绪分开；partial 或零错误不能绕过正式结果的来源/复核闸门",
+   "primary_task": "T32",
+   "linked_tasks": [
+    "T02",
+    "T10",
+    "T18",
+    "T28",
+    "T31",
+    "T32",
+    "T33",
+    "T35",
+    "T36",
+    "T40"
+   ],
+   "fixture_spec": "缺ASR产品/无音频项目/生成器成功/partial未核稿",
+   "expectation": "产品项目阶段发布分开，partial不绕事实硬条件",
+   "negative_control": "项目不适用证明产品或部分稿豁免真实性",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "阶段命令成功（exit 0）与发布就绪分开：数据集未 final、模型未终态、论断未支持时 release 为 not_ready；partial 不能绕过任一硬闸门。",
+   "updated_at": null,
+   "fixture": "synthetic：缺ASR产品/无音频项目/生成器成功/partial未核稿；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "阶段命令成功（exit 0）与发布就绪分开：数据集未 final、模型未终态、论断未支持时 release 为 not_ready；partial 不能绕过任一硬闸门。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "80249a37a938b5601421bd698418fe2a6aa8053f6cd20d372b6c1b11e9fe1a2d"
+  },
+  "A55": {
+   "id": "A55",
+   "scenario": "本次执行与缓存复用有不同回执并绑定原执行和当前依据；改时间戳、遗漏依赖或借旧签名冒充新计算被拒绝",
+   "primary_task": "T24",
+   "linked_tasks": [
+    "T24",
+    "T25",
+    "T33",
+    "T37",
+    "T40"
+   ],
+   "fixture_spec": "缓存有原回执，再改输入/环境/时间戳/签名",
+   "expectation": "复用与执行分开，依赖失配或伪造拒绝",
+   "negative_control": "touch旧文件称新计算",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "四态发布：complete/limited/not_ready/failed 有真实判定。",
+   "updated_at": "2026-11-14T14:45:13+08:00",
+   "fixture": "synthetic：缓存有原回执，再改输入/环境/时间戳/签名；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "四态发布：complete/limited/not_ready/failed 有真实判定。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "39b03ebbc4701924cdbe23627a1c85bee226dc82caeb4279c032d6eb69e43768"
+  },
+  "A56": {
+   "id": "A56",
+   "scenario": "不同目标参数/尺度/分母/观察窗的结果不直接按显著性比较；图文只使用具有相同支持范围的结果",
+   "primary_task": "T21",
+   "linked_tasks": [
+    "T02",
+    "T16",
+    "T18",
+    "T21",
+    "T26",
+    "T29",
+    "T33"
+   ],
+   "fixture_spec": "OR/风险差/标准化系数/不同时间分母混比较",
+   "expectation": "按参数尺度分组，图文支持范围一致",
+   "negative_control": "最小p排名或ready授权所有结论",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "limited 需显式 allow_limited 且硬闸门全过。",
+   "updated_at": "2026-11-14T14:45:13+08:00",
+   "fixture": "synthetic：OR/风险差/标准化系数/不同时间分母混比较；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "limited 需显式 allow_limited 且硬闸门全过。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "9b1930b68dcc70d6833c81da655eb8a6243b6eed0ab2395c5ab99460b9d79485"
+  },
+  "A57": {
+   "id": "A57",
+   "scenario": "不可行、无界、超时、可行候选、局部解与已认证全局解分开；KKT/小残差等必要证据不被升级为全局最优证明",
+   "primary_task": "T19",
+   "linked_tasks": [
+    "T19",
+    "T33"
+   ],
+   "fixture_spec": "无界max x/互斥约束/(x²-1)²驻点0/超时可行解",
+   "expectation": "独立真值区分解质量，证据充分才认证全局",
+   "negative_control": "超时当不可行或KKT/残差证全局",
+   "environment_profiles": [
+    "local_core",
+    "selected_model_engine"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "partial 报告不能绕过 datasets_reviewed 硬闸门。",
+   "updated_at": "2026-11-14T14:45:13+08:00",
+   "fixture": "synthetic：无界max x/互斥约束/(x²-1)²驻点0/超时可行解；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "partial 报告不能绕过 datasets_reviewed 硬闸门。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "30cab3c3eaabeb3d49ad7d48b1820d4509a1c44a78eae481d15945ccd17b4bc0"
+  },
+  "A58": {
+   "id": "A58",
+   "scenario": "插补、估计、模拟和图像近似读数保留原始层、方法及不确定性；验证生成链不能伪装为来源直接观测",
+   "primary_task": "T38",
+   "linked_tasks": [
+    "T02",
+    "T07",
+    "T13",
+    "T17",
+    "T33",
+    "T38"
+   ],
+   "fixture_spec": "实测旁有插补/估计/模拟/图读数并删除标记",
+   "expectation": "原层不覆盖，方法不确定性用途可追",
+   "negative_control": "生成链验证冒充来源直接观测",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:20:16.189365+08:00",
+     "command": "cd tests; python -m unittest test_recovery_layer -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_recovery_layer.py",
+    "tests/test_recovery_layer.py"
+   ],
+   "note": "生成值必须给方法与不确定性，估算不混入实测层。",
+   "updated_at": "2026-11-14T14:45:13+08:00",
+   "fixture": "synthetic：实测旁有插补/估计/模拟/图读数并删除标记；实际 fixture 由 tests/test_recovery_layer.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_recovery_layer -v"
+   ],
+   "command": "cd tests; python -m unittest test_recovery_layer -v",
+   "observed": "生成值必须给方法与不确定性，估算不混入实测层。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:20:16.189365+08:00",
+   "expectation_sha256": "58091f318cb1c8e750c1338af01de9c72f624c1a225a35457b8e3ebae74a34bd"
+  },
+  "A59": {
+   "id": "A59",
+   "scenario": "明确规模、资源预算和环境后测试流式/检查点对账；达到预算如实部分完成，不能静默减少数据集/模型/单元格",
+   "primary_task": "T34",
+   "linked_tasks": [
+    "T24",
+    "T33",
+    "T34"
+   ],
+   "fixture_spec": "预声明三档具体规模/计数/资源，中档故障",
+   "expectation": "各档实测耗时内存/范围，到限有继续点",
+   "negative_control": "小样例称大规模或预算变数量上限",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T14:34:30.235397+08:00",
+     "command": "cd tests; python -m unittest test_lifecycle_release -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_lifecycle_release.py",
+    "tests/test_lifecycle_release.py"
+   ],
+   "note": "依赖未完成/失败时后继步骤不可开始。",
+   "updated_at": "2026-11-14T14:45:13+08:00",
+   "fixture": "synthetic：预声明三档具体规模/计数/资源，中档故障；实际 fixture 由 tests/test_lifecycle_release.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_lifecycle_release -v"
+   ],
+   "command": "cd tests; python -m unittest test_lifecycle_release -v",
+   "observed": "依赖未完成/失败时后继步骤不可开始。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T14:34:30.235397+08:00",
+   "expectation_sha256": "d8412bc7bf7b6f4b099cd3abefe3fa7b5b645b6b0af578bcd0a28babc90fa42c"
+  },
+  "A60": {
+   "id": "A60",
+   "scenario": "每批在实现前准备独立期望并执行相应验收；新模块既是生产者也是消费者，最终综合测试不替代前置门检",
+   "primary_task": "T39",
+   "linked_tasks": [
+    "T01",
+    "T08",
+    "T22",
+    "T33",
+    "T34",
+    "T36",
+    "T39"
+   ],
+   "fixture_spec": "每批注入错生产/消费方，查前置期望与执行",
+   "expectation": "本批门检拒错，M7综合，必要集成齐才关任务",
+   "negative_control": "只等M7测或文档完成即发布",
+   "environment_profiles": [
+    "local_core"
+   ],
+   "required_evidence": [
+    "fixture_and_oracle_hashes",
+    "actual_program_config_environment",
+    "execution_receipt",
+    "observed_values_states_differences",
+    "actual_semantic_or_visual_review_when_applicable"
+   ],
+   "skip_policy": "Unavailable, not run, timeout, mock or skip is not actual integration passed.",
+   "design_state": "planned",
+   "result": "passed",
+   "runs": [
+    {
+     "at": "2026-11-14T15:18:33.321125+08:00",
+     "command": "cd tests; python -m unittest test_acceptance_cards -v",
+     "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+     "result": "passed"
+    }
+   ],
+   "evidence": [
+    "tests/test_acceptance_cards.py"
+   ],
+   "note": "order-check 拒绝 expectation_recorded_at 晚于 implemented_at 的卡；batch-gate 在前置批未通过时拒绝当前批；期望文本事后改写被 sha256 检出。",
+   "updated_at": null,
+   "fixture": "synthetic：每批注入错生产/消费方，查前置期望与执行；实际 fixture 由 tests/test_acceptance_cards.py 在临时目录内用代码构造（明确 synthetic，不是真实研究材料）",
+   "steps": [
+    "cd tests; python -m unittest test_acceptance_cards -v"
+   ],
+   "command": "cd tests; python -m unittest test_acceptance_cards -v",
+   "observed": "order-check 拒绝 expectation_recorded_at 晚于 implemented_at 的卡；batch-gate 在前置批未通过时拒绝当前批；期望文本事后改写被 sha256 检出。",
+   "environment": "Python 3.12.4 (Windows 11); pandas 2.3.3, numpy 2.3.5, statsmodels 0.15.0, matplotlib 3.11.2, PyMuPDF 1.26.6, python-docx 1.2.0, openpyxl 3.1.5, rapidocr_onnxruntime 1.4.4, vosk 0.3.45, Word COM 16.0, ffmpeg 8.1.1",
+   "expectation_recorded_at": "2026-11-14T13:41:57.814198+08:00",
+   "implemented_at": "2026-11-14T15:18:33.321125+08:00",
+   "expectation_sha256": "829b40f6d3b0d9787defd72c8c66488aff69f0acb0bd458e74387baa704467e3"
+  }
+ }
+}

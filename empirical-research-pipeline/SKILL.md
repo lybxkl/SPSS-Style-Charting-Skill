@@ -19,6 +19,8 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 
 **使用本 skill 时先读 [references/12-exhaustive-research.md](references/12-exhaustive-research.md)**：开放数据集注册表、全资料覆盖、逐格证据、整合后的第二遍复读、缺数回查、任意引擎回执和交付闸门的具体契约都在这里。统计与图表的数字一致，不等于原始数据正确；两层都必须通过。
 
+当前 v2 代码使用 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md) 的维护流程：严格恢复解码、活跃来源代次、逐单元范围复读、按字段的独立校核，以及自动追踪依赖的只读发布检查。系数通过不代表标准误/区间/p 值已核；阶段 complete 不代表全研究 ready。完整交付范围须声明 `full_research` 并包含实际分析报告与 DOCX/PDF；`release show` 检查当前版本，旧发布状态不能沿用。
+
 ## 何时使用
 
 - 用户给了一个文件夹，里面混有 PDF、Word、Excel、CSV、文本、网页、访谈稿、图片或扫描件，要求整理、编码、统计、出图或写成论文。
@@ -36,14 +38,16 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 | XLSX / XLSM | 工作表、单元格文本；只读打开 | `.xls` 先转换；建议安装 `openpyxl` |
 | CSV / TSV / JSON / JSONL | 字段、行数、编码、缺失；表格数据质量审计 | 编码工作表会跳过表格，直接走 `auto_stats` |
 | TXT / MD / HTML / XML / YAML / RTF | 纯文本抽取；HTML 去标签 | 网页正文可用，脚本/样式会被去掉 |
-| 图片（PNG/JPG/TIFF 等） | 文件清单；尺寸/页数 | 先 OCR，再进入编码；本 skill 不自带 OCR |
-| 音频/视频 | 文件清单 | 先转写/抽帧，再进入编码；本 skill 不自带 ASR |
-| 压缩包 | 文件清单 | 先解压；审计会标记 `unsupported` |
+| 图片（PNG/JPG/TIFF 等） | 文件清单；尺寸/页数；v2 可调用 RapidOCR | 需要实际安装 OCR 引擎；转写未核，必须回原图核对 |
+| 音频/视频 | 文件清单；v2 可调用 Vosk、ffmpeg | 需要实际引擎与语言模型；保留时间定位、未听范围和说话人争议 |
+| 压缩包 | v1 文件清单；v2 逐成员登记与安全提取 | 保留父原件、成员序号和哈希；成员数不是观察数，未知格式继续处置 |
 | 未知/专有格式 | 文件清单 | 先转换或导出为上述格式 |
 
 “任何资料”不等于“任何二进制都能直接解析”。本 skill 会先把所有文件纳入审计和样本对账；不能直接读的格式会明确标记并给出转换路径，不会静默漏掉。
 
 ## 硬规则
+
+v2 任务同时读取 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)。它规定当前版本的复核签名、搜索范围、执行绑定、独立校核、语境复读和发布行为；不能用台账里的 `verified/passed` 字样代替这些实际检查。
 
 1. **先审计，再编码/建模。** 没弄清文件数、可读文本数、重复数、字段缺失和排除原因之前，不要开始统计。
 2. **按内容去重，不按文件名。** 同名不同文、同文不同名都很常见；至少用 MD5，再用标题/关键字段/正文抽样复核。
@@ -104,6 +108,26 @@ python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目�
 每个阶段都有“闸门”。闸门不过，不进入下一阶段。
 
 这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段，补数后全格重核；用户补充资料/数据形态时重算受影响的模型、图表、报告和 DOCX。内置脚本可被等价、自选实现替换，但来源、复核、样本与运行回执契约不能省略。
+
+### 可选的 v2 契约层
+
+需要在混合资料里做「可审计的中间结论」时（扫描页/音视频/跨页表、逐格复核、
+多输入模型、独立数值校核、发布范围），用 `scripts/` 下的 v2 模块把每一步落成
+带内容哈希与状态机的记录：`source_units → ocr_provider/asr_provider →
+table_recovery → audit_view → discovery → search_index → gaps →
+review_workbench → entities → models → validation → claims → layout_check →
+lifecycle → release`。
+
+它不替代本文件下面的阶段闸门，而是把「恢复程度、没找到、转写未核、N 的语义、
+求解质量、复核范围」这些容易被含糊掉的东西显式记下来。启用方式、记录种类、
+命令与每个模块的硬性拒绝见 [references/13-contract-v2.md](references/13-contract-v2.md)。
+不启用时原有链路照旧工作。
+
+v2 的维护入口包括：
+
+- **成稿**：`refs.py` 记录实际访问层级、原文支持与撤稿/更正查核；`manuscript.py` 保留自选章节和附录，核验正文、表格、图注与实印 DOCX/PDF。章节和最低字数默认不固定。
+- **设计与图**：`designcheck.py` 联查设计、诊断、角色 N 与泄漏；`figsemantics.py` 对账实际图元与交付 PNG，测量标签边界；配色只推荐。`layout_check.py` 检查最终安置。位图字号须有完全对应的实际渲染字体证据，单独的源 PDF 不能证明位图内部字号。
+- **验收**：仓库的 `tools/run_acceptance.py` 保存真实执行、原始日志、逐项结果与当前代码/fixture 哈希；`tools/acceptance_cards.py` 核对执行前冻结的场景映射，不接受仅源码或自报 passed。历史先后顺序不能用事后时间戳证明。
 
 ---
 
@@ -632,6 +656,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `references/10-contracts.md` | 查脚本之间的键列/漏斗/N/缺失值/退出码约定时 |
 | `references/11-methods-catalog.md` | 选方法、查变量要求与前置判据、写结果句式、避开常见误用时 |
 | `references/12-exhaustive-research.md` | 使用本 skill 时先读：全资料发现、开放数据集/模型、全格回源复核、补数闭环与交付契约 |
+| `references/14-reviewed-workflow.md` | v2 当前维护流程：真实复核、开放执行器、版本失效、结论支持与成稿发布 |
 
 ## 模板
 

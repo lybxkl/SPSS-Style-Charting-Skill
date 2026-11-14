@@ -1,0 +1,326 @@
+{
+  "generated_at": "2026-11-14T12:41:38.335850+00:00",
+  "execution": "docs/remediation-2026-11-14/accepted-final/execution.json",
+  "execution_sha256": "2ca30cdab44cdb119fc91fbf285a98c4777a33ab22de96e17d9ab1267a7efb8a",
+  "findings": [
+    {
+      "id": "F01",
+      "title": "事务暂存可在提交前覆盖原件",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c09_staging_rejects_escape_without_writing"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F02",
+      "title": "MILP 被当作连续 LP 求解并错误认证全局最优",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c04_milp_integer_domain_is_honored"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F03",
+      "title": "非线性求解忽略边界且未复核可行性",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c05_nonlinear_bounds_and_unsupported_methods"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F04",
+      "title": "v2 发布门禁仅信状态文本，可绕过来源复核与方法评估",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c01_fake_verification_does_not_release",
+        "test_remediation.AuditFixes.test_c02_model_without_source_or_method_review_does_not_release",
+        "test_remediation.AuditFixes.test_c14_open_gap_is_a_failed_release_check"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F05",
+      "title": "旧数值校核可给新数据和新估计续签",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c17_refit_invalidates_old_validation"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F06",
+      "title": "普通账本读取不执行契约、特性和内容哈希校验",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c03_tampered_ledger_is_rejected_by_normal_reads"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F07",
+      "title": "复核工作台与 final 使用不同的单元格签名",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c08_workbench_events_are_consumed_by_final",
+        "test_remediation.AuditFixes.test_new_dispute_overrides_previous_approval_across_timezones"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F08",
+      "title": "OCR/ASR 来源复读事件被误判成不存在的数据格",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c21_source_reread_is_not_a_dataset_cell_review"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F09",
+      "title": "局部检索回执被冒算为全资料检索覆盖",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c12_filtered_search_covers_only_scanned_sources"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F10",
+      "title": "索引与发现有未披露的固定截断",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c18_long_text_tail_is_searchable_and_new_material_invalidates_receipt"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F11",
+      "title": "补数关闭只是填字段，没有实际数据整合与复核闭环",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c13_zero_hits_or_nonexistent_dataset_cannot_close_gap"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F12",
+      "title": "任意 trace 字典即可让无来源数字进入且通过 DOCX 检查",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c15_nonexistent_numeric_trace_is_rejected"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F13",
+      "title": "固定组稿目录会静默丢弃已登记章节",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c16_custom_sections_are_preserved_and_missing_spans_fail"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F14",
+      "title": "开放模型接口仍是白名单，自定义 runner 参数未执行",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c06_open_family_and_role_are_registerable",
+        "test_remediation.AuditFixes.test_c07_python_runner_is_invoked_and_result_bound"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F15",
+      "title": "绑定的代码改变后仍可发布",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c10_code_drift_blocks_commit"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F16",
+      "title": "父版本校验与发布不是一个并发原子操作",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c19_concurrent_different_successors_cannot_both_replace_same_parent"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F17",
+      "title": "运行超过一小时的活锁可被其他运行抢走",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c11_live_long_lock_cannot_be_stolen_or_released_by_other_owner"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F18",
+      "title": "研究设计诊断只看字段存在，False 也能判通过",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c20_false_diagnostic_does_not_satisfy_method_check"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F19",
+      "title": "设计联查不接受模型注册表正常产生的相对路径",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c23_model_paths_are_consumable_by_design_check"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F20",
+      "title": "未实现的稳定性规格被静默丢弃，零运行也能 passed",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_remediation.AuditFixes.test_c22_unrun_stability_requests_remain_visible_and_unassessed"
+      ],
+      "historical_evidence_limit": null
+    },
+    {
+      "id": "F21",
+      "title": "60张验收卡的观察结果与原场景多处错配，证据门检不足以证明全通过",
+      "runtime_status": "fixed_and_regression_passed",
+      "test_ids": [
+        "test_acceptance_cards.AcceptanceCardsCase.test_batch_gate_blocks_planned_task_and_recovers",
+        "test_acceptance_cards.AcceptanceCardsCase.test_complete_card_validates",
+        "test_acceptance_cards.AcceptanceCardsCase.test_empty_expectation_is_error",
+        "test_acceptance_cards.AcceptanceCardsCase.test_evidence_must_stay_inside_repository",
+        "test_acceptance_cards.AcceptanceCardsCase.test_execution_for_old_program_version_is_rejected",
+        "test_acceptance_cards.AcceptanceCardsCase.test_expectation_recorded_after_implementation_fails_order_check",
+        "test_acceptance_cards.AcceptanceCardsCase.test_later_partial_batch_does_not_block_earlier_batch",
+        "test_acceptance_cards.AcceptanceCardsCase.test_mismatched_scenario_test_mapping_is_rejected",
+        "test_acceptance_cards.AcceptanceCardsCase.test_missing_evidence_file_is_named",
+        "test_acceptance_cards.AcceptanceCardsCase.test_prose_only_steps_is_error",
+        "test_acceptance_cards.AcceptanceCardsCase.test_render_lists_all_cards_and_expectation_field",
+        "test_acceptance_cards.AcceptanceCardsCase.test_rewritten_expectation_is_detected",
+        "test_acceptance_cards.AcceptanceCardsCase.test_source_only_evidence_cannot_claim_passed",
+        "test_acceptance_cards.AcceptanceCardsCase.test_unassessed_without_gap_is_error"
+      ],
+      "historical_evidence_limit": "Original implementation's per-batch pre-implementation gates have no independently verifiable historical execution chain. Current guard tests and integrated tests passed, but cannot retroactively establish that history."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R01",
+      "title": "复杂资料恢复与结构还原",
+      "tasks": [
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T38"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R02",
+      "title": "主动发现遗漏与定向补数",
+      "tasks": [
+        "T08",
+        "T09",
+        "T10"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R03",
+      "title": "逐格证据复核与冲突裁决工作台",
+      "tasks": [
+        "T11",
+        "T12",
+        "T13",
+        "T38"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R04",
+      "title": "跨资料实体、关系与口径整合",
+      "tasks": [
+        "T14",
+        "T15"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R05",
+      "title": "开放数学/统计模型适配与条件评估",
+      "tasks": [
+        "T16",
+        "T17",
+        "T18",
+        "T19",
+        "T20"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R06",
+      "title": "合理规格稳定性与独立数值校核",
+      "tasks": [
+        "T21",
+        "T22"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R07",
+      "title": "追加材料、依赖更新与环境复现",
+      "tasks": [
+        "T23",
+        "T24",
+        "T25",
+        "T40"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R08",
+      "title": "全文论断、文献与完整论文",
+      "tasks": [
+        "T26",
+        "T27",
+        "T28"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    },
+    {
+      "id": "R09",
+      "title": "绘图语义、最终安置与出版质量",
+      "tasks": [
+        "T29",
+        "T30",
+        "T31"
+      ],
+      "state": "implemented_and_regression_tested_in_measured_scope"
+    }
+  ],
+  "environment_versions": {
+    "numpy": "2.3.5",
+    "pandas": "2.3.3",
+    "scipy": "1.18.1",
+    "statsmodels": "0.15.0",
+    "matplotlib": "3.11.2",
+    "PyMuPDF": "1.26.6",
+    "python-docx": "1.2.0",
+    "openpyxl": "3.1.5",
+    "vosk": "0.3.45",
+    "rapidocr_onnxruntime": "1.4.4"
+  },
+  "acceptance_summary": {
+    "passed": 59,
+    "historical_component_unassessed": 1
+  },
+  "scope": "Synthetic fixtures and named actual local providers; no real empirical research claim."
+}

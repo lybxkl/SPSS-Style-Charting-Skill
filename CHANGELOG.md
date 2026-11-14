@@ -1,6 +1,51 @@
 # CHANGELOG
 
+## 2026-11-15 跨功能逻辑审计
+
+- 修复严格文本解码、重复 JSON 键、同名字段覆盖、活跃来源/恢复代次、不可变表示及逐单元覆盖；PPTX 正文/表格/备注恢复与未解视觉范围分别记录。
+- 发现、索引和发布核对实际表示哈希；恢复修订也使索引过期。整单元范围复读绑定实际报告，blocked 缺数仍属未完成。
+- 缓存绑定实现及实际环境，重复复用幂等；依赖步骤写入前拒绝重复 ID、未知父节点和环。
+- 模型规格路径避免 ID 冲突，缺完整规格不再猜补；新增实际条件适配器，CSV/TSV 保留身份字符串，原始 beta 与 OR/IRR 不混标。外部日志保留原始字节，原生 JSON 严格解析。
+- 独立校核逐字段绑定实际 N，精确大整数保持差异；未核标准误/区间/p 值不借系数通过放行。预测按真实数值/日期时间分组，变体路径、尺度可比性和检验族一并检查。
+- 发布评估改为只读、前后核对依据并自动补齐正文/论断/图的模型与数据依赖；当前发布重评、阶段 complete 与完整研究 project_ready 分开。
+- 同步 README、契约文档与维护流程；完整模块/函数清单、实际入口观测、专项反例与本轮执行证据见 `docs/comprehensive-audit-2026-11-14/`。该目录沿用审计开始日期；最终时间以实际回执为准。
+
+## 2026-11-14 独立审计修复
+
+- 正式发布消费当前全格 final、全来源覆盖、模型独立数值与方法评估、语境复读、实际成稿和各图安置证据；不信任状态字样。
+- 统一工作台与核验器完整签名，区分源单元与数据格事件；输入、代码、原件、复核事件及重新拟合均有版本失效检查。
+- 账本正常读取检查契约和完整性；事务限制路径、绑定代码、串行原子发布并保留不同输出，锁保护活进程及 owner。
+- 搜索去除长文本静默截断，记录实际扫描范围与当前原件清单；补数关闭须实际补格、整表复核及模型重评。
+- MILP 保留整数域，非线性方法核边界与约束；开放 Python/命令执行器和非系数结果，保留原生输出独立校核。
+- 补充真实聚类/GEE、全规格处置、多重比较、训练内预处理、按组/时间留出和结果口径可比性；未执行、未收敛不冒充通过。
+- 补充多维原生审计视图、DOCX 注释部件、CSV 逻辑记录及压缩成员安全提取，保留精度与成员身份。
+- 科研配色仍为推荐；实际保存图与图元绑定，同图斜排保留全部标签。文稿保留自选章节/附录，导出原子替换且核对实际 PDF。
+- 验收保存真实执行结果、源码/fixture/日志哈希及执行前冻结映射；历史声明与当前证据分开。
+
 变更按日期记录。历史缺陷编号见 `docs/ISSUES-FIXED.md`；资料、统计与交付审计见 [2026-11-13 报告](docs/AUDIT-2026-11-13.md)，配色与展示完整性复核见 [2026-11-14 报告](docs/AUDIT-2026-11-14-PALETTE.md)。
+
+## 2026-11-14 v2 契约层（研究证据台账）
+
+- 新增可选 v2 契约层（`references/13-contract-v2.md`）：31 类记录、状态迁移、内容哈希、特性协商与拒绝；`cell_evidence.prepared → verified` 为非法跳转。
+- 新增资料恢复层：`source_units`（物理文件/逻辑单元/独立观察三数分开，容器成员不重复计数，扫描页只判 `partial` 并写 `unrecovered`，旧版 Office 写 `unsupported_format` 回执）、`ocr_provider`（真实 RapidOCR，转写永远未核，复核走 `adjudicate`）、`asr_provider`（真实 Vosk，片段可回放，说话人未定）、`table_recovery`（跨页续表/重复表头/合并单元格/公式缓存与独立复算）。
+- 新增审计视图：`audit_view` 对 CSV/JSONL/XLSX 做独立对账（原始 XML 读单元格、日期序列号、公式文本、JSON 重复键与大数精度、0.10 不被写成 0.1）；空表只给范围证据，不报 0/0=100%。
+- 新增发现与回查：`discovery` 两条路径并写结构覆盖；`search_index` 索引过期即拒绝回答「没有」；`gaps` 的 resolved/unavailable/exhausted 各有真实前提。
+- 新增逐格复核工作台：离线页面、盲第二次抽取、冲突只记 `differs` 不投票、补丁父版本校验与全表复核作废。
+- 新增实体/关系/合并审计与单位换算；`models` 开放注册表（四态、按角色的多输入、数学模型的求解质量：infeasible/unbounded/timeout/local/certified_global、无样本 N 不编 N）；`validation` 独立数值校核（共享预处理只能算 `agrees_but_not_independent`）与规格稳定性（无通过校核不得扩展）。
+- 新增 `claims`（方向/极值/分母/单位/时间/因果措辞/文献访问层次/数字可溯的机器核查、成稿块指纹与实印比对、失效传播）、`layout_check`（按最终 DOCX/PDF 实际安置尺寸量 dpi/字号，位图无文字层判不了就不放行）、`lifecycle`（环境前后快照、缓存复用写新运行记录、步骤依赖与预算）、`release`（complete/limited/not_ready/failed 四态，limited 仍需硬闸门全过）。
+- 新增测试 8 个文件、174 项：`test_contract_v2`、`test_research_core`、`test_recovery_layer`（真实 OCR+ASR）、`test_discovery_review`、`test_models_entities`、`test_lifecycle_release`、`test_claims`、`test_layout`。完整回归见 `docs/implementation/verification/`。
+
+### 2026-11-14 第二轮：补齐审计发现的缺口
+
+- `verify_dataset.py` 增加 v2 检查（值类型义务、证据单元版本、`partial` 单元只能支撑 `image_approx` 且需记录回读、合法空表的范围证据、`review_event` 的签名/归属/时间/独立性），v2 账本不存在时行为不变。
+- 新增 `designcheck.py`：设计特征→必须报告的诊断、角色 N 按观测单位计、训练/测试泄漏与重复测量检查；结果写 `validation_result(kind=design_linkage)`。
+- 新增 `refs.py`：DOI 元数据核验、访问层级（summary/abstract/full text）与证据哈希、verbatim 引文支持；摘要不能支撑全文论断。
+- 新增 `manuscript.py`：从 `manuscript_block` 组装完整论文，拒绝缺章/占位/不可溯数字，真实 Word→PDF，回读实印文本与审核文本比对，不一致即 stale。
+- 新增 `figsemantics.py`：从真实 artist 读柱高/误差棒/散点/折线/图例并与数据对账；60 类密集标签用旋转矩形 SAT 实测重叠；布局只给 rotate/expand/widen/subplot 方案，配色只作建议。
+- 新增 `faults.py` 与硬化测试：ENOSPC 半写、pointer 替换前杀进程、检查点五层失效、超时只能 cancelled、200k 行分块与 50k 行读回、并发提交幂等。据此修复：`txn` 先发布后写回执（改为先回执后指针）、`Project.latest` 不容忍撕裂尾行、`checkpoint_state` 不看状态、`recover` 选错 commit、缓存 `is_valid` 与 status 矛盾、`models` 数学规格被要求 fit/train、`solve` 不调用问题构造器、`audit_view` 缺 PDF 视图、`table_recovery` 无缓存公式的判定。
+- 新增 `tools/acceptance_cards.py`（validate/render/batch-gate/order-check/drift）。原实现曾自报 60/60；独立审计 F21 发现执行证据和场景错配，该历史通过声明已撤回。当前为 59 项实际回归通过、A60 历史批次顺序未核，见修复报告。
+- 新增 4 个端到端项目（定量问卷、定性访谈、数学规划、混合材料）与守卫/实体身份测试；回归 842 项通过（508 s）。
+- 尚未接线：`references`/`figure_spec` 生成端/`manuscript_block` 组装器只提供记录与检查，未提供生成脚本；`research_gate.py`（v1）未改写，v2 的消费端是 `release.py`。这些缺口逐项记在实施台账中，未计入「已完成」。
 
 ## 2026-11-14 配色细节与展示完整性复核
 

@@ -1,0 +1,532 @@
+{
+ "checked": 60,
+ "errors": [],
+ "warnings": [
+  {
+   "case": "A01",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_guard_entities -v"
+  },
+  {
+   "case": "A02",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A02",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A03",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A03",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A04",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A04",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A05",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A05",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A06",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A06",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A07",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A07",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A08",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A08",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A09",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A09",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A10",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A11",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A11",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A12",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A12",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A13",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A13",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A14",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A14",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A15",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A15",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A16",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A16",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A17",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A17",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A18",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_guard_entities -v"
+  },
+  {
+   "case": "A19",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A19",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A20",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A20",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A21",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A21",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A22",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A22",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A23",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A23",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A24",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A24",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A25",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A25",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A26",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A26",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A27",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A27",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A28",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A28",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A29",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A29",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A30",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_models_entities.py"
+  },
+  {
+   "case": "A30",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A31",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A31",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A32",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_claims.py"
+  },
+  {
+   "case": "A32",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_claims -v"
+  },
+  {
+   "case": "A33",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_claims.py"
+  },
+  {
+   "case": "A33",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_claims -v"
+  },
+  {
+   "case": "A34",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A34",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A35",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A35",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A36",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A36",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A37",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_figure_semantics -v"
+  },
+  {
+   "case": "A38",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_layout.py"
+  },
+  {
+   "case": "A38",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_layout -v"
+  },
+  {
+   "case": "A39",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_layout.py"
+  },
+  {
+   "case": "A39",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_layout -v"
+  },
+  {
+   "case": "A40",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A41",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_hardening -v"
+  },
+  {
+   "case": "A42",
+   "kind": "evidence-after-observation",
+   "message": "证据 mtime 2026-11-14T07:45:13+00:00 晚于 observed_at 2026-11-14T15:35:15+08:00，像是事后补的：docs/implementation/verification/final/regression-v4.log"
+  },
+  {
+   "case": "A42",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest discover -s . -p \"test_*.py\" -v"
+  },
+  {
+   "case": "A43",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A44",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A44",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A45",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_design_v2 -v"
+  },
+  {
+   "case": "A46",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A46",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A47",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_contract_v2 -v"
+  },
+  {
+   "case": "A48",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_hardening -v"
+  },
+  {
+   "case": "A49",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_discovery_review.py"
+  },
+  {
+   "case": "A49",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_discovery_review -v"
+  },
+  {
+   "case": "A50",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_hardening -v"
+  },
+  {
+   "case": "A51",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_models_entities -v"
+  },
+  {
+   "case": "A52",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_acceptance_cards -v"
+  },
+  {
+   "case": "A53",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_claims.py"
+  },
+  {
+   "case": "A53",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_claims -v"
+  },
+  {
+   "case": "A54",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A55",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A55",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A56",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A56",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A57",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A57",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A58",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_recovery_layer.py"
+  },
+  {
+   "case": "A58",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_recovery_layer -v"
+  },
+  {
+   "case": "A59",
+   "kind": "duplicate-evidence",
+   "message": "evidence 重复登记 2 次：tests/test_lifecycle_release.py"
+  },
+  {
+   "case": "A59",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_lifecycle_release -v"
+  },
+  {
+   "case": "A60",
+   "kind": "command-not-in-evidence",
+   "message": "command 在 1 个证据文件里都 grep 不到，证据不是这条命令的执行回执：cd tests; python -m unittest test_acceptance_cards -v"
+  }
+ ],
+ "results": "F:\\测试文件\\SPSS-Style-Charting-Skill\\docs\\implementation\\ACCEPTANCE-RESULTS.json"
+}

@@ -21,7 +21,7 @@ def build():
         thresholds=dict(minEffectiveDpi=597,minFontPt=7.2,figureWidthCm=15),
         requirements=[dict(gateId=g['id'],definitionVersion=g['definitionVersion'],reportStage=g['reportStage'],displayStage=g['displayStage'],blockingAt=g['blockingAt'],source=g['owner'],allowNa=g.get('allowNa',False),required=g.get('required',True)) for g in sorted(records,key=lambda g:g['id'])]))
     members=[]
-    for directory in ['scripts','references','contracts/gates','profiles','assets']:
+    for directory in ['scripts','references','contracts','profiles','assets']:
         for path in sorted((PACKAGE/directory).rglob('*')):
             if not path.is_file() or path.suffix in ('.pyc','.pyo') or '__pycache__' in path.parts or path.name=='package-manifest.json':continue
             members.append(dict(path=path.relative_to(PACKAGE).as_posix(),sha256=hashlib.sha256(path.read_bytes()).hexdigest()))

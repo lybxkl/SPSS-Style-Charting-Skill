@@ -1,0 +1,1420 @@
+{
+  "schema": "dsa.workflow/1",
+  "id": "empirical-research-pipeline",
+  "version": "1.0.0",
+  "requiredFeatures": [
+    "dag-v1",
+    "bindings-v1",
+    "actions-v1",
+    "gate-admission-v1",
+    "ui-v1"
+  ],
+  "workspace": {
+    "directories": [
+      "data",
+      "docs",
+      "output",
+      "scripts",
+      "runs"
+    ]
+  },
+  "stages": [
+    {
+      "id": "scope",
+      "index": 1,
+      "name": "范围与口径",
+      "short": "范围",
+      "purpose": "研究问题、时间窗、纳入/排除标准写成 docs/scope.md",
+      "script": null,
+      "args": [],
+      "artifacts": [
+        "docs/scope.md"
+      ],
+      "dependsOn": [],
+      "admission": {},
+      "afterRun": {
+        "checkpoint": "data-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [],
+      "manualInstructions": [
+        "写 docs/scope.md，至少包含：研究问题、分析单位、时间窗、纳入/排除标准、关键变量的操作化口径、已知局限。",
+        "这一步不产生数字；不要为了「看起来完整」编造样本量或文献引用。",
+        "写完后在工作台点「刷新」，scope 闸门会检查文件是否存在且非空。"
+      ],
+      "ui": {
+        "panels": [],
+        "draftTask": "scope"
+      },
+      "legacyAdmission": {}
+    },
+    {
+      "id": "audit",
+      "index": 2,
+      "name": "资料审计",
+      "short": "审计",
+      "purpose": "逐份文件的可读性、重复、类型与字数审计；同时生成去重计划",
+      "script": "scripts/audit_corpus.py",
+      "args": [
+        "--root",
+        "data",
+        "--out-dir",
+        "output/audit",
+        "--min-chars",
+        "100",
+        "--content-dedupe"
+      ],
+      "steps": [
+        {
+          "script": "scripts/audit_corpus.py",
+          "args": [
+            "--root",
+            "data",
+            "--out-dir",
+            "output/audit",
+            "--min-chars",
+            "100",
+            "--content-dedupe"
+          ],
+          "produces": [
+            "output/audit/corpus_files.csv",
+            "output/audit/corpus_summary.json",
+            "output/audit/sample_flow.csv"
+          ]
+        },
+        {
+          "script": "scripts/dedupe_corpus.py",
+          "args": [
+            "--root",
+            "data",
+            "--audit",
+            "output/audit/corpus_files.csv",
+            "--out-dir",
+            "output/audit"
+          ],
+          "produces": [
+            "output/audit/dedupe_plan.csv"
+          ],
+          "continueOnError": true
+        }
+      ],
+      "artifacts": [
+        "output/audit/sample_flow.csv",
+        "output/audit/corpus_summary.json",
+        "output/audit/dedupe_plan.csv"
+      ],
+      "dependsOn": [
+        "scope"
+      ],
+      "admission": {
+        "gates": [
+          "scope-doc",
+          "sources-mounted",
+          "sources-outside"
+        ]
+      },
+      "afterRun": {
+        "checkpoint": "data-ready",
+        "reportStages": [
+          "scope",
+          "audit"
+        ],
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "audit"
+      ],
+      "manualInstructions": [],
+      "ui": {
+        "panels": [
+          "corpus"
+        ],
+        "draftTask": "",
+        "artifactPrefixes": [
+          "output/audit/"
+        ]
+      },
+      "legacyAdmission": {}
+    },
+    {
+      "id": "coding",
+      "index": 3,
+      "name": "编码与抽取",
+      "short": "编码",
+      "purpose": "按 profile 生成编码表；有 extract_profile.json 时落 dataset.csv 与 evidence.jsonl",
+      "script": "scripts/make_coding_sheet.py",
+      "args": [
+        "--root",
+        "data",
+        "--out",
+        "output/coding",
+        "--audit",
+        "output/audit/corpus_files.csv"
+      ],
+      "optionalArgs": [
+        {
+          "flag": "--dedupe-plan",
+          "file": "output/audit/dedupe_plan.csv"
+        },
+        {
+          "flag": "--extract",
+          "file": "extract_profile.json"
+        },
+        {
+          "flag": "--decisions",
+          "file": "decisions.jsonl"
+        }
+      ],
+      "steps": [
+        {
+          "script": "scripts/make_coding_sheet.py",
+          "args": [
+            "--root",
+            "data",
+            "--out",
+            "output/coding",
+            "--audit",
+            "output/audit/corpus_files.csv"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--dedupe-plan",
+              "file": "output/audit/dedupe_plan.csv"
+            },
+            {
+              "flag": "--extract",
+              "file": "extract_profile.json"
+            },
+            {
+              "flag": "--decisions",
+              "file": "decisions.jsonl"
+            }
+          ],
+          "optionalFlags": [
+            {
+              "flag": "--require-review",
+              "whenFile": "decisions.jsonl"
+            }
+          ],
+          "produces": [
+            "output/coding/coding_sheet.csv",
+            "output/coding/sample_flow.csv",
+            "output/coding/skipped_documents.csv"
+          ]
+        },
+        {
+          "script": "scripts/check_decisions.py",
+          "args": [
+            "--root",
+            "data",
+            "--decisions",
+            "decisions.jsonl",
+            "--out",
+            "output/qa/decision_issues.csv"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--review",
+              "file": "output/coding/extraction_review.csv"
+            }
+          ],
+          "whenFile": "decisions.jsonl",
+          "produces": [
+            "output/qa/decision_issues.csv"
+          ],
+          "continueOnError": true
+        }
+      ],
+      "artifacts": [
+        "output/coding/coding_sheet.csv",
+        "output/coding/sample_flow.csv",
+        "output/coding/skipped_documents.csv"
+      ],
+      "dependsOn": [
+        "audit"
+      ],
+      "admission": {
+        "checkpoint": "data-ready",
+        "reportStages": [
+          "scope",
+          "audit"
+        ]
+      },
+      "afterRun": {
+        "checkpoint": "data-ready",
+        "reportStages": [
+          "scope",
+          "audit",
+          "coding"
+        ],
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "coding"
+      ],
+      "manualInstructions": [],
+      "ui": {
+        "panels": [
+          "corpus"
+        ],
+        "draftTask": "codebook",
+        "artifactPrefixes": [
+          "output/coding/"
+        ]
+      },
+      "legacyAdmission": {}
+    },
+    {
+      "id": "dataset",
+      "index": 4,
+      "name": "数据集",
+      "short": "数据集",
+      "purpose": "分析宽表 output/dataset/analysis.csv（一行一个分析单位，含 in_analysis 标记）",
+      "script": null,
+      "args": [],
+      "artifacts": [
+        "output/dataset/analysis.csv"
+      ],
+      "dependsOn": [
+        "audit"
+      ],
+      "admission": {},
+      "afterRun": {
+        "checkpoint": "data-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "dataset"
+      ],
+      "manualInstructions": [
+        "从 output/coding/dataset.csv（逐份抽取结果）构建 output/dataset/analysis.csv：一行一个分析单位。",
+        "必须保留 in_analysis 标记（0/1）并说明排除理由；派生变量（分组、对数等）要写进 docs/codebook.md。",
+        "不要改动 evidence.jsonl 里的原文证据；分析表只做可追溯的转换。",
+        "构建脚本放 scripts/ 并在 project.json 里登记（可选），但产物必须是 output/dataset/analysis.csv——data/ 是语料根，宽表放进去会被下一次审计当成一份资料。"
+      ],
+      "ui": {
+        "panels": [
+          "analysis"
+        ],
+        "draftTask": ""
+      },
+      "legacyAdmission": {}
+    },
+    {
+      "id": "verify",
+      "index": 5,
+      "name": "全格复核",
+      "short": "复核数据",
+      "purpose": "逐格回源 + 独立复算：prepare 生成待核模板，final 通过后数据才允许进入统计",
+      "script": "scripts/verify_dataset.py",
+      "args": [
+        "--registry",
+        "research_registry.json",
+        "--root",
+        ".",
+        "--out",
+        "output/data_verification",
+        "--stage",
+        "prepare"
+      ],
+      "steps": [
+        {
+          "script": "scripts/verify_dataset.py",
+          "args": [
+            "--registry",
+            "research_registry.json",
+            "--root",
+            ".",
+            "--out",
+            "output/data_verification",
+            "--stage",
+            "prepare"
+          ],
+          "whenFile": "research_registry.json",
+          "continueOnError": true
+        }
+      ],
+      "artifacts": [
+        "output/data_verification/dataset_verification.json"
+      ],
+      "dependsOn": [
+        "dataset"
+      ],
+      "admission": {
+        "checkpoint": "data-ready"
+      },
+      "afterRun": {
+        "checkpoint": "analysis-ready",
+        "gates": [
+          "verification-final"
+        ],
+        "waitingMessage": "prepare 已生成待核模板：实际逐格复读并完成 final 校验后再续跑",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "verify"
+      ],
+      "manualInstructions": [],
+      "ui": {
+        "panels": [],
+        "draftTask": "verify",
+        "legacySkipWhenMissing": "research_registry.json"
+      },
+      "legacyAdmission": {}
+    },
+    {
+      "id": "stats",
+      "index": 6,
+      "name": "统计分析",
+      "short": "统计",
+      "purpose": "描述统计 + 回归 + 诊断，产出 coef_*.csv 与 model_meta.json",
+      "script": "scripts/auto_stats.py",
+      "args": [
+        "--data",
+        "output/dataset/analysis.csv",
+        "--out",
+        "output/models",
+        "--sample-flow",
+        "output/coding/sample_flow.csv",
+        "--vif",
+        "--roc"
+      ],
+      "optionalArgs": [
+        {
+          "flag": "--config",
+          "file": "chart_config.json"
+        },
+        {
+          "flag": "--spec",
+          "file": "model_spec.json"
+        }
+      ],
+      "steps": [
+        {
+          "script": "scripts/auto_stats.py",
+          "args": [
+            "--data",
+            "output/dataset/analysis.csv",
+            "--out",
+            "output/models",
+            "--sample-flow",
+            "output/coding/sample_flow.csv",
+            "--vif",
+            "--roc"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--config",
+              "file": "chart_config.json"
+            },
+            {
+              "flag": "--spec",
+              "file": "model_spec.json"
+            }
+          ],
+          "produces": [
+            "output/models/coef_all.csv",
+            "output/models/fit.csv",
+            "output/models/model_meta.json"
+          ]
+        },
+        {
+          "script": "scripts/methods_pack.py",
+          "args": [
+            "--data",
+            "output/dataset/analysis.csv",
+            "--out",
+            "output/methods",
+            "--config",
+            "methods.json"
+          ],
+          "whenFile": "methods.json",
+          "produces": [
+            "output/methods/methods_report.md",
+            "output/methods/methods_manifest.csv"
+          ],
+          "continueOnError": true
+        }
+      ],
+      "artifacts": [
+        "output/models/model_meta.json",
+        "output/models/coef_all.csv",
+        "output/methods/methods_report.md"
+      ],
+      "dependsOn": [
+        "verify"
+      ],
+      "admission": {
+        "checkpoint": "analysis-ready"
+      },
+      "afterRun": {
+        "checkpoint": "analysis-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "stats"
+      ],
+      "manualInstructions": [],
+      "ui": {
+        "panels": [
+          "models"
+        ],
+        "draftTask": ""
+      },
+      "legacyAdmission": {
+        "checkpoint": "analysis-ready",
+        "whenFile": "research_registry.json",
+        "requiredInStrict": true,
+        "gates": [
+          "verification-final",
+          "verification-fresh"
+        ]
+      }
+    },
+    {
+      "id": "figures",
+      "index": 7,
+      "name": "出版级图表",
+      "short": "图表",
+      "purpose": "全景图表包与 chart_manifest.csv（dpi / px_width / N / 调色板）；有 paper.json 时出多面板图",
+      "script": "scripts/auto_chart_pack.py",
+      "args": [
+        "--data",
+        "output/dataset/analysis.csv",
+        "--out",
+        "output/chart_pack",
+        "--no-tiff"
+      ],
+      "optionalArgs": [
+        {
+          "flag": "--config",
+          "file": "chart_config.json"
+        }
+      ],
+      "steps": [
+        {
+          "script": "scripts/auto_chart_pack.py",
+          "args": [
+            "--data",
+            "output/dataset/analysis.csv",
+            "--out",
+            "output/chart_pack",
+            "--no-tiff"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--config",
+              "file": "chart_config.json"
+            }
+          ],
+          "produces": [
+            "output/chart_pack/chart_manifest.csv"
+          ]
+        },
+        {
+          "script": "scripts/paper_figures.py",
+          "args": [
+            "--data",
+            "output/dataset/analysis.csv",
+            "--paper",
+            "paper.json",
+            "--out",
+            "output/figures"
+          ],
+          "whenFile": "paper.json",
+          "produces": [
+            "output/figures/paper_figures_manifest.csv"
+          ],
+          "continueOnError": true
+        }
+      ],
+      "artifacts": [
+        "output/chart_pack/chart_manifest.csv",
+        "output/figures/paper_figures_manifest.csv"
+      ],
+      "dependsOn": [
+        "stats"
+      ],
+      "admission": {
+        "checkpoint": "analysis-ready"
+      },
+      "afterRun": {
+        "checkpoint": "figures-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "figures",
+        "qa"
+      ],
+      "manualInstructions": [],
+      "ui": {
+        "panels": [
+          "figures"
+        ],
+        "draftTask": "figures"
+      },
+      "legacyAdmission": {
+        "checkpoint": "analysis-ready",
+        "whenFile": "research_registry.json",
+        "requiredInStrict": true,
+        "gates": [
+          "verification-final",
+          "verification-fresh"
+        ]
+      }
+    },
+    {
+      "id": "manuscript",
+      "index": 8,
+      "name": "文稿组装",
+      "short": "文稿",
+      "purpose": "按 spec 组装正文、图表与题注；有 figure_map.json 时回填 600dpi 图并导出 PDF",
+      "script": "scripts/assemble_manuscript.py",
+      "args": [
+        "--spec",
+        "manuscript.json",
+        "--out",
+        "output/manuscript.docx"
+      ],
+      "steps": [
+        {
+          "script": "scripts/assemble_manuscript.py",
+          "args": [
+            "--spec",
+            "manuscript.json",
+            "--out",
+            "output/manuscript.docx"
+          ],
+          "produces": [
+            "output/manuscript.docx",
+            "output/manuscript_numbers.csv",
+            "output/figure_map.json"
+          ]
+        },
+        {
+          "script": "scripts/export_pdf_hires.py",
+          "args": [
+            "--docx",
+            "output/manuscript.docx",
+            "--out-pdf",
+            "output/manuscript.pdf",
+            "--figure-map",
+            "output/figure_map.json"
+          ],
+          "whenFile": "output/figure_map.json",
+          "produces": [
+            "output/manuscript.pdf"
+          ],
+          "continueOnError": true
+        }
+      ],
+      "artifacts": [
+        "output/manuscript.docx",
+        "output/manuscript_numbers.csv",
+        "output/figure_map.json"
+      ],
+      "dependsOn": [
+        "figures"
+      ],
+      "admission": {
+        "checkpoint": "figures-ready"
+      },
+      "afterRun": {
+        "checkpoint": "manuscript-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "manuscript"
+      ],
+      "manualInstructions": [
+        "先调 data_analysis_manuscript action=scaffold 生成骨架（按图表清单的 section 分组，figure 块的 png/caption 照抄清单，正文留「待补」；png 缺失或 status 不是 ok 的图会被跳过）。",
+        "再按 action=brief 的改稿说明把「待补」写成正文，只改 manuscript.json；不要凭空手写一份 spec 绕过骨架。",
+        "正文里的每个数字都要能落到 output/models/*.csv 或 output/dataset/analysis.csv 的原值；图注里的 N 不要重复加。",
+        "改完必须重跑第 8 阶段（data_analysis_run_stage(stageId=\"manuscript\")）生成 output/manuscript.docx——闸门只认这个 docx；再跑第 9 阶段终检。",
+        "不要手改 docx 绕过统计结果；数字对不上就回到 stats/figures 修产物。"
+      ],
+      "ui": {
+        "panels": [
+          "manuscript",
+          "manuscriptSpec"
+        ],
+        "draftTask": "manuscript",
+        "requiredFiles": [
+          "manuscript.json"
+        ]
+      },
+      "legacyAdmission": {
+        "checkpoint": "figures-ready",
+        "whenFile": "research_registry.json",
+        "requiredInStrict": true,
+        "gates": [
+          "verification-final",
+          "verification-fresh"
+        ]
+      }
+    },
+    {
+      "id": "qa",
+      "index": 9,
+      "name": "终检",
+      "short": "终检",
+      "purpose": "图表合规 + 数字溯源 + 研究总闸门 + 复核包，任何未过项都不许报成功",
+      "script": "scripts/qa_outputs.py",
+      "steps": [
+        {
+          "script": "scripts/qa_outputs.py",
+          "args": [
+            "--docx",
+            "output/manuscript.docx",
+            "--data",
+            "output/dataset/analysis.csv",
+            "--figures",
+            "output/chart_pack/figures",
+            "--manifest",
+            "output/chart_pack/chart_manifest.csv",
+            "--audit",
+            "output/audit/corpus_files.csv",
+            "--min-dpi",
+            "600",
+            "--min-fontsize",
+            "7.2",
+            "--allow-raster-text",
+            "--out",
+            "output/qa/qa_report.json",
+            "--exit-zero"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--pdf",
+              "file": "output/manuscript.pdf"
+            }
+          ],
+          "produces": [
+            "output/qa/qa_report.json"
+          ],
+          "continueOnError": true
+        },
+        {
+          "script": "scripts/verify_numbers.py",
+          "args": [
+            "--out",
+            "output/verify",
+            "--tables",
+            "output/models",
+            "--figures-manifest",
+            "output/chart_pack/chart_manifest.csv",
+            "--sample-flow",
+            "output/coding/sample_flow.csv",
+            "--docx",
+            "output/manuscript.docx"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--numbers",
+              "file": "output/manuscript_numbers.csv"
+            }
+          ],
+          "produces": [
+            "output/verify/number_issues.csv",
+            "output/verify/number_trace.csv"
+          ],
+          "continueOnError": true
+        },
+        {
+          "script": "scripts/research_gate.py",
+          "args": [
+            "--registry",
+            "research_registry.json",
+            "--root",
+            ".",
+            "--verification",
+            "output/data_verification/dataset_verification.json",
+            "--out",
+            "output/research_gate.json"
+          ],
+          "whenFile": "output/data_verification/dataset_verification.json",
+          "produces": [
+            "output/research_gate.json"
+          ],
+          "continueOnError": true
+        },
+        {
+          "script": "scripts/review_pack.py",
+          "args": [
+            "--data",
+            "output/dataset/analysis.csv",
+            "--stats",
+            "output/models",
+            "--figures",
+            "output/chart_pack/chart_manifest.csv",
+            "--qa",
+            "output/qa/qa_report.json",
+            "--verify",
+            "output/verify/number_issues.csv",
+            "--sample-flow",
+            "output/coding/sample_flow.csv",
+            "--out",
+            "output/review/review_pack.md"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--decisions",
+              "file": "decisions.jsonl"
+            },
+            {
+              "flag": "--research-gate",
+              "file": "output/research_gate.json"
+            }
+          ],
+          "whenFile": "research_registry.json",
+          "continueOnError": true
+        }
+      ],
+      "args": [
+        "--docx",
+        "output/manuscript.docx",
+        "--data",
+        "output/dataset/analysis.csv",
+        "--figures",
+        "output/chart_pack/figures",
+        "--manifest",
+        "output/chart_pack/chart_manifest.csv",
+        "--audit",
+        "output/audit/corpus_files.csv",
+        "--min-dpi",
+        "600",
+        "--min-fontsize",
+        "7.2",
+        "--allow-raster-text",
+        "--out",
+        "output/qa/qa_report.json",
+        "--exit-zero"
+      ],
+      "optionalArgs": [
+        {
+          "flag": "--pdf",
+          "file": "output/manuscript.pdf"
+        }
+      ],
+      "artifacts": [
+        "output/qa/qa_report.json",
+        "output/verify/number_issues.csv",
+        "output/research_gate.json",
+        "output/review/review_pack.md"
+      ],
+      "dependsOn": [
+        "manuscript"
+      ],
+      "admission": {
+        "checkpoint": "manuscript-ready"
+      },
+      "afterRun": {
+        "checkpoint": "manuscript-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "qa"
+      ],
+      "manualInstructions": [],
+      "ui": {
+        "panels": [
+          "numbers",
+          "qa"
+        ],
+        "draftTask": "qa"
+      },
+      "legacyAdmission": {
+        "checkpoint": "manuscript-ready",
+        "whenFile": "research_registry.json",
+        "requiredInStrict": true,
+        "gates": [
+          "verification-final",
+          "verification-fresh"
+        ]
+      }
+    },
+    {
+      "id": "recheck",
+      "index": 10,
+      "name": "复核与修订",
+      "short": "复核",
+      "purpose": "机器复算 + 交叉核对 + 模型审计，问题逐条可裁定，修完重跑受影响阶段",
+      "script": null,
+      "args": [],
+      "artifacts": [
+        "output/recheck/issues.jsonl",
+        "output/recheck/coverage.json",
+        "output/recheck/report.md"
+      ],
+      "dependsOn": [
+        "qa"
+      ],
+      "admission": {
+        "checkpoint": "manuscript-ready"
+      },
+      "afterRun": {
+        "checkpoint": "delivery-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [
+        "recheck"
+      ],
+      "manualInstructions": [
+        "先调 data_analysis_recheck（action=status）看 12 项机器复算，再取 action=evidence 的证据包。",
+        "逐条写问题：id（RC-001…）、severity、where（文件:行 或 阶段）、claim、evidence、fix_kind；用 data_analysis_issue 落库。",
+        "修数据只能改 scripts/ 或 data/ 后重跑受影响阶段；不要手改 output/ 产物让闸门变绿。",
+        "最后交 12 项覆盖表（R1–R12：checked / unchecked+理由）与 report.md；人逐条裁定后闭环。"
+      ],
+      "ui": {
+        "panels": [
+          "recheck"
+        ],
+        "draftTask": "recheck"
+      },
+      "legacyAdmission": {
+        "checkpoint": "delivery-ready",
+        "whenFile": "research_registry.json",
+        "requiredInStrict": true,
+        "gates": [
+          "verification-final",
+          "verification-fresh"
+        ]
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "verify-prepare",
+      "tool": "dataset-verification",
+      "variant": "prepare",
+      "stage": "verify",
+      "label": "生成逐格复核模板",
+      "steps": [
+        {
+          "script": "scripts/verify_dataset.py",
+          "args": [
+            "--registry",
+            "research_registry.json",
+            "--root",
+            ".",
+            "--out",
+            "output/data_verification",
+            "--stage",
+            "prepare"
+          ]
+        }
+      ],
+      "outFile": "output/data_verification/dataset_verification.json",
+      "admission": {
+        "checkpoint": "data-ready"
+      }
+    },
+    {
+      "id": "verify-final",
+      "tool": "dataset-verification",
+      "variant": "final",
+      "stage": "verify",
+      "label": "校验实际逐格复核",
+      "steps": [
+        {
+          "script": "scripts/verify_dataset.py",
+          "args": [
+            "--registry",
+            "research_registry.json",
+            "--root",
+            ".",
+            "--out",
+            "output/data_verification",
+            "--stage",
+            "final",
+            "--snapshot",
+            "output/data_verification/verification_snapshot.json"
+          ]
+        }
+      ],
+      "outFile": "output/data_verification/dataset_verification.json",
+      "admission": {
+        "checkpoint": "data-ready"
+      }
+    },
+    {
+      "id": "research-check",
+      "tool": "research-gate",
+      "stage": "qa",
+      "label": "研究总闸门",
+      "steps": [
+        {
+          "script": "scripts/research_gate.py",
+          "args": [
+            "--registry",
+            "research_registry.json",
+            "--root",
+            ".",
+            "--verification",
+            "output/data_verification/dataset_verification.json",
+            "--out",
+            "output/research_gate.json"
+          ]
+        }
+      ],
+      "outFile": "output/research_gate.json",
+      "admission": {}
+    },
+    {
+      "id": "decisions-check",
+      "tool": "decision-check",
+      "stage": "coding",
+      "label": "判断台账校验",
+      "steps": [
+        {
+          "script": "scripts/check_decisions.py",
+          "args": [
+            "--root",
+            "data",
+            "--decisions",
+            "decisions.jsonl",
+            "--out",
+            "output/qa/decision_issues.csv"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--review",
+              "file": "output/coding/extraction_review.csv"
+            }
+          ]
+        }
+      ],
+      "admission": {}
+    },
+    {
+      "id": "review-pack",
+      "tool": "review-pack",
+      "stage": "qa",
+      "label": "生成复核包",
+      "steps": [
+        {
+          "script": "scripts/review_pack.py",
+          "args": [
+            "--data",
+            "output/dataset/analysis.csv",
+            "--stats",
+            "output/models",
+            "--figures",
+            "output/chart_pack/chart_manifest.csv",
+            "--qa",
+            "output/qa/qa_report.json",
+            "--verify",
+            "output/verify/number_issues.csv",
+            "--sample-flow",
+            "output/coding/sample_flow.csv",
+            "--out",
+            "output/review/review_pack.md"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--decisions",
+              "file": "decisions.jsonl"
+            },
+            {
+              "flag": "--research-gate",
+              "file": "output/research_gate.json"
+            }
+          ]
+        }
+      ],
+      "admission": {}
+    }
+  ],
+  "draftTasks": [
+    {
+      "id": "scope",
+      "stage": "scope",
+      "label": "研究范围与口径",
+      "file": "docs/scope.md",
+      "brief": "写研究范围：研究问题、假设、样本与时间口径、纳入排除标准、关键变量与测量、分析策略、交付物清单。",
+      "need": [
+        "项目骨架",
+        "docs/scope.md（若有）",
+        "data/ 文件清单",
+        "审计摘要"
+      ],
+      "contextFiles": [
+        "docs/scope.md",
+        "output/audit/corpus_summary.json"
+      ]
+    },
+    {
+      "id": "codebook",
+      "stage": "coding",
+      "label": "变量字典与编码规则",
+      "file": "docs/codebook.md",
+      "brief": "写变量字典：每个变量一行（变量名、含义、类型、取值/编码、来源字段、缺失处理、是否进分析）。只写材料里能看到的列。",
+      "need": [
+        "analysis.csv 表头与样本行",
+        "docs/scope.md",
+        "编码/审计摘要"
+      ],
+      "contextFiles": [
+        "docs/codebook.md",
+        "docs/scope.md"
+      ]
+    },
+    {
+      "id": "verify",
+      "stage": "verify",
+      "label": "逐格复核说明",
+      "file": "docs/verify-notes.md",
+      "brief": "按 dataset_verification.json 与 cell_issues.csv 写复核说明：每个数据集的主键与单位、复核了多少格、哪些格退回、退回原因（缺来源/定位不到/派生规则不成立）、以及 prepare→final 之间改了哪些原件。**不要把「prepare 生成了模板」写成「已经复核通过」**。",
+      "need": [
+        "research_registry.json",
+        "output/data_verification/dataset_verification.json",
+        "output/data_verification/cell_issues.csv",
+        "output/source_coverage.jsonl"
+      ],
+      "contextFiles": [
+        "output/data_verification/dataset_verification.json",
+        "output/data_verification/cell_issues.csv"
+      ]
+    },
+    {
+      "id": "figures",
+      "stage": "figures",
+      "label": "图表题注与解读",
+      "file": "docs/figure-notes.md",
+      "brief": "为清单里的每张图写一条题注（图号、标题、含 N）与 2–3 句解读；N 只能取 manifest 的 n 列。缺 N 的图要明确写「N 未记录」。",
+      "need": [
+        "chart_pack/chart_manifest.csv",
+        "docs/scope.md"
+      ],
+      "contextFiles": [
+        "output/chart_pack/chart_manifest.csv",
+        "output/figures/paper_figures_manifest.csv"
+      ]
+    },
+    {
+      "id": "manuscript",
+      "stage": "manuscript",
+      "label": "文稿小节",
+      "file": "docs/manuscript-notes.md",
+      "brief": "按实证论文结构写「方法」「结果」小节草稿。每个数字都要来自统计输出，句末用（模型名 · 变量）标注来源；没有出处就不写数字。",
+      "need": [
+        "output/models 的系数与拟合摘要",
+        "图表清单",
+        "docs/scope.md"
+      ],
+      "contextFiles": [
+        "output/models/fit.csv",
+        "output/models/coef_all.csv"
+      ]
+    },
+    {
+      "id": "qa",
+      "stage": "qa",
+      "label": "质检问题说明",
+      "file": "docs/qa-notes.md",
+      "brief": "把终检报告里的问题按 error / warning 分组，逐条说明「是什么、影响什么、怎么处理」；input 类（没得查）单独一节，不要算成数字错误。",
+      "need": [
+        "output/qa/qa_report.json",
+        "output/verify/number_issues.csv"
+      ],
+      "contextFiles": [
+        "output/qa/qa_report.json",
+        "output/verify/number_issues.csv"
+      ]
+    },
+    {
+      "id": "recheck",
+      "stage": "recheck",
+      "label": "复核问题清单",
+      "file": "docs/recheck-notes.md",
+      "brief": "按 12 项复核清单逐项判断：每条问题写 id（RC-001…）、severity（error/warning/info）、where（文件:行 或 阶段）、claim（哪里不成立）、evidence（数字/行号）、fix_kind（edit-text/edit-code/rerun/accept-risk/ask-user）。只依据证据包，不要猜；证据不足就写「证据不足，建议人工核对」。最后给一张 12 项覆盖表（R1–R12：checked / unchecked+理由）。",
+      "need": [
+        "机器复算 12 项",
+        "analysis.csv 与 dataset.csv 样本",
+        "图表清单与模型摘要",
+        "数字溯源与终检报告"
+      ],
+      "contextFiles": [
+        "output/recheck/report.md",
+        "output/recheck/coverage.json"
+      ]
+    }
+  ],
+  "rerunRules": [
+    {
+      "match": "prefix",
+      "pattern": "data/",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "scripts/",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "research_registry.json",
+      "stages": [
+        "verify",
+        "dataset",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/datasets/",
+      "stages": [
+        "verify",
+        "dataset",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/data_verification/",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/audit/",
+      "stages": [
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/coding/",
+      "stages": [
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "decisions.jsonl",
+      "stages": [
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/dataset/",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "model_spec.json",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "chart_config.json",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "methods.json",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/models/",
+      "stages": [
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/methods/",
+      "stages": [
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/chart_pack/",
+      "stages": [
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/figures/",
+      "stages": [
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/manuscript",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "manuscript.json",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "output/figure_map.json",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/qa/",
+      "stages": [
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/verify/",
+      "stages": [
+        "qa"
+      ]
+    }
+  ],
+  "argumentBindings": [
+    {
+      "token": "output/chart_pack/chart_manifest.csv",
+      "select": "latest-existing",
+      "paths": [
+        "output/chart_pack/chart_manifest.csv",
+        "output/figures/paper_figures_manifest.csv"
+      ],
+      "fallback": "output/chart_pack/chart_manifest.csv"
+    },
+    {
+      "token": "output/chart_pack/figures",
+      "select": "directory-of",
+      "from": "output/chart_pack/chart_manifest.csv",
+      "cases": {
+        "output/chart_pack/chart_manifest.csv": "output/chart_pack/figures"
+      }
+    },
+    {
+      "token": "output/coding/sample_flow.csv",
+      "select": "first-existing",
+      "paths": [
+        "output/coding/sample_flow.csv",
+        "output/audit/sample_flow.csv"
+      ],
+      "fallback": "output/audit/sample_flow.csv"
+    },
+    {
+      "token": "output/dataset/analysis.csv",
+      "select": "first-existing",
+      "paths": [
+        "output/dataset/analysis.csv",
+        {
+          "json": "output/datasets/index.json",
+          "array": "datasets",
+          "field": "file"
+        },
+        {
+          "json": "research_registry.json",
+          "array": "datasets",
+          "field": "path"
+        },
+        "data/analysis.csv"
+      ],
+      "fallback": "output/dataset/analysis.csv"
+    }
+  ],
+  "taskConstraints": [
+    "技能包只读，不复制、不改写它。",
+    "每个数字须有当前材料或实际产物依据；缺输入就明确说明，不伪造数据、N、p 值或文献。",
+    "图表按技能要求生成；图注写 N 与口径。",
+    "命令以当前工作流和项目覆盖为准；结果以当前门禁报告为准。"
+  ],
+  "agentInstructions": [
+    "研究方法和真实证据要求以 SKILL.md 及其引用为准。",
+    "阶段、依赖、执行步骤、可选动作和重跑范围以本次工作流声明为准，不凭旧阶段编号继续。",
+    "用工作台执行登记命令，记录实际生产和体检；人工步骤按 manualInstructions 完成，不伪造人工签收。",
+    "缺失、失效或不兼容的契约需要修复或升级；不能沿用另一版的旧通过结果。"
+  ]
+}

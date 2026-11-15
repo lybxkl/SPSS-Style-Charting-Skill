@@ -28,7 +28,7 @@ def acceptance(package,label):
     env={**os.environ,'DSA_SKILL_ROOT':str(package),'PYTHONUTF8':'1'}
     commands=[]
     with (OUT/f'{label}-acceptance.log').open('w',encoding='utf-8') as log:
-        for script in ['tests/gate-report.test.mjs','tests/gate-workflow.test.mjs','tests/gate-audit.test.mjs']:
+        for script in ['tests/gate-report.test.mjs','tests/gate-workflow.test.mjs','tests/gate-audit.test.mjs','tests/workflow-contract.test.mjs']:
             result=subprocess.run(['node',script],cwd=WORKBENCH,env=env,capture_output=True,text=True,encoding='utf-8',timeout=240)
             log.write(result.stdout+result.stderr);log.flush()
             commands.append({'script':script,'exitCode':result.returncode})

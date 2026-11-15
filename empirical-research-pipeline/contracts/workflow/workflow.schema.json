@@ -1,0 +1,746 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "dsa.workflow/1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "requiredFeatures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "directories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "directories"
+      ],
+      "additionalProperties": false
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "whenFile": {
+            "type": "string"
+          },
+          "produces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "continueOnError": {
+            "type": "boolean"
+          },
+          "optionalArgs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "flag": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "whenFile": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "flag"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "optionalFlags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "flag": {
+                  "type": "string"
+                },
+                "file": {
+                  "type": "string"
+                },
+                "whenFile": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "flag"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "short": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,63}$"
+            },
+            "uniqueItems": true
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "script": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "whenFile": {
+                  "type": "string"
+                },
+                "produces": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "continueOnError": {
+                  "type": "boolean"
+                },
+                "optionalArgs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "flag": {
+                        "type": "string"
+                      },
+                      "file": {
+                        "type": "string"
+                      },
+                      "whenFile": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "flag"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "optionalFlags": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "flag": {
+                        "type": "string"
+                      },
+                      "file": {
+                        "type": "string"
+                      },
+                      "whenFile": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "flag"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "script"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "admission": {
+            "type": "object",
+            "properties": {
+              "checkpoint": {
+                "enum": [
+                  "data-ready",
+                  "analysis-ready",
+                  "figures-ready",
+                  "manuscript-ready",
+                  "delivery-ready"
+                ]
+              },
+              "reportStages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "gates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "waitingMessage": {
+                "type": "string"
+              },
+              "whenFile": {
+                "type": "string"
+              },
+              "requiredInStrict": {
+                "type": "boolean"
+              },
+              "requireComplete": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "legacyAdmission": {
+            "type": "object",
+            "properties": {
+              "checkpoint": {
+                "enum": [
+                  "data-ready",
+                  "analysis-ready",
+                  "figures-ready",
+                  "manuscript-ready",
+                  "delivery-ready"
+                ]
+              },
+              "reportStages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "gates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "waitingMessage": {
+                "type": "string"
+              },
+              "whenFile": {
+                "type": "string"
+              },
+              "requiredInStrict": {
+                "type": "boolean"
+              },
+              "requireComplete": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "afterRun": {
+            "type": "object",
+            "properties": {
+              "checkpoint": {
+                "enum": [
+                  "data-ready",
+                  "analysis-ready",
+                  "figures-ready",
+                  "manuscript-ready",
+                  "delivery-ready"
+                ]
+              },
+              "reportStages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "gates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "waitingMessage": {
+                "type": "string"
+              },
+              "whenFile": {
+                "type": "string"
+              },
+              "requiredInStrict": {
+                "type": "boolean"
+              },
+              "requireComplete": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "inspectionStages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "manualInstructions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ui": {
+            "type": "object",
+            "properties": {
+              "panels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "draftTask": {
+                "type": "string"
+              },
+              "requiredFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "artifactPrefixes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "legacySkipWhenMissing": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "purpose",
+          "dependsOn",
+          "artifacts",
+          "admission",
+          "afterRun",
+          "inspectionStages",
+          "manualInstructions",
+          "ui"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "tool": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "variant": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "script": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "whenFile": {
+                  "type": "string"
+                },
+                "produces": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "continueOnError": {
+                  "type": "boolean"
+                },
+                "optionalArgs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "flag": {
+                        "type": "string"
+                      },
+                      "file": {
+                        "type": "string"
+                      },
+                      "whenFile": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "flag"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "optionalFlags": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "flag": {
+                        "type": "string"
+                      },
+                      "file": {
+                        "type": "string"
+                      },
+                      "whenFile": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "flag"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "script"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "outFile": {
+            "type": "string"
+          },
+          "admission": {
+            "type": "object",
+            "properties": {
+              "checkpoint": {
+                "enum": [
+                  "data-ready",
+                  "analysis-ready",
+                  "figures-ready",
+                  "manuscript-ready",
+                  "delivery-ready"
+                ]
+              },
+              "reportStages": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "gates": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "waitingMessage": {
+                "type": "string"
+              },
+              "whenFile": {
+                "type": "string"
+              },
+              "requiredInStrict": {
+                "type": "boolean"
+              },
+              "requireComplete": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "stage",
+          "label",
+          "steps"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "draftTasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "stage": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+          },
+          "label": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "brief": {
+            "type": "string"
+          },
+          "need": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "contextFiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "stage",
+          "label",
+          "file",
+          "brief",
+          "need"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rerunRules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "match": {
+            "enum": [
+              "exact",
+              "prefix"
+            ]
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "match",
+          "pattern",
+          "stages"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "argumentBindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "select": {
+            "enum": [
+              "first-existing",
+              "latest-existing",
+              "directory-of"
+            ]
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "json": {
+                      "type": "string"
+                    },
+                    "array": {
+                      "type": "string"
+                    },
+                    "field": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "json",
+                    "array",
+                    "field"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "fallback": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "cases": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "token",
+          "select"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "select": {
+                  "const": "directory-of"
+                }
+              },
+              "required": [
+                "select"
+              ]
+            },
+            "then": {
+              "required": [
+                "from"
+              ]
+            },
+            "else": {
+              "required": [
+                "paths",
+                "fallback"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "taskConstraints": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "agentInstructions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "requiredFeatures",
+    "workspace",
+    "stages",
+    "actions",
+    "draftTasks",
+    "rerunRules",
+    "argumentBindings",
+    "taskConstraints"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

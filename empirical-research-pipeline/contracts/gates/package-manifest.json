@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "0e7cb044408ea807ac497369153c205ffdfc3525db8603c0b2557d0e56392609"
+      "sha256": "9e6b0832faad69470302ed017a9a2a12084d1d15a562b226f13a31675897a926"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -67,6 +67,14 @@
     {
       "path": "contracts/gates/report.schema.json",
       "sha256": "9686718e782d55dc921fa72010ca09615a44b06bec21a9e4db4037eaeba62ab0"
+    },
+    {
+      "path": "contracts/workflow/workflow.json",
+      "sha256": "562647b99db1a81d108a493a62e95cd9aaeb7796bdc9ad34486cea7f3ab759c7"
+    },
+    {
+      "path": "contracts/workflow/workflow.schema.json",
+      "sha256": "350977242ad20b7db6dbf3425510f2246b61b67ff03c146e3e0a79c88e51a860"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -367,6 +375,10 @@
     {
       "path": "scripts/verify_numbers.py",
       "sha256": "1e91320b9455a88998d9e242a16c8e8eca2cfaf095b66bf5852b6d9d67865dd4"
+    },
+    {
+      "path": "scripts/workflow_contract.py",
+      "sha256": "b364b9841cd11f17555a775ff52183dbca746ba7c371a40695123b0f6567eeb2"
     }
   ],
   "schema": "dsa.package-manifest/1"

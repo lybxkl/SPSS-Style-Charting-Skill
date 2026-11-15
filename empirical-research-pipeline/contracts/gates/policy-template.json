@@ -1,0 +1,774 @@
+{
+  "catalogSha256": "884c803425dbfba03fa68f465fb232911bf3c400dfa547fb33ffb13d3666adb1",
+  "mode": "skill",
+  "requirements": [
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "artifacts-declared",
+      "reportStage": "qa",
+      "required": false,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-dedupe",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-flow",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-freshness",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-hash",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-monotonic",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-summary",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "audit-truncated",
+      "reportStage": "audit",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "coding",
+      "gateId": "coding-applicable",
+      "reportStage": "coding",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "coding",
+      "gateId": "coding-cross",
+      "reportStage": "coding",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "coding",
+      "gateId": "coding-flow",
+      "reportStage": "coding",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "coding",
+      "gateId": "coding-sheet",
+      "reportStage": "coding",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "coding",
+      "gateId": "coding-skipped",
+      "reportStage": "coding",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "dataset-csv",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "dataset-flag",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "analysis-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "dataset-in-analysis",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "dataset-key",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "dataset-path",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "datasets-index",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-cited",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-dpi",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-files",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-font",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-fresh",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-manifest",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-palette",
+      "reportStage": "figures",
+      "required": false,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-paper",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-source-dpi",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-source-font",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-status",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "figures",
+      "gateId": "fig-title",
+      "reportStage": "figures",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "manuscript",
+      "gateId": "manuscript-body",
+      "reportStage": "manuscript",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "manuscript-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "manuscript",
+      "gateId": "manuscript-docx",
+      "reportStage": "manuscript",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "manuscript",
+      "gateId": "manuscript-figures",
+      "reportStage": "manuscript",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "manuscript",
+      "gateId": "manuscript-fresh",
+      "reportStage": "manuscript",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "materials-provenance",
+      "reportStage": "audit",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "materials-provenance-cover",
+      "reportStage": "audit",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "audit",
+      "gateId": "materials-selection",
+      "reportStage": "audit",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "methods-report",
+      "reportStage": "stats",
+      "required": false,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "models-index",
+      "reportStage": "stats",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "models-plan",
+      "reportStage": "stats",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "models-sweep",
+      "reportStage": "stats",
+      "required": false,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "provenance-cells",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "provenance-claims",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-decision-facts",
+      "reportStage": "qa",
+      "required": false,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-decisions",
+      "reportStage": "qa",
+      "required": false,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-fresh",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-numbers",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-pdf",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-report",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-review",
+      "reportStage": "qa",
+      "required": false,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-signoff",
+      "reportStage": "qa",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-v05",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "qa-vision",
+      "reportStage": "qa",
+      "required": false,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "recheck",
+      "gateId": "recheck-coverage",
+      "reportStage": "recheck",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "recheck",
+      "gateId": "recheck-issues",
+      "reportStage": "recheck",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "recheck",
+      "gateId": "recheck-machine",
+      "reportStage": "recheck",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "recheck",
+      "gateId": "recheck-report",
+      "reportStage": "recheck",
+      "required": false,
+      "source": "workbench"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "recheck",
+      "gateId": "recheck.caption-n-consistent",
+      "reportStage": "recheck",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "recheck",
+      "gateId": "recheck.caption-n-present",
+      "reportStage": "recheck",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "dataset",
+      "gateId": "registry-present",
+      "reportStage": "dataset",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "research-gate",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "scope",
+      "gateId": "scope-doc",
+      "reportStage": "scope",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "verify",
+      "gateId": "source-coverage",
+      "reportStage": "verify",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "scope",
+      "gateId": "sources-mounted",
+      "reportStage": "audit",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "data-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "scope",
+      "gateId": "sources-outside",
+      "reportStage": "audit",
+      "required": true,
+      "source": "workbench"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "stage-source",
+      "reportStage": "qa",
+      "required": false,
+      "source": "workbench"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "stats-fit-n",
+      "reportStage": "stats",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "stats-flow",
+      "reportStage": "stats",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "stats-fresh",
+      "reportStage": "stats",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "figures-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "stats",
+      "gateId": "stats-models",
+      "reportStage": "stats",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "manuscript",
+      "gateId": "tbl-present",
+      "reportStage": "manuscript",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": true,
+      "blockingAt": "delivery-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "qa",
+      "gateId": "v2.release-ready",
+      "reportStage": "qa",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "analysis-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "verify",
+      "gateId": "verification-cells",
+      "reportStage": "verify",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "analysis-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "verify",
+      "gateId": "verification-final",
+      "reportStage": "verify",
+      "required": true,
+      "source": "skill"
+    },
+    {
+      "allowNa": false,
+      "blockingAt": "analysis-ready",
+      "definitionVersion": "2.0",
+      "displayStage": "verify",
+      "gateId": "verification-fresh",
+      "reportStage": "verify",
+      "required": true,
+      "source": "skill"
+    }
+  ],
+  "researchContract": "v1",
+  "schema": "dsa.gate-policy/1",
+  "scopeKey": "project",
+  "thresholds": {
+    "figureWidthCm": 15,
+    "minEffectiveDpi": 597,
+    "minFontPt": 7.2
+  }
+}

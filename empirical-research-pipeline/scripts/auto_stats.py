@@ -1225,6 +1225,11 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
     with open(os.path.join(out_dir, "model_summary.md"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(summary) + "\n")
     meta = {"data": os.path.abspath(args.data), "spec": os.path.abspath(args.spec),
+            "input_bindings": getattr(args, '_gate_input_bindings', {}),
+            "sample_receipts": [{"model": info['mid'], "n": int(info['n']),
+                                 "used_rows": info['used_rows'], "n_before": int(info['n_before']),
+                                 "n_dropna": int(info['n_dropped']),
+                                 "n_removed_separation": int(info['n_removed_separation'])} for info in infos],
             "filter": filter_desc, "n": int(len(df)),
             "separation": args.separation, "max_models": args.max_models,
             "vif": bool(args.vif), "roc": bool(args.roc),
@@ -1237,6 +1242,10 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
                              "model_n": info["n"], "match": info.get("flow_match")}
                             for info in infos if info.get("flow_stage") is not None],
             "failures": failures}
+    from gate_contract import digest as gate_digest
+    if any(gate_digest(path) != sha for path, sha in meta['input_bindings'].items()):
+        print('ERROR: model inputs changed during estimation', file=sys.stderr)
+        return 2
     with open(os.path.join(out_dir, "model_meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, ensure_ascii=False, indent=2)
     if combined.empty:
@@ -1420,6 +1429,7 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     rows = _model_rows(mid, mtype, fit, Xv, refs, outcome, n_model, n_events,
                        se_type, merges, excluded, sample)
     info = {"mid": mid, "mtype": mtype, "outcome": outcome, "n": n_model,
+            "used_rows": [int(index) + 1 for index in frame.index] if all(isinstance(index,(int,np.integer)) and index>=0 for index in frame.index) else None,
             "n_before": n_before, "n_dropped": n_dropped,
             "n_removed_separation": int(n_before - n_dropped - n_model),
             "n_events": n_events, "se_type": se_type, "cluster": cluster,
@@ -1845,6 +1855,12 @@ def main() -> int:
         print(f"ERROR: data not found: {args.data}", file=sys.stderr)
         return 2
     try:
+        from gate_contract import digest as gate_digest
+        args._gate_input_bindings = {
+            os.path.abspath(path): gate_digest(path)
+            for path in [args.data, args.spec, args.config, args.sample_flow]
+            if path and os.path.isfile(path)
+        }
         df = read_csv_auto(args.data, low_memory=False)
     except pd.errors.EmptyDataError:
         print(f"ERROR: data file has no columns/rows: {args.data}", file=sys.stderr)

@@ -1,0 +1,449 @@
+{
+  "$defs": {
+    "evidence": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "structure"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "locator",
+              "expected",
+              "actual"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "text"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "locator",
+              "quote"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "actual": {},
+        "expected": {},
+        "kind": {
+          "enum": [
+            "structure",
+            "measurement",
+            "table",
+            "text",
+            "record",
+            "applicability"
+          ]
+        },
+        "locator": {
+          "type": "object"
+        },
+        "resourceRef": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "resourceRef"
+      ],
+      "type": "object"
+    },
+    "gate": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unjudged"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "na"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "applicability"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "advice": {
+          "type": "string"
+        },
+        "collectionRefs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "coverage": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "required": [
+            "expected",
+            "checked",
+            "failed",
+            "unjudged"
+          ],
+          "type": "object"
+        },
+        "definitionVersion": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "detail": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "inputRefs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "level": {
+          "enum": [
+            "error",
+            "warn",
+            "info"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "unjudged",
+            "na"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "definitionVersion",
+        "level",
+        "status",
+        "detail",
+        "inputRefs",
+        "collectionRefs",
+        "coverage",
+        "evidence",
+        "advice"
+      ],
+      "type": "object"
+    },
+    "hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "urn:dsa:gates:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "attemptId": {
+      "pattern": "^attempt-[a-f0-9]+$",
+      "type": "string"
+    },
+    "catalogSha256": {
+      "$ref": "#/$defs/hash"
+    },
+    "checkpoint": {
+      "enum": [
+        "data-ready",
+        "analysis-ready",
+        "figures-ready",
+        "manuscript-ready",
+        "delivery-ready"
+      ]
+    },
+    "collections": {
+      "items": {
+        "properties": {
+          "basePath": {
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+            "type": "string"
+          },
+          "complete": {
+            "const": true
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "rootId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "selector": {
+            "properties": {
+              "recursive": {
+                "const": true
+              }
+            },
+            "required": [
+              "recursive"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "rootId",
+          "basePath",
+          "selector",
+          "members",
+          "complete"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "gates": {
+      "items": {
+        "$ref": "#/$defs/gate"
+      },
+      "type": "array"
+    },
+    "generatedAt": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "generation": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "policySha256": {
+      "$ref": "#/$defs/hash"
+    },
+    "producer": {
+      "required": [
+        "entry",
+        "version",
+        "argv",
+        "exitCode"
+      ],
+      "type": "object"
+    },
+    "productionRuns": {
+      "type": "array"
+    },
+    "protocolVersion": {
+      "const": "1.0"
+    },
+    "reportId": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "requiredFeatures": {
+      "items": {
+        "enum": [
+          "coverage-v1",
+          "relative-roots-v1",
+          "project-aliases-v1",
+          "package-closure-v1"
+        ]
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "resources": {
+      "items": {
+        "if": {
+          "properties": {
+            "exists": {
+              "const": true
+            }
+          }
+        },
+        "properties": {
+          "exists": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+            "type": "string"
+          },
+          "projectPaths": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          },
+          "rootId": {
+            "pattern": "^(project|skill|material:[A-Za-z0-9_.-]+)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rootId",
+          "path",
+          "exists"
+        ],
+        "then": {
+          "required": [
+            "bytes",
+            "sha256",
+            "mtimeMs"
+          ]
+        },
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema": {
+      "const": "dsa.gates/1"
+    },
+    "scopeKey": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "skill": {
+      "required": [
+        "name",
+        "manifestSha256"
+      ],
+      "type": "object"
+    },
+    "stage": {
+      "enum": [
+        "scope",
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa",
+        "recheck"
+      ]
+    },
+    "summary": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "required": [
+        "pass",
+        "fail",
+        "unjudged",
+        "na"
+      ],
+      "type": "object"
+    },
+    "thresholds": {
+      "properties": {
+        "figureWidthCm": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "minEffectiveDpi": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "minFontPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "minEffectiveDpi",
+        "minFontPt",
+        "figureWidthCm"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "protocolVersion",
+    "reportId",
+    "attemptId",
+    "generation",
+    "stage",
+    "checkpoint",
+    "scopeKey",
+    "generatedAt",
+    "producer",
+    "productionRuns",
+    "skill",
+    "catalogSha256",
+    "policySha256",
+    "environment",
+    "resources",
+    "collections",
+    "thresholds",
+    "gates",
+    "summary",
+    "requiredFeatures"
+  ],
+  "type": "object"
+}

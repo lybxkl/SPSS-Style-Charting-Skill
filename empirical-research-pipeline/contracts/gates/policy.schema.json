@@ -1,0 +1,138 @@
+{
+  "$id": "urn:dsa:policy:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "catalogSha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "legacy",
+        "shadow",
+        "compare",
+        "skill"
+      ]
+    },
+    "requirements": {
+      "items": {
+        "properties": {
+          "allowNa": {
+            "type": "boolean"
+          },
+          "blockingAt": {
+            "enum": [
+              "data-ready",
+              "analysis-ready",
+              "figures-ready",
+              "manuscript-ready",
+              "delivery-ready"
+            ]
+          },
+          "definitionVersion": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "displayStage": {
+            "enum": [
+              "scope",
+              "audit",
+              "coding",
+              "dataset",
+              "verify",
+              "stats",
+              "figures",
+              "manuscript",
+              "qa",
+              "recheck"
+            ]
+          },
+          "gateId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "reportStage": {
+            "enum": [
+              "scope",
+              "audit",
+              "coding",
+              "dataset",
+              "verify",
+              "stats",
+              "figures",
+              "manuscript",
+              "qa",
+              "recheck"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "skill",
+              "workbench",
+              "legacy"
+            ]
+          }
+        },
+        "required": [
+          "gateId",
+          "definitionVersion",
+          "reportStage",
+          "displayStage",
+          "blockingAt",
+          "source",
+          "allowNa"
+        ],
+        "type": "object"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "researchContract": {
+      "enum": [
+        "v1",
+        "v2"
+      ]
+    },
+    "schema": {
+      "const": "dsa.gate-policy/1"
+    },
+    "scopeKey": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "thresholds": {
+      "properties": {
+        "figureWidthCm": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "minEffectiveDpi": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "minFontPt": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "minEffectiveDpi",
+        "minFontPt",
+        "figureWidthCm"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "mode",
+    "scopeKey",
+    "catalogSha256",
+    "thresholds",
+    "requirements"
+  ],
+  "type": "object"
+}

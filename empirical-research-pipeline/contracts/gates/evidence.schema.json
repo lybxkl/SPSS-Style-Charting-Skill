@@ -1,0 +1,63 @@
+{
+  "$id": "urn:dsa:evidence:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "structure"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "locator",
+          "expected",
+          "actual"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "text"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "locator",
+          "quote"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "actual": {},
+    "expected": {},
+    "kind": {
+      "enum": [
+        "structure",
+        "measurement",
+        "table",
+        "text",
+        "record",
+        "applicability"
+      ]
+    },
+    "locator": {
+      "type": "object"
+    },
+    "resourceRef": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "resourceRef"
+  ],
+  "type": "object"
+}

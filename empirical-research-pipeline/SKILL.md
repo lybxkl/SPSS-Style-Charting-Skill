@@ -5,9 +5,11 @@ description: 从混合研究资料中尽可能完整地发现、整合任意数�
 
 # 实证研究数据流水线
 
+工作台门禁报告的入口、覆盖范围、迁移与恢复见 [门禁报告与兼容状态](references/15-gate-reports.md)。技能是研究质量判定的唯一实现来源，工作台保留挂载、工作流与真实裁定。报告只证明实际检查过的事实；缺失或失效证据保持未判。
+
 把“一堆杂乱资料”变成“可复核的样本流程 + 可追溯的编码/字段数据 + 可复现的模型 + 可投稿的图表与文稿”。本 skill 不限定学科、语言或文件格式；法律裁判文书只是“文本编码”的一个示例，问卷、访谈、新闻、政策文件、实验记录、开放数据、网页和数据库导出同样适用。
 
-运行环境：Python 3.9+；PDF 需 PyMuPDF；表格/统计需 pandas、numpy、scipy、statsmodels；图表需 matplotlib；Excel 建议 openpyxl；Word→PDF 需 Windows + Microsoft Word + pywin32；SPSS 语法由 SPSS 打开运行。其他模型可由 Agent 选择相应语言与引擎。
+运行环境：Python 3.9+；门禁协议需 jsonschema 4.x；PDF 需 PyMuPDF；表格/统计需 pandas、numpy、scipy、statsmodels；图表需 matplotlib；Excel 建议 openpyxl；Word→PDF 需 Windows + Microsoft Word + pywin32；SPSS 语法由 SPSS 打开运行。其他模型可由 Agent 选择相应语言与引擎。
 
 本仓库/包内的示例数字、文件名、路径与变量值均为虚构占位，不含任何真实资料、编码数据、SPSS 数据或论文成稿。
 

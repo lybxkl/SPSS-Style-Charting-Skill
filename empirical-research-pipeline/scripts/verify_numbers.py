@@ -1345,7 +1345,7 @@ def print_summary(report: Report):
         print(f"ignored: {report.ignored} (by --ignore)")
 
 
-def write_run_json(out_dir: str, argv_list, check: str):
+def write_run_json(out_dir: str, argv_list, check: str, bindings=None, collections=None):
     """Stamp this run into run.json without dropping another producer's stamp.
 
     Several scripts may write into one output directory (coding writes a
@@ -1359,6 +1359,14 @@ def write_run_json(out_dir: str, argv_list, check: str):
         "check": check,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "argv": list(argv_list),
+        "bindings": bindings or {},
+        "collections": collections or {},
+    }
+    from gate_contract import digest as output_digest
+    payload['output_sha256'] = {
+        name: output_digest(os.path.join(out_dir, name))
+        for name in ('number_issues.csv', 'number_trace.csv')
+        if os.path.isfile(os.path.join(out_dir, name))
     }
     merged = {}
     if os.path.exists(path):
@@ -1433,6 +1441,31 @@ def main(argv=None) -> int:
         selected = {"V-06"}
 
     sources = [args.tables, args.manifest, args.docx, args.md, args.sample_flow, args.numbers]
+    # Bind bytes actually available before checking. Absolute/outside inputs remain
+    # supported by the legacy CLI, but cannot produce a portable gate attestation.
+    from gate_contract import digest as gate_digest
+    from pathlib import Path as GatePath
+    gate_bindings = {}
+    gate_collections = {}
+    outside_binding = False
+    for source in [*sources, *args.figure_data]:
+        if not source:
+            continue
+        source_path = GatePath(source).resolve()
+        candidates = sorted(source_path.rglob('*')) if source_path.is_dir() else [source_path]
+        if source_path.is_dir():
+            try:
+                gate_collections[source_path.relative_to(GatePath.cwd()).as_posix()] = sorted(p.relative_to(GatePath.cwd()).as_posix() for p in candidates if p.is_file())
+            except ValueError:
+                outside_binding = True
+        for candidate in candidates:
+            if candidate.is_file():
+                try:
+                    relative = candidate.relative_to(GatePath.cwd()).as_posix()
+                except ValueError:
+                    outside_binding = True
+                    continue
+                gate_bindings[relative] = gate_digest(candidate)
     if not any(sources):
         report.error("input", "输入", "至少一个来源", "无",
                      "nothing to verify: 请提供 --tables / --figures-manifest / --md / --docx / "
@@ -1515,7 +1548,9 @@ def main(argv=None) -> int:
     print_summary(report)
     print(f"issues: {issues_path}")
     print(f"trace: {trace_path}")
-    run_path = write_run_json(args.out, raw_argv, args.check)
+    if outside_binding or any(not GatePath(rel).is_file() or gate_digest(rel) != sha for rel, sha in gate_bindings.items()):
+        gate_bindings = {}
+    run_path = write_run_json(args.out, raw_argv, args.check, gate_bindings, gate_collections)
     if run_path:
         print(f"run: {run_path}")
 

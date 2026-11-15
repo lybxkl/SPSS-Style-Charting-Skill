@@ -25,7 +25,7 @@ REPO = Path(__file__).resolve().parent.parent
 SKILL_DIR = REPO / "empirical-research-pipeline"
 SKILL_NAME = SKILL_DIR.name
 DIST = REPO / "dist" / f"{SKILL_NAME}.skill"
-INCLUDE = ("SKILL.md", "assets", "profiles", "references", "scripts")
+INCLUDE = ("SKILL.md", "assets", "profiles", "references", "scripts", "contracts")
 SKIP_NAMES = {"__pycache__", ".DS_Store", "Thumbs.db"}
 SKIP_SUFFIX = {".pyc", ".pyo"}
 
@@ -54,7 +54,7 @@ def build(path: Path, files: list[Path]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files:
+        for f in sorted(files, key=lambda item: item.relative_to(SKILL_DIR).as_posix()):
             arc = f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}"
             data = f.read_bytes()
             digest.update(arc.encode("utf-8"))

@@ -1,0 +1,289 @@
+{
+  "$id": "urn:dsa:attempt:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "properties": {
+        "attemptId": {
+          "pattern": "^attempt-[a-f0-9]+$",
+          "type": "string"
+        },
+        "catalogSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "checkpoint": {
+          "enum": [
+            "data-ready",
+            "analysis-ready",
+            "figures-ready",
+            "manuscript-ready",
+            "delivery-ready"
+          ]
+        },
+        "generation": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "policySha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "producerContext": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requestedAt": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requestedGateIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "schema": {
+          "const": "dsa.gate-attempt/1"
+        },
+        "scopeKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "scope",
+            "audit",
+            "coding",
+            "dataset",
+            "verify",
+            "stats",
+            "figures",
+            "manuscript",
+            "qa",
+            "recheck"
+          ]
+        }
+      },
+      "required": [
+        "schema",
+        "attemptId",
+        "generation",
+        "stage",
+        "checkpoint",
+        "scopeKey",
+        "requestedAt",
+        "requestedGateIds",
+        "catalogSha256",
+        "policySha256",
+        "producerContext"
+      ],
+      "type": "object"
+    },
+    {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "phase": {
+                "const": "completed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "resultPath",
+              "resultSha256"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "attemptId": {
+          "pattern": "^attempt-[a-f0-9]+$",
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "phase": {
+          "enum": [
+            "requested",
+            "running",
+            "production-running",
+            "completed",
+            "crashed",
+            "cancelled",
+            "interrupted",
+            "conflict"
+          ]
+        },
+        "requestPath": {
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+          "type": "string"
+        },
+        "requestSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "resultPath": {
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+          "type": "string"
+        },
+        "resultSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "schema": {
+          "const": "dsa.gate-state/1"
+        },
+        "stage": {
+          "enum": [
+            "scope",
+            "audit",
+            "coding",
+            "dataset",
+            "verify",
+            "stats",
+            "figures",
+            "manuscript",
+            "qa",
+            "recheck"
+          ]
+        }
+      },
+      "required": [
+        "schema",
+        "attemptId",
+        "generation",
+        "stage",
+        "phase",
+        "requestPath",
+        "requestSha256"
+      ],
+      "type": "object"
+    },
+    {
+      "allOf": [
+        {
+          "else": {
+            "required": [
+              "reason"
+            ]
+          },
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "completed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reportPath",
+              "reportSha256"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "attemptId": {
+          "pattern": "^attempt-[a-f0-9]+$",
+          "type": "string"
+        },
+        "checkerExitCode": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "finishedAt": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "outcome": {
+          "enum": [
+            "completed",
+            "crashed",
+            "cancelled",
+            "interrupted",
+            "conflict"
+          ]
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reportPath": {
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*:)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+          "type": "string"
+        },
+        "reportSha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "schema": {
+          "const": "dsa.gate-result/1"
+        }
+      },
+      "required": [
+        "schema",
+        "attemptId",
+        "generation",
+        "outcome",
+        "finishedAt",
+        "checkerExitCode"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "attemptId": {
+          "pattern": "^attempt-[a-f0-9]+$",
+          "type": "string"
+        },
+        "detail": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "finishedAt": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "generation": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema": {
+          "const": "dsa.gate-error/1"
+        }
+      },
+      "required": [
+        "schema",
+        "attemptId",
+        "generation",
+        "reason",
+        "detail",
+        "finishedAt"
+      ],
+      "type": "object"
+    }
+  ]
+}

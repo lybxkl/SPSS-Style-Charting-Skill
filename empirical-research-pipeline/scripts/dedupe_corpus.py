@@ -26,6 +26,8 @@ import shutil
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime
+from pathlib import Path
+from gate_roots import source_path
 
 # Stamped into the run output so an artefact names the code that made it.
 SCRIPT_VERSION = "2.0.0"
@@ -89,6 +91,16 @@ def rel_of(row: dict) -> str:
     return (row.get("rel_path") or row.get("relpath") or "").strip()
 
 
+def readable_source(rel: str, root: str):
+    # Planning only reads sources. Applying moves retains safe_relpath's write boundary.
+    project = next((p for p in [Path(root).absolute(), *Path(root).absolute().parents]
+                    if (p / '.workbench/gates/roots.json').is_file()), Path.cwd())
+    try:
+        return str(source_path(project, root, rel))
+    except ValueError:
+        return None
+
+
 def build_plan(groups: dict, root: str, dest_name: str, copy_mode: bool):
     """Create plan rows; a group whose keeper is missing is marked action=skip."""
     plan: list[dict] = []
@@ -101,7 +113,7 @@ def build_plan(groups: dict, root: str, dest_name: str, copy_mode: bool):
             keepers = [rows[0]]
         keeper = keepers[0]
         keeper_rel = rel_of(keeper)
-        keeper_path = safe_relpath(keeper_rel, root) if keeper_rel else None
+        keeper_path = readable_source(keeper_rel, root) if keeper_rel else None
         keeper_ok = bool(keeper_path and os.path.isfile(keeper_path))
         if keeper_ok and keeper.get("md5"):
             keeper_ok = md5_file(keeper_path) == keeper["md5"]
@@ -124,7 +136,7 @@ def build_plan(groups: dict, root: str, dest_name: str, copy_mode: bool):
             if row is keeper:
                 continue
             rel = rel_of(row)
-            src = safe_relpath(rel, root) if rel else None
+            src = readable_source(rel, root) if rel else None
             exists = bool(src and os.path.isfile(src))
             md5_ok = ""
             if exists and row.get("md5"):

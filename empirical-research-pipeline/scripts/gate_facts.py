@@ -211,12 +211,15 @@ class Facts:
         return not failures, {'changed': failures, 'runId': receipt['runId']}
 
     def figures(self):
-        candidates = ['output/chart_pack/chart_manifest.csv', 'output/figures/paper_figures_manifest.csv']
+        candidates = ['output/chart_pack/chart_manifest.csv', 'output/figures/paper_figures_manifest.csv', 'output/figures/chart_manifest.csv']
         rows = []
+        seen = set()
         for rel in candidates:
-            if self.inputs.file(rel).is_file():
+            actual = self.inputs.file(rel)
+            if actual.is_file() and actual not in seen:
+                seen.add(actual)
                 for row in self.csv(rel, ('id',), allow_empty=True):
-                    rows.append({**row, '_manifest': rel})
+                    rows.append({**row, '_manifest': self.inputs.artifact_path(rel)})
         if not rows:
             raise MissingEvidence('nonempty chart manifest')
         return rows
@@ -323,12 +326,15 @@ def audit(facts, ident):
     if ident == 'audit-dedupe':
         rows = facts.csv('output/audit/dedupe_plan.csv', ('role',), allow_empty=True)
         inventory=facts.csv('output/audit/corpus_files.csv',('status',))
-        expected={(r.get('dup_group'),r.get('rel_path') or r.get('relpath'),r.get('dup_role')) for r in inventory if r.get('dup_group')}
+        group_key='dedupe_group' if inventory and 'dedupe_group' in inventory[0] else 'dup_group'
+        role_key='dedupe_role' if group_key=='dedupe_group' else 'dup_role'
+        expected={(r.get(group_key),r.get('rel_path') or r.get('relpath'),r.get(role_key)) for r in inventory if r.get(group_key)}
         actual=[(r.get('group'),r.get('rel_path') or r.get('relpath'),r['role']) for r in rows]
         bad = [i for i, row in enumerate(rows, 2) if row['role'] not in ('keeper', 'duplicate') or not row.get('reason','').strip()]
         groups={r[0] for r in expected}
         invalid_groups=[g for g in groups if sum(item[0]==g and item[2]=='keeper' for item in expected)!=1 or not any(item[0]==g and item[2]=='duplicate' for item in expected)]
-        return not bad and not invalid_groups and len(actual)==len(set(actual)) and set(actual)==expected, {'invalidRows': bad,'invalidGroups':invalid_groups,'entries':len(rows),'expected':len(expected)}
+        skipped=[i for i,row in enumerate(rows,2) if row.get('action')=='skip']
+        return not bad and not invalid_groups and not skipped and len(actual)==len(set(actual)) and set(actual)==expected, {'invalidRows': bad,'invalidGroups':invalid_groups,'skippedRows':skipped,'entries':len(rows),'expected':len(expected),'missing':sorted(expected-set(actual)),'extra':sorted(set(actual)-expected)}
     rows = facts.csv('output/audit/corpus_files.csv', ('md5',))
     excluded={'metadata','hidden','quarantined','zero_byte','unreadable','unsupported'}
     bad = [i for i, row in enumerate(rows, 2) if row.get('status') not in excluded and not re.fullmatch(r'[a-fA-F0-9]{32}', row.get('md5', ''))]

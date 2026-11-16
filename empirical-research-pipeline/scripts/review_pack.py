@@ -25,6 +25,7 @@ import os
 import sys
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 SCRIPT_VERSION = "1.0.0"
 
@@ -190,6 +191,9 @@ def _model_section(stats_dir: str | None, data_rows: int | None) -> dict:
 
 
 def _figure_section(manifest: str | None) -> dict:
+    if manifest and os.path.isdir(manifest):
+        manifest = next((str(Path(manifest)/name) for name in ('chart_manifest.csv','paper_figures_manifest.csv')
+                         if (Path(manifest)/name).is_file()), None)
     rows = _read_csv(manifest)
     if not rows:
         return {"provided": False}
@@ -204,6 +208,31 @@ def _figure_section(manifest: str | None) -> dict:
 
 
 def _verify_section(path: str | None) -> dict:
+    if path and os.path.isdir(path):
+        path = next((str(Path(path)/name) for name in ('number_issues.csv','dataset_verification.json')
+                     if (Path(path)/name).is_file()), None)
+    if path and str(path).endswith('.json') and os.path.isfile(path):
+        report = _read_json(path)
+        changed = []
+        snapshot = report.get('snapshot_path')
+        if snapshot and os.path.isfile(snapshot):
+            if report.get('snapshot_sha256') and hashlib.sha256(Path(snapshot).read_bytes()).hexdigest() != report['snapshot_sha256']:
+                changed.append(str(snapshot))
+            bindings = {**_read_json(snapshot).get('bindings', {}), **report.get('review_bindings', {})}
+            if not bindings: changed.append('missing verification bindings')
+            for file, expected in bindings.items():
+                try:
+                    actual = hashlib.sha256(Path(file).read_bytes()).hexdigest()
+                except OSError:
+                    actual = None
+                if actual != expected: changed.append(file)
+        else:
+            changed.append(str(snapshot or 'missing verification snapshot'))
+        errors = report.get('error_count', 0)
+        return {'provided': True, 'kind': 'dataset_verification', 'total': report.get('cell_count'),
+                'severity': {'error': errors}, 'status': report.get('status'),
+                'current': not changed, 'changed_bindings': changed,
+                'checks': {}, 'errors': [], 'limitations': report.get('limitations')}
     rows = _read_csv(path)
     if not path or not os.path.isfile(path):
         return {"provided": False}
@@ -359,7 +388,12 @@ def _render(payload: dict) -> str:
     verify = payload["numbers"]
     lines += ["## 4. 数字溯源", ""]
     if verify.get("provided"):
-        lines.append(f"- 问题总数：{verify['total']}；严重度：{verify['severity']}")
+        if verify.get('kind') == 'dataset_verification':
+            lines.append(f"- 数据逐格核验：{verify['total']} 格；记录状态：{verify.get('status')}；严重度：{verify['severity']}")
+            lines.append('- 当前绑定：' + ('一致' if verify['current'] else '已变化，需要重新复核'))
+            for file in verify.get('changed_bindings', []): lines.append(f'- 已变化：`{file}`')
+        else:
+            lines.append(f"- 问题总数：{verify['total']}；严重度：{verify['severity']}")
         lines.append(f"- 检查分布：{verify['checks']}")
         for item in verify.get("errors", []):
             lines.append(f"- error `{item['check']}` {item['where']}：{item['detail']}")

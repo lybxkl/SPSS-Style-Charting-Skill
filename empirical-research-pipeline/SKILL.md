@@ -5,9 +5,15 @@ description: 从混合研究资料中尽可能完整地发现、整合任意数�
 
 # 实证研究数据流水线
 
+在 DSH 中使用且工具表提供 `data_analysis_status` / `data_analysis_start` 时：用户明确调用本技能或要求开始研究后，先用可见文字说明正在启动，并调用 `data_analysis_start` 为当前对话创建/打开项目与建立关联，再读取当前工作流。只有 status 并不表示没有工作台；未关联时不要静默改走手工 Python。启动失败应立即说明具体原因并解决入口；已有成果只作待验证输入，不能冒充本次执行。独立 CLI 环境没有这些工作台工具时，按本技能自身流程执行并明确交付方式。
+
 工作台的阶段、顺序、依赖、命令、条件步骤、检查点、工具动作、任务说明和重跑范围由本技能的 [workflow.json](contracts/workflow/workflow.json) 唯一声明，结构契约见 [workflow.schema.json](contracts/workflow/workflow.schema.json)。修改研究流程时维护这份声明并重新构建发布清单，插件按当前契约读取；不要另在插件中维护一份阶段表。
 
 工作台门禁报告的入口、覆盖范围、迁移与恢复见 [门禁报告与兼容状态](references/15-gate-reports.md)。技能是研究质量判定的唯一实现来源，工作台保留挂载、工作流与真实裁定。报告只证明实际检查过的事实；缺失或失效证据保持未判。
+
+自定义脚本、任意引擎、项目覆盖和兼容模式均可使用。选用兼容/对照模式时说明原因和实际验收范围，模式迁移成功不等于研究质量通过。自定义产物不必迁回默认目录：在 `research_registry.json.artifact_paths` 声明“默认逻辑路径 → 实际项目相对路径”，例如 `{"output/chart_pack/chart_manifest.csv":"output/figures/chart_manifest.csv","output/models":"output/analysis_pack","output/qa/qa_report.json":"output/qa"}`。审计清单和生成文件放在产物目录，保留原材料扫描范围；材料通过已登记挂载读取。
+
+自定义逐格复算适配器可在注册表 `verification.adapters` 声明名称与脚本，供 CLI 与工作台共享，例如 `{"envcell":"scripts/envcell_adapter.py"}`。解析器重放可登记 `method=parser_replay`，如实说明它能核一致性、不能独立证明语义；`independent_reextract` 只描述实际独立实施的检查。适配器自动绑定已导入的本项目代码，其他依赖可在适配器的 `verification_dependencies` 列出。注册表、codebook、解析器或数据在 final 后改变时，重新 prepare/final；最终答复同时列出当前通过、未通过和未评估项。
 
 把“一堆杂乱资料”变成“可复核的样本流程 + 可追溯的编码/字段数据 + 可复现的模型 + 可投稿的图表与文稿”。本 skill 不限定学科、语言或文件格式；法律裁判文书只是“文本编码”的一个示例，问卷、访谈、新闻、政策文件、实验记录、开放数据、网页和数据库导出同样适用。
 

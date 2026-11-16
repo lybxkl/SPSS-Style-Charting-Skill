@@ -73,10 +73,11 @@ def resolve(root, relative):
     return target
 
 
-def atomic_json(path, value):
+def atomic_json(path, value, *, compact=False):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + '\n'
+    data = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=None if compact else 2,
+                      separators=(',', ':') if compact else None, allow_nan=False) + '\n'
     fd, temp = tempfile.mkstemp(prefix=path.name + '.', suffix='.tmp', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as f:
@@ -123,6 +124,7 @@ def validate_report(report):
     if set(report['requiredFeatures']) - FEATURES:
         raise ValueError('unsupported required feature')
     resource_ids = [r['id'] for r in report['resources']]
+    resource_set = set(resource_ids)
     collection_ids = [c['id'] for c in report['collections']]
     if len(set(collection_ids)) != len(collection_ids):
         raise ValueError('duplicate collection')
@@ -140,9 +142,9 @@ def validate_report(report):
             raise ValueError('duplicate gate or unknown status')
         seen.add(g['id'])
         counts[g['status']] += 1
-        if not set(g['inputRefs']) <= set(resource_ids) or not g['evidence']:
+        if not set(g['inputRefs']) <= resource_set or not g['evidence']:
             raise ValueError('missing evidence or unresolved reference')
-        if any(e.get('resourceRef') not in resource_ids for e in g['evidence']):
+        if any(e.get('resourceRef') not in resource_set for e in g['evidence']):
             raise ValueError('unresolved evidence reference')
         if not set(g['collectionRefs']) <= set(collection_ids):
             raise ValueError('unresolved collection reference')
@@ -170,13 +172,29 @@ class Inputs:
         self.collections = {}
         self.aliases = {}
         self.collection_aliases = {}
+        self.artifact_paths = {}
         from gate_roots import roots_for
         self.material_roots = roots_for(self.root)
         self.file('.workbench/gates/roots.json')
+        registry = self.file('research_registry.json')
+        if registry.is_file():
+            self.artifact_paths = read_json(registry).get('artifact_paths', {})
+            if not isinstance(self.artifact_paths, dict): raise ValueError('artifact_paths must map logical paths to actual paths')
+            for logical, actual in self.artifact_paths.items():
+                relative_path(logical)
+                relative_path(actual)
+
+    def artifact_path(self, relative):
+        raw = str(relative)
+        for logical in sorted(self.artifact_paths, key=len, reverse=True):
+            if raw == logical or raw.startswith(logical + '/'):
+                return self.artifact_paths[logical] + raw[len(logical):]
+        return raw
 
     def collection(self, relative):
         from gate_roots import members as enumerate_members, absolute_reference
-        raw=str(relative)
+        requested=str(relative)
+        raw=self.artifact_path(requested)
         if Path(raw).is_absolute():
             root_id,base_path,_=absolute_reference(self.root,raw,self.material_roots)
             base=self.root if root_id=='project' else self.material_roots[root_id]
@@ -185,6 +203,7 @@ class Inputs:
             root_id,base_path,base,ident='project',raw,self.root,raw
         members = enumerate_members(base,base_path,self.material_roots if root_id=='project' else {})
         self.collection_aliases[raw]=ident
+        self.collection_aliases[requested]=ident
         record=dict(id=ident,rootId=root_id,basePath=base_path,
                     selector={'recursive':True},members=members,complete=True)
         if ident in self.collections and self.collections[ident]!=record:
@@ -196,7 +215,8 @@ class Inputs:
 
     def file(self, relative):
         from gate_roots import reference, absolute_reference
-        relative=str(relative)
+        requested=str(relative)
+        relative=self.artifact_path(requested)
         if Path(relative).is_absolute():
             root_id,resource_path,path=absolute_reference(self.root,relative,self.material_roots)
             ident=root_id+':'+resource_path
@@ -209,6 +229,7 @@ class Inputs:
             except ValueError:pass
         else:project_path=relative
         self.aliases[relative]=ident
+        self.aliases[requested]=ident
         if ident in self.resources:
             previous=self.resources[ident]
             if (previous['rootId'],previous['path'])!=(root_id,resource_path):

@@ -51,5 +51,16 @@ class WorkflowContractTests(unittest.TestCase):
     def test_duplicate_json_keys_are_not_accepted(self):
         self.file.write_text('{"schema":"dsa.workflow/1","schema":"ignored"}',encoding='utf-8')
         with self.assertRaises(ValueError):workflow.validate(self.package)
+    def test_gate_catalog_references_are_checked_when_present(self):
+        shutil.copytree(PACKAGE/'contracts/gates',self.package/'contracts/gates')
+        self.value['stages'][0]['admission']['gates']=['missing-gate'];self.invalid(self.value)
+        self.value['stages'][0]['admission']['gates']=[]
+        self.value['stages'][0]['inspectionStages']=['missing-report'];self.invalid(self.value)
+    def test_report_filters_cannot_disable_admission_with_typos_or_empty_lists(self):
+        shutil.copytree(PACKAGE/'contracts/gates',self.package/'contracts/gates')
+        for selected in [[],['unknown-report']]:
+            self.value['stages'][0]['admission']={'checkpoint':'data-ready','reportStages':selected};self.invalid(self.value)
+    def test_paths_have_the_same_canonical_form_in_both_runtimes(self):
+        self.value['stages'][0]['artifacts']=['output/trailing/'];self.invalid(self.value)
 
 if __name__=='__main__':unittest.main()

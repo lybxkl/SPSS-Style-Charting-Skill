@@ -79,7 +79,10 @@
           "produces": [
             "output/audit/corpus_files.csv",
             "output/audit/corpus_summary.json",
-            "output/audit/sample_flow.csv"
+            "output/audit/sample_flow.csv",
+            "output/audit/corpus_audit.csv",
+            "output/audit/corpus_duplicates.csv",
+            "output/audit/corpus_report.md"
           ]
         },
         {
@@ -1040,7 +1043,8 @@
       ],
       "contextFiles": [
         "docs/scope.md",
-        "output/audit/corpus_summary.json"
+        "output/audit/corpus_summary.json",
+        "research_registry.json"
       ]
     },
     {
@@ -1056,7 +1060,9 @@
       ],
       "contextFiles": [
         "docs/codebook.md",
-        "docs/scope.md"
+        "docs/scope.md",
+        "output/coding/coding_sheet.csv",
+        "output/audit/corpus_summary.json"
       ]
     },
     {
@@ -1073,7 +1079,12 @@
       ],
       "contextFiles": [
         "output/data_verification/dataset_verification.json",
-        "output/data_verification/cell_issues.csv"
+        "output/data_verification/cell_issues.csv",
+        "research_registry.json",
+        "output/source_coverage.jsonl",
+        "output/model_plan.jsonl",
+        "decisions.jsonl",
+        "docs/scope.md"
       ]
     },
     {
@@ -1088,7 +1099,9 @@
       ],
       "contextFiles": [
         "output/chart_pack/chart_manifest.csv",
-        "output/figures/paper_figures_manifest.csv"
+        "output/figures/paper_figures_manifest.csv",
+        "output/models/descriptives.csv",
+        "docs/scope.md"
       ]
     },
     {
@@ -1104,7 +1117,11 @@
       ],
       "contextFiles": [
         "output/models/fit.csv",
-        "output/models/coef_all.csv"
+        "output/models/coef_all.csv",
+        "output/chart_pack/chart_manifest.csv",
+        "output/figures/paper_figures_manifest.csv",
+        "output/models/descriptives.csv",
+        "docs/scope.md"
       ]
     },
     {
@@ -1119,7 +1136,10 @@
       ],
       "contextFiles": [
         "output/qa/qa_report.json",
-        "output/verify/number_issues.csv"
+        "output/verify/number_issues.csv",
+        "output/models/fit.csv",
+        "output/models/coef_all.csv",
+        "docs/scope.md"
       ]
     },
     {
@@ -1136,7 +1156,11 @@
       ],
       "contextFiles": [
         "output/recheck/report.md",
-        "output/recheck/coverage.json"
+        "output/recheck/coverage.json",
+        "output/recheck/issues.jsonl",
+        "output/qa/qa_report.json",
+        "output/verify/number_issues.csv",
+        "output/models/descriptives.csv"
       ]
     }
   ],

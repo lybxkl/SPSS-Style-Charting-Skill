@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "9e6b0832faad69470302ed017a9a2a12084d1d15a562b226f13a31675897a926"
+      "sha256": "4d6385c3080be296414c4fa7b7531b1a07edeb16fc44f7df1551cb5c11031998"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -70,7 +70,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "562647b99db1a81d108a493a62e95cd9aaeb7796bdc9ad34486cea7f3ab759c7"
+      "sha256": "86bc6a187a0f78984be6ac4c7fd5c126b3f8ea882a275e48b031b4ac345d502b"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -146,7 +146,7 @@
     },
     {
       "path": "references/15-gate-reports.md",
-      "sha256": "97ab2c40859b4e02bfe32a2ec323bce92549cda91dfab20e9e6fe5c56482e850"
+      "sha256": "4d9d39954fd7baa2447108dbbae0715eeb35259fe765867b64aceb60da348283"
     },
     {
       "path": "scripts/analysis_utils.py",
@@ -194,7 +194,7 @@
     },
     {
       "path": "scripts/dedupe_corpus.py",
-      "sha256": "36285002b8c04df8e84de026c411ba3e79b121da00de2424f527c66e861b44a7"
+      "sha256": "110ef78af70ecee5784d344ca2feea755a1f7e183b1c1ae8f95126f8978305ec"
     },
     {
       "path": "scripts/depgraph.py",
@@ -250,11 +250,11 @@
     },
     {
       "path": "scripts/gate_contract.py",
-      "sha256": "b531fb41e20e7ed30c2f9b04e344feadd5400ed933975c01355e6ec06d581952"
+      "sha256": "2fca7771cf0bb14c01eb4434c66b5d4ef4141ac7aa49d698578ac4c97b9a1972"
     },
     {
       "path": "scripts/gate_facts.py",
-      "sha256": "585a393ac64a216c93f0459494094fe92313711ec72ed4f3bbcb3ce38c4dc286"
+      "sha256": "11d9a2a87e764f1f8739cc74e2bfe11e86108dc68a29b7fdde13ca920e1a0ba6"
     },
     {
       "path": "scripts/gate_lock.py",
@@ -262,11 +262,11 @@
     },
     {
       "path": "scripts/gate_roots.py",
-      "sha256": "77d57995a7969b8476feec83728f104736ab114257b498e0eb810a281e91d6f8"
+      "sha256": "3c7307976d2599d5992012157a0451bdfcd4c627990d15350bd9b31253cc0dd7"
     },
     {
       "path": "scripts/gates.py",
-      "sha256": "4fd10ae07f80c70eec9aee56a0c7edc7f16216f96a8e21ce488273e5544668cd"
+      "sha256": "56aa88cae463afd19b85877a373f4b7d1e617e0a17a6a799c40f41c0ff89d266"
     },
     {
       "path": "scripts/layout_check.py",
@@ -322,11 +322,11 @@
     },
     {
       "path": "scripts/research_gate.py",
-      "sha256": "4115e84b00efd03c6693b282aff9845aca58c9ec5572a176c67716bd3d585d6a"
+      "sha256": "62f72ab8318abc671f7a49e901964dff4e9368ab1ae322dec5536b019048c6d1"
     },
     {
       "path": "scripts/review_pack.py",
-      "sha256": "30d5dd1f56e06d09ad02be4abdae1072675d625c72901003b6231e5e19b4b1c3"
+      "sha256": "d7886183bafd3e3745ad5fe9c0c1626fba672bd42d159e2e0b7436b95ffb41ea"
     },
     {
       "path": "scripts/review_workbench.py",
@@ -370,7 +370,7 @@
     },
     {
       "path": "scripts/verify_dataset.py",
-      "sha256": "061dbc3e2c4fcdbedb7f11c72d7a4fc222364e295a2511eea17ee0c205d42da9"
+      "sha256": "25af4dd16f9232fd1c37dc51c93f1b3285142dc4cb5045c2b38ea27b8c6895fb"
     },
     {
       "path": "scripts/verify_numbers.py",
@@ -378,7 +378,7 @@
     },
     {
       "path": "scripts/workflow_contract.py",
-      "sha256": "b364b9841cd11f17555a775ff52183dbca746ba7c371a40695123b0f6567eeb2"
+      "sha256": "8250e35592100e85428cf16060c53937198f76933fc65336d9fac72f6d1d97b9"
     }
   ],
   "schema": "dsa.package-manifest/1"

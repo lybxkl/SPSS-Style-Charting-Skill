@@ -81,6 +81,20 @@ def validate(package):
         for value in binding.get('paths',[]):relative(value if isinstance(value,str) else value['json'])
         if binding.get('fallback'):relative(binding['fallback'])
         for value in binding.get('cases',{}).values():relative(value)
+    catalog=package/'contracts/gates/catalog.json'
+    if catalog.exists():
+        catalog.resolve().relative_to(package)
+        definitions=read(catalog)['gates']
+        gate_ids={gate['id'] for gate in definitions}
+        reports={gate['reportStage'] for gate in definitions if gate['owner']=='skill'}
+        report_stages={gate['reportStage'] for gate in definitions}
+        if any(gate['displayStage'] not in seen for gate in definitions):raise ValueError('missing gate display stage')
+        for owner in spec['stages']+spec['actions']:
+            for key in ['admission','afterRun','legacyAdmission']:
+                if set(owner.get(key,{}).get('gates',[]))-gate_ids:raise ValueError('unknown gate reference')
+                selected=owner.get(key,{}).get('reportStages')
+                if selected is not None and (not selected or set(selected)-report_stages):raise ValueError('empty or unknown report stage filter')
+            if set(owner.get('inspectionStages',[]))-reports:raise ValueError('unknown inspection stage')
     return {**spec,'sha256':hashlib.sha256(file.read_bytes()).hexdigest()}
 
 def main():

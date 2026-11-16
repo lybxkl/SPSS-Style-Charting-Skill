@@ -16,6 +16,10 @@ python scripts/gates.py recover --root PROJECT
 
 策略保存在 `.workbench/gates/policy.json`。独立 CLI 初始化默认 compare；兼容当前契约的工作台新项目直接消费包内 policy-template.json，默认 skill。已有项目保留原模式，显式迁移保留 before/after 记录。legacy 使用旧规则，shadow 只生成新报告，compare 并列显示，skill 正式使用技能事实；缺报告不会回退。删除硬要求、放宽 NA 或推迟到期点均被拒绝。升级目录后显式迁移策略再体检。
 
+所有模式继续可选；legacy 的自动生产不强制追加技能体检，但显式 `data_analysis_gates(action=inspect)` 仍可运行技能检查，返回 `inspectionFacts`，不会替你切换模式或阻止继续研究。迁移回执说明前后模式，状态工具区分“兼容执行成功”和“完整质量验收”。
+
+自定义产物使用注册表 `artifact_paths` 的逻辑路径到实际相对路径映射（目录映射作用于其子路径），报告绑定实际文件和注册表；映射不删除缺项，也不将缺文件视为通过。自定义复算器可通过 `verification.adapters` 登记，CLI 和门禁共享同一实现及导入依赖。报告紧凑写入，消费者不以固定 8 MiB 或固定来源数量拒绝合法研究规模；每条证据、成员及当前哈希仍完整核对。工具只回摘要，完整报告和单项证据保留。
+
 面板可初始化、重做、停止、恢复体检及打开哈希绑定的证据；模型入口为 data_analysis_gates。体检不经过生产 Runner，不虚构 runId，不改生产退出码。面板、工具与自动链使用相同的消费和准入逻辑。force 不能绕过正式 skill 准入或项目锁。NA 必须有目录许可、规则和范围证据；尚未到期的要求不提前阻断生成其证据的步骤。
 
 报告位于 `output/gates/runs/<attempt>/report.json`，当前权威指针位于 `output/gates/state/<stage>.json`。阶段同名 JSON 只是兼容副本。体检失败保留旧报告历史，但不能继续用旧报告作为当前通过。`completed` 仅表示体检完成，不代表检查通过。

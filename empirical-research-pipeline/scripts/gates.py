@@ -245,14 +245,14 @@ def evaluate(root,stage,checkpoint,run_id=None):
         validate_report(report)
         if not inputs.unchanged() or manifest_valid()!=manifest or environment()!=runtime:
             raise ValueError('inputs or implementation changed during evaluation')
-        atomic_json(resolve(root,base+'/report.json'),report)
+        atomic_json(resolve(root,base+'/report.json'),report,compact=True)
         result=dict(schema='dsa.gate-result/1',attemptId=attempt,generation=generation,outcome='completed',finishedAt=now(),checkerExitCode=0,reportPath=base+'/report.json',reportSha256=digest(root/base/'report.json'))
         atomic_json(resolve(root,base+'/result.json'),result)
         current=read_json(state_path)
         if current['attemptId']!=attempt or current['generation']!=generation:raise ValueError('publication generation conflict')
         state.update(phase='completed',resultPath=base+'/result.json',resultSha256=digest(root/base/'result.json'),updatedAt=now())
         atomic_json(state_path,state)
-        atomic_json(directory/f'{stage}.json',report)
+        atomic_json(directory/f'{stage}.json',report,compact=True)
         return report
     except Exception as exc:
         if state:

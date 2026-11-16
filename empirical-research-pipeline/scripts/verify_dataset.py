@@ -18,6 +18,7 @@ import json
 import math
 import os
 import sys
+import types
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
@@ -152,6 +153,9 @@ class Verifier:
         self.root = Path(root).resolve()
         self.registry_path = self.path(registry_path)
         self.registry = load_json(self.registry_path)
+        if not adapters:
+            declared = self.registry.get('verification', {}).get('adapters', {})
+            adapters = [f'{name}={path}' for name, path in declared.items()] if isinstance(declared, dict) else declared
         self.issues, self.traces, self.datasets = [], [], {}
         self.records, self.cells, self.done, self.active = {}, {}, {}, set()
         self.cache, self.bindings, self.adapters = {}, {}, {}
@@ -167,6 +171,33 @@ class Verifier:
             spec.loader.exec_module(module)
             self.adapters[name] = module
             self.bind(full)
+            self.bind_adapter_dependencies(module)
+
+    def bind_adapter_dependencies(self, module):
+        """Track imported project code, including imports made lazily by adapters."""
+        pending, seen = [module], set()
+        while pending:
+            current = pending.pop()
+            if id(current) in seen: continue
+            seen.add(id(current))
+            file = getattr(current, '__file__', None)
+            if not file: continue
+            path = Path(file).resolve()
+            if current is not module and not path.is_relative_to(self.root) and not path.is_relative_to(Path(module.__file__).resolve().parent):
+                continue
+            if path.is_file(): self.bind(path)
+            for value in vars(current).values():
+                if isinstance(value, types.ModuleType): pending.append(value)
+                elif isinstance(value, (types.FunctionType, type)):
+                    imported = sys.modules.get(getattr(value, '__module__', ''))
+                    if imported is not None: pending.append(imported)
+        for dependency in getattr(module, 'verification_dependencies', ()):
+            self.bind(dependency)
+        self._adapter_module_count = len(sys.modules)
+
+    def refresh_adapter_dependencies(self):
+        if len(sys.modules) != getattr(self, '_adapter_module_count', -1):
+            for adapter in self.adapters.values(): self.bind_adapter_dependencies(adapter)
 
     def path(self, path):
         p = Path(path)
@@ -283,6 +314,7 @@ class Verifier:
             if module is None:
                 raise VerificationError("custom locator needs an explicitly supplied --adapter")
             value = module.read_source(full, loc)
+            self.refresh_adapter_dependencies()
         else:
             raise VerificationError(f"unknown locator type: {kind}; supply an adapter for other formats")
         if loc.get("number_as_text") and isinstance(value, (int, Decimal)) and not isinstance(value, bool):
@@ -313,7 +345,9 @@ class Verifier:
             module = self.adapters.get(rule.get("adapter"))
             if module is None:
                 raise VerificationError("custom transform needs an explicitly supplied --adapter")
-            return module.recompute(rule, values)
+            result = module.recompute(rule, values)
+            self.refresh_adapter_dependencies()
+            return result
         nums = [Fraction(decimal(v)) for v in values]
         if not nums:
             raise VerificationError(f"{op} needs nonempty inputs")
@@ -473,6 +507,7 @@ class Verifier:
                 pass
         # Re-hash after opening every source: a file changed during verification
         # cannot receive a successful snapshot.
+        for adapter in self.adapters.values(): self.bind_adapter_dependencies(adapter)
         for path, old in list(self.bindings.items()):
             if sha256(path) != old:
                 self.issue("changed_during_run", path, "input changed during verification")
@@ -517,8 +552,8 @@ class Verifier:
                         raise VerificationError("each cell needs a source reread; pending/rejected is not approved")
                     if not str(record.get("reviewer", "")).strip() or not str(record.get("note", "")).strip():
                         raise VerificationError("reviewer and source/context check note are required")
-                    if record.get("method") not in {"source_reread", "independent_reextract"}:
-                        raise VerificationError("review method must reopen sources or independently reextract")
+                    if record.get("method") not in {"source_reread", "independent_reextract", "parser_replay"}:
+                        raise VerificationError("review method must describe source reread, independent extraction or parser replay")
                     checked = parse_time(record["checked_at"])
                     if checked < started or checked > datetime.now(timezone.utc):
                         raise VerificationError("review must occur after prepare and not in the future")
@@ -780,6 +815,13 @@ def main(argv=None):
             report["v2_review_sha256"] = sha256(v2_reviews)
     if verifier and args.stage == "final" and args.snapshot:
         try:
+            methods = {}
+            for dataset in verifier.datasets.values():
+                for review in load_jsonl(verifier.path(dataset['spec']['review'])):
+                    method = review.get('method', 'unspecified')
+                    methods[method] = methods.get(method, 0) + 1
+            report['declared_review_methods'] = methods
+            report['semantic_independence'] = 'not_established_by_machine'
             report["snapshot_path"] = str(verifier.path(args.snapshot))
             report["snapshot_sha256"] = sha256(report["snapshot_path"])
             report["review_bindings"] = {str(verifier.path(v["spec"]["review"])):

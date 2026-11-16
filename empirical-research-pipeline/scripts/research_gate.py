@@ -13,6 +13,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from gate_roots import source_path, source_members, roots_for
 
 from verify_dataset import load_json, load_jsonl, parse_time, read_csv, sha256, validate_final_report, write_json
 
@@ -29,6 +30,9 @@ class ResearchGate:
         self.bindings = {str(self.registry_path): sha256(self.registry_path)}
         self.model_count = 0
         self.adapters = adapters
+        self.material_roots = roots_for(self.root)
+        roots_file = self.root / '.workbench/gates/roots.json'
+        if roots_file.is_file(): self.file(roots_file)
 
     def path(self, name):
         path = Path(name)
@@ -55,14 +59,12 @@ class ResearchGate:
             rel = row.get("rel_path") or row.get("relpath")
             if not rel or rel in self.sources:
                 raise ValueError("source inventory has missing/duplicate relative paths")
-            path = (source_root / rel).resolve()
-            if not path.is_relative_to(source_root):
-                raise ValueError("source inventory path escapes source_root")
+            path = source_path(self.root, source_root, rel, self.material_roots)
             self.sources[rel] = {"path": path, "status": row.get("status")}
         if not self.sources:
             raise ValueError("source inventory is empty")
         # Enumerate again so a stale audit cannot silently omit newly added files.
-        disk = {p.relative_to(source_root).as_posix() for p in source_root.rglob("*") if p.is_file()}
+        disk = set(source_members(self.root, source_root))
         if disk != set(self.sources):
             self.error("source_inventory", f"inventory/disk mismatch; new={sorted(disk-set(self.sources))}, missing={sorted(set(self.sources)-disk)}")
         used = {}

@@ -5,6 +5,38 @@ import os
 from gate_contract import read_json, resolve
 
 
+def source_path(project, scope, relative, registered=None):
+    """Read a lexical source identity, including explicitly registered mounts."""
+    from gate_contract import relative_path
+    relative_path(relative)
+    base = Path(scope).resolve()
+    target = (Path(scope) / relative).resolve()
+    if target.is_relative_to(base):
+        return target
+    if any(target.is_relative_to(root) for root in (roots_for(project) if registered is None else registered).values()):
+        return target
+    raise ValueError('source inventory path escapes source_root (unregistered mount)')
+
+
+def source_members(project, scope):
+    """Keep lexical paths while traversing registered directory junctions."""
+    scope = Path(scope).absolute()
+    registered = roots_for(project)
+    seen, result = set(), []
+    def unreadable(error): raise error
+    for current, dirs, files in os.walk(scope, followlinks=True, onerror=unreadable):
+        actual = Path(current).resolve()
+        relative = Path(current).relative_to(scope).as_posix()
+        if relative != '.': source_path(project, scope, relative, registered)
+        if actual in seen: raise ValueError('cycle or duplicate directory in source scope')
+        seen.add(actual)
+        for name in files:
+            relative = (Path(current) / name).relative_to(scope).as_posix()
+            source_path(project, scope, relative, registered)
+            result.append(relative)
+    return sorted(result)
+
+
 def roots_for(root):
     file=resolve(root,'.workbench/gates/roots.json')
     if not file.is_file():return {}
@@ -54,10 +86,8 @@ def members(root,relative,roots):
         reference(root,Path(current).relative_to(root).as_posix(),roots)
         if actual in visited:raise ValueError('cycle or duplicate directory in source collection')
         visited.add(actual)
-        if len(visited)>5000:raise ValueError('collection directory budget exceeded')
         for name in files:
             rel=(Path(current)/name).relative_to(root).as_posix()
             reference(root,rel,roots)
             result.append(rel)
-            if len(result)>5000:raise ValueError('collection exceeds verification budget')
     return sorted(result)

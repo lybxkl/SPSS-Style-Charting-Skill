@@ -266,12 +266,10 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 ### 2.1 文本编码
 
 1. 先写 `assets/codebook-template.md` 的实例：每个变量都要有**定义、取值、判断规则、证据位置、正例、反例、缺失规则**。
-2. 用 `scripts/make_coding_sheet.py` 抽取全文和候选证据句，生成编码工作表；它只提供证据片段，不替你做最终判断。
-   - 默认 `--profile generic`：适用于访谈、新闻、政策、报告、网页、会议记录等任意文本资料。
-   - `--profile legal`：多抽法院、案号、省份、案由候选。词表是随包示例，类别要对着这批材料自己改；不需要这些候选就用默认的 `generic`。
+2. 用 `scripts/make_coding_sheet.py` 抽取全文和候选证据句，生成编码工作表；它只提供证据片段，不替你做最终判断，对任何文体的资料读法都一样（访谈、新闻、政策、报告、网页、会议记录……）。法院、案号这类某类文书的字段不内置：要抽什么，写进项目自己的 `--extract` 剖面。
    - CSV/TSV/JSON/XLSX 等表格会跳过并提示走统计流程；图片/音视频会提示先 OCR/转写。
 3. 人工/LLM 编码时，每条记录至少保存 `*_ev` 证据句；没有证据句的编码视为未完成。证据句的格式是 `<字段>=<原文片段>@<char_start>-<char_end>`（片段超 200 字会加「…」，但偏移量始终指向整句），同一句先判否定再判肯定，命中项带 `negated`/`polarity`——**两个编码员的结果可以逐条按字段+偏移对齐，不必人工翻原文**。
-4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。**这一步是人工协议：本 skill 没有任何脚本计算 κ**，需要自己算（或让 SPSS/R/Python 跑 `sklearn.metrics.cohen_kappa_score`），流程见 `references/02-coding-protocol.md` 的「信度检验」节。
+4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。用 `scripts/compute_kappa.py` 对齐两轮编码并计算：模型初编码与独立复读（或两名编码员）各产出一份 `dataset.csv`，脚本按文档+字段对齐，输出每变量 κ/一致率（`kappa_report.csv`）、逐条分歧及双方证据行（`disagreements.csv`）与 `coding-sample.md` 骨架；κ < 0.6 的变量自动点名。流程见 `references/02-coding-protocol.md` 的「信度检验」节。
 5. codebook 冻结后再全量编码；后续改动要记录版本与影响范围。
 
 ### 2.2 字段抽取（`--extract`，一行一个观测）
@@ -282,7 +280,6 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 
 ```bash
 python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
-    --profile generic \
     --extract draft/fields.json
 ```
 
@@ -308,12 +305,11 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 `unparsed`（找到文字但解析不出）分开计数。写论文时说"未提及占 30%"之前先看这张表——
 把"解析失败"算进"未提及"，等于把工具的无能写成了研究对象的行为。
 
-- **领域写在 JSON 里，不写在代码里**。`profiles/` 里的裁判文书、访谈和词汇满意度都是**示例夹具**，不是目标用户，也不限制研究领域；写一份新 profile 就能换领域，不用改 Python。`--profile` 只有 `generic` 与 `legal` 两档，默认 `generic`，`legal` 只在处理中国裁判文书时多抽法院和案号候选。
+- **领域写在 JSON 里，不写在代码里**。`profiles/` 里的裁判文书、访谈和词汇满意度都是**示例夹具**，不是目标用户，也不限制研究领域；写一份新 profile 就能换领域，不用改 Python。引擎不内置任何文体的字段或切段，`--extract` 也拒绝直接使用包内 `profiles/`（要先把示例复制到 `draft/`、读过样本改好切段再传）。
 - **`na` 必填**：缺失要落短语（`未提及` / `不适用` / `未判罚金`），不能落空串——空串分不清"没提到"与"不适用"。
 - **NA ≠ 0 ≠ False**：`contains` 字段在段存在但未命中时是 `False`（不是 NA），`count_unique` 的 `0` 是值。把"没投诉"写成缺失，等于扔掉一次测量。
 - **证据可回验**：每条证据的偏移必须能在原文 `text[s:e]` 命中，用 `extract_lib.verify_evidence()` 校验（不要自己另写一份解析）。
 - **换行先归一**：偏移一律指向 `\r\n`→`\n` 归一后的文本。CRLF 文件不归一，每条偏移会按行数整体漂移。
-- `--profile legal` 的字段（案号/法院/案由）与 profile 字段**不要混用**：前者是"候选"，后者是"取值"。
 
 ### 2.3 问卷/量表/结构化抽取
 
@@ -326,12 +322,14 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 ```bash
 python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
-  --extract profiles/eldercare-interview.json --require-review
+  --extract draft/eldercare-interview.json --require-review
 python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目录" \
   --review output/coding/extraction_review.csv --out output/qa/decision_issues.csv
 python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
-  --extract profiles/eldercare-interview.json --decisions decisions.jsonl --require-review
+  --extract draft/eldercare-interview.json --decisions decisions.jsonl --require-review
 ```
+
+（`draft/eldercare-interview.json` 指把示例剖面复制进 `draft/` 并按这批材料改过切段后的项目剖面；直接传包内 `profiles/` 会被拒绝。）
 
 模型读 `extraction_review.csv` 与原文，逐条写 `decisions.jsonl`；`value` 必须是 `alternatives` 或当前值里出现过的候选，否则 `check_decisions.py` 直接拒绝——这是“不许凭空取值”的机器闸门。`na` 判断不需要候选，但必须给出原文 span。
 
@@ -361,7 +359,7 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 | `model1_sample` 等 | 每个模型单独的样本标记；不要用 `in_analysis` 代替 | **你在建模时加**；`auto_stats.py --spec` 会按模型写各自的 N |
 | `dup_group` / `dup_role` | 重复组 ID 与 keeper/duplicate 角色 | `audit_corpus.py`（字节级）；`--content-dedupe` 另写 `dup_content_group`/`dup_role_content` |
 | `exclusion_reason` | 排除原因，便于写样本流程 | **你在编码时加**；`make_coding_sheet.py` 把被 `--audit`/`--dedupe-plan` 排除的文件逐条写进 `skipped_documents.csv`（含 reason），不靠这一列 |
-| `<字段>_src` | 非直接抽取字段的来源（`year_src`/`charge_src`/`court_level_src` 等） | **编码时加**；`make_coding_sheet.py --profile legal` 会为抽取字段写 5 个 `*_src` |
+| `<字段>_src` | 非直接抽取字段的来源（`year_src`/`charge_src`/`court_level_src` 等） | **编码时加**；`make_coding_sheet.py --extract` 会为抽取字段写 `*_src` |
 
 `in_scope`/`in_analysis`/`model*_sample`/`exclusion_reason` 目前没有任何脚本自动生成或校验——它们是**约定**，写不写由你决定，但样本流程对不上时第一件事就是查这几列。`sample_flow.csv`（列 `stage,n,note`）应由 `make_coding_sheet.py` 生成并逐档对账，不要手写正文里的漏斗数字。
 
@@ -635,11 +633,12 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 |---|---|
 | `scripts/audit_corpus.py` | 扫描任意资料目录：文件状态、文本/页数、有效字符、MD5、重复、内容级重复（`--content-dedupe`）、抽样框、格式分布、年份提示 |
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
-| `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句；`--profile legal` 才抽取法院/案号字段；`--extract profile.json` 走字段抽取层，产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
+| `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句（对任何文体读法一致，不内置领域字段）；`--extract profile.json` 走字段抽取层（只接受项目剖面，拒绝包内示例），产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
+| `scripts/compute_kappa.py` | 两轮独立编码对齐：按文档+字段算每变量一致率与 Cohen's κ，逐条分歧带双方证据行，生成 `kappa_report.csv`/`disagreements.csv`/`coding-sample.md` |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |
 | `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |
-| `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗单调 |
+| `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗按链单调（`note` 写 `funnel=名` 分链） |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |

@@ -69,8 +69,8 @@
 
 - 任何**不是直接从原文抽取**的字段，必须在同一行给出 `<field>_src`，取值是短语（如
   `裁判日期`、`案号`、`文件名`、`正文（定罪罪名）`、`目录名`）。
-- 至少覆盖：`year_src`、`trial_level_src`、`court_level_src`、`charge_src`、`province_src`。
-- 生成方：`make_coding_sheet.py`（通用层给 `doc_type_src`、`case_no_src`、`province_src`）。
+- 至少覆盖：`year_src`、`trial_level_src`、`court_level_src`、`charge_src` 等你声明的派生字段。
+- 生成方：你在编码时加；`make_coding_sheet.py` 通用层只给 `year_src`、`doc_type_src`，`--extract` 层为每个抽取字段写 `<字段>_src`。
 - 消费方：`qa_outputs.py` 不强制，但报告的「数据质量」一节必须能引用这些列。
 
 ## 6. 证据（evidence）

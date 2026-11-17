@@ -207,7 +207,7 @@ def is_binary(s: pd.Series) -> bool:
 def infer_columns(df: pd.DataFrame, cfg: dict, max_categories: int = 12):
     drop = set(cfg.get("drop", []))
     time_col = cfg.get("time") or next((c for c in df.columns if re.search(r"year|年份|时间", c, re.I)), None)
-    group_col = cfg.get("group") or next((c for c in df.columns if re.search(r"category|crime|group|类别|案由", c, re.I)), None)
+    group_col = cfg.get("group") or next((c for c in df.columns if re.search(r"category|group|类别", c, re.I)), None)
     treatment_col = cfg.get("treatment") or next((c for c in df.columns if re.search(r"stage|treatment|处理|阶段", c, re.I)), None)
     # The outcome is resolved once in resolve_outcome() (S-12: this used to be
     # duplicated here with a different failure mode).

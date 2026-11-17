@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import unittest
 
@@ -128,6 +129,14 @@ class DecisionContractTest(TempCase):
 
 
 class ExtractionReviewTest(TempCase):
+    def setUp(self) -> None:
+        super().setUp()
+        # --extract refuses shipped example profiles; copy the shape example
+        # into the project's draft/ first, exactly as a real project does.
+        self.profile = self.p("draft", "fields.json")
+        os.makedirs(os.path.dirname(self.profile), exist_ok=True)
+        shutil.copyfile(ELDER, self.profile)
+
     def _corpus(self, age: str) -> str:
         root = self.p("corpus")
         os.makedirs(root, exist_ok=True)
@@ -169,7 +178,7 @@ class ExtractionReviewTest(TempCase):
         root = self._corpus("未记录")
         out = self.p("out")
         proc = run("make_coding_sheet.py", "--root", root, "--out", out,
-                   "--extract", ELDER, "--min-chars", "5", "--require-review")
+                   "--extract", self.profile, "--min-chars", "5", "--require-review")
         self.assertEqual(proc.returncode, 2, proc.stderr)
         review = read_csv(os.path.join(out, "extraction_review.csv"))
         age_row = next(row for row in review
@@ -196,7 +205,7 @@ class ExtractionReviewTest(TempCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
         proc = run("make_coding_sheet.py", "--root", root, "--out", out,
-                   "--extract", ELDER, "--min-chars", "5",
+                   "--extract", self.profile, "--min-chars", "5",
                    "--decisions", decisions, "--require-review")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         rows = read_csv(os.path.join(out, "dataset.csv"))
@@ -225,7 +234,7 @@ class ExtractionReviewTest(TempCase):
                 "confidence": 0.9, "needs_human": False,
             }, ensure_ascii=False) + "\n")
         proc = run("make_coding_sheet.py", "--root", root, "--out", out,
-                   "--extract", ELDER, "--min-chars", "5",
+                   "--extract", self.profile, "--min-chars", "5",
                    "--decisions", decisions)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         with open(os.path.join(out, "evidence.jsonl"), encoding="utf-8") as fh:
@@ -252,7 +261,7 @@ class ExtractionReviewTest(TempCase):
             }, ensure_ascii=False) + "\n")
         out = self.p("excluded")
         proc = run("make_coding_sheet.py", "--root", root, "--out", out,
-                   "--extract", ELDER, "--min-chars", "5",
+                   "--extract", self.profile, "--min-chars", "5",
                    "--decisions", decisions)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         rows = read_csv(os.path.join(out, "dataset.csv"))

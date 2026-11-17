@@ -234,7 +234,7 @@ Flag 语义：
 
 ## 4. 与既有产物的关系
 
-- `--extract profile.json` 是**并列**入口，不替代 `--profile`/`--keywords`。同一趟运行里两者可同时给：`coding_sheet.*` 照旧产出，额外多出 `dataset.csv`/`evidence.jsonl`/`run.json`。
+- `--extract profile.json` 是**并列**入口，不替代 `--keywords`。同一趟运行里两者可同时给：`coding_sheet.*` 照旧产出，额外多出 `dataset.csv`/`evidence.jsonl`/`run.json`。`--extract` 只接受项目剖面（`draft/` 等），传包内 `profiles/` 示例会被拒绝并退出 2。
 - `sample_flow.csv` 增加一行 `stage=抽取字段完成`，`n` = 写入 `dataset.csv` 的行数。
 - `skipped_documents.csv` 不变。
 - **文本在计算任何偏移之前统一换行**（`\r\n`/`\r` → `\n`）。证据偏移一律指向归一化后的文本；否则一份 CRLF 文件里每条偏移都会按行数偏移。

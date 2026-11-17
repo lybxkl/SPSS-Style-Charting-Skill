@@ -91,10 +91,6 @@ LOG_METRICS = {"OR", "HR", "RR", "AOR", "ODDS", "RATIO",
                "ODDS RATIO", "HAZARD RATIO", "RISK RATIO"}
 LIN_METRICS = {"B", "BETA", "COEF", "COEF.", "β", "Β", "SLOPE", "ESTIMATE", "LINEAR"}
 
-SHORT_CATEGORY = {
-    "其他": "其他",
-}
-
 # dummy pattern: C(charge_f)[T.水生资源] / charge_f[T.水生资源] / 变量[级别]
 _DUMMY_TERM_RE = re.compile(r"^\s*(?P<var>.+?)\s*\[\s*(?:T\.)?\s*(?P<level>.+?)\s*\]\s*$")
 _C_WRAPPER_RE = re.compile(r"^C\(\s*(?P<var>[^()]+?)\s*\)$")
@@ -110,8 +106,6 @@ def short_label(value, col: str = "", max_chars: int | None = None) -> str:
     actual charts pass an explicit budget retaining the entire label.
     """
     s = str(value).strip()
-    if col in {"category", "crime"} and s in SHORT_CATEGORY:
-        return SHORT_CATEGORY[s]
     dummy = _DUMMY_TERM_RE.match(s)
     if dummy and dummy.group("level").strip():
         var = _C_WRAPPER_RE.sub(r"\g<var>", dummy.group("var").strip()).strip()
@@ -234,7 +228,7 @@ def role_columns(df: pd.DataFrame, cfg: dict, max_categories: int):
         time_col = next((c for c in df.columns if re.search(r"year|年份|时间|date", c, re.I)), None)
     group_col = cfg.get("group")
     if not group_col:
-        group_col = next((c for c in df.columns if re.search(r"category|crime|group|类别|案由", c, re.I)), None)
+        group_col = next((c for c in df.columns if re.search(r"category|group|类别", c, re.I)), None)
     treatment_col = cfg.get("treatment")
     if not treatment_col:
         treatment_col = next((c for c in df.columns if re.search(r"stage|treatment|处理|阶段", c, re.I)), None)

@@ -39,25 +39,22 @@
 
 ## 编码工作表的自动字段
 
-`make_coding_sheet.py` 只做候选抽取，最终编码仍由 codebook 决定。默认 `--profile generic`，适合访谈、新闻、政策、报告、网页、会议记录等任意文本资料；`--profile legal` 才额外抽取法院、案号、省份、案由。
+`make_coding_sheet.py` 只做候选抽取，最终编码仍由 codebook 决定。它对任何文体的读法一致，不内置领域字段；法院、案号这类某类文书的字段写在项目自己的 `--extract` 剖面里（`references/09-field-extraction.md`）。
 
 | 字段 | 规则 | 仍需人工做什么 |
 |---|---|---|
 | `rel_path` / `relpath` | 相对 `--root` 的路径，统一用 `/`，两列同值（契约键列） | 作为与 audit/dedupe/统计脚本对接的主键 |
 | `source_type` | 文件扩展名/类型（pdf/docx/txt/html…） | 确认格式是否影响文本完整性 |
-| `doc_type` | generic: 文件类型；legal: 判决/裁定/调解/决定/其他 | `--doc-type` 是白名单，可重复（`--doc-type judgment ruling`）；`all` 表示不过滤 |
-| `title` | 前 12 行里以“判决书/裁定书/调解书/决定书/调解协议”结尾的行优先，跳过以“人民法院/人民检察院”结尾的行 | 核对标题是否被页眉/导航污染 |
+| `doc_type` | 恒为 `document`（文件种类，不是文体分类） | 文体/类别判断写进 codebook 或项目剖面，不由脚本猜 |
+| `title` | 首个有效行（≥2 字符），无领域词表 | 核对标题是否被页眉/导航污染 |
 | `year` | 文件名年份优先，其次正文；只认 1949–今年、且前后都不是数字的四位数 | 统一年份口径（发布/事件/裁判） |
-| `case_no` | 仅 legal profile：文件名案号优先，其次正文；覆盖刑初/刑终/刑再/刑更/刑他/刑申/民初/民终/民再/民特/民辖/民申/行初/行终/知行/执/执异/破申/诉前调，保留“字第”与“之一” | 核对是否误取引用案例 |
-| `court` | 仅 legal profile：文件名法院优先，其次正文；只收含省/市/自治区/自治州/区/县等行政区划前缀或“最高人民法院”的名称，排除“原审法院/一审法院/二审法院/本院” | 核对法院层级 |
-| `province` | 仅 legal profile：路径省份目录优先，其次法院名；必须在省级白名单内（“广州市”不算省份，留空） | 统一地区口径；无省份留空并注明 |
-| `*_src` | `year_src`/`doc_type_src`/`case_no_src`/`court_src`/`province_src` 记录取值来源（filename/title/body/path/case_no/redacted/fallback） | 来源为 `fallback` 的字段重点复核 |
-| `category_candidates` | 关键词词典命中的类别/案由候选；文件名命中与正文“案由：”命中合并去重 | 不要把正文引用的其他类别当主类别 |
+| `*_src` | `year_src`/`doc_type_src` 记录取值来源 | 来源为 `fallback` 的字段重点复核 |
+| `category_candidates` | 关键词词典命中的类别候选；文件名命中优先，其次正文命中 | 不要把正文引用的其他类别当主类别 |
 | `signals` / `evidence` | 关键词命中的证据句，每词最多 3 句；输出契约格式证据串（见下节） | 按 codebook 判定，否定表述优先 |
 
-脱敏文书（法院名含 `****`）的 `court` 返回空串并记 `court_src="redacted"`，不得伪造“人民法院”。
+领域字段（案号/法院/省份等）不在工作表里：要抽它们，读样本后把切段和字段写进项目剖面，用 `--extract` 产出 `dataset.csv`。包内 `profiles/` 只是字段形状示例，`--extract` 会直接拒绝它们。
 
-所有排除（扩展名、格式、读取失败、0 字节、低于 `--min-chars`、`--audit`、`--dedupe-plan`、`--doc-type`）统一写入 `skipped_documents.csv`，列为 `rel_path,relpath,file,doc_type,chars,reason,detail,skip_stage,file_kind`；`skip_stage` 取机器可读枚举（`ext_filter/format/read/size/min_chars/audit/dedupe/doc_type`）。同时写 `sample_flow.csv`（列 `stage,n,note`，`n` 单调不增：文件总数 → 有效文件 → 通过筛选 → 编码完成），漏斗可直接从产物重建。`--audit` 清单里没有任何 `valid` 行时，脚本先把每个文件写进 skipped，再以退出码 2 结束，不会假装“成功抽取 0 份”；确需 0 行输出时显式加 `--allow-empty`。
+所有排除（扩展名、格式、读取失败、0 字节、低于 `--min-chars`、`--audit`、`--dedupe-plan`）统一写入 `skipped_documents.csv`，列为 `rel_path,relpath,file,doc_type,chars,reason,detail,skip_stage,file_kind`；`skip_stage` 取机器可读枚举（`ext_filter/format/read/size/min_chars/audit/dedupe`）。同时写 `sample_flow.csv`（列 `stage,n,note`，`n` 单调不增：文件总数 → 有效文件 → 通过筛选 → 编码完成），漏斗可直接从产物重建。`--audit` 清单里没有任何 `valid` 行时，脚本先把每个文件写进 skipped，再以退出码 2 结束，不会假装“成功抽取 0 份”；确需 0 行输出时显式加 `--allow-empty`。
 
 ## 证据片段规则
 
@@ -148,15 +145,25 @@
 
 至少做一次：
 
-可投稿档没有现成的双人编码或 Cohen's κ 脚本。抽样复核写在 `docs/decisions/coding-sample.md`，正文含「抽样复核：」，写明抽了哪些原文、脚本值和原文是否一致、残留误差。只有两名编码者的独立结果时才计算 κ，并在方法里写明；分层重读不能写成 κ。
+用 `scripts/compute_kappa.py` 对齐两轮独立编码并计算一致率与 Cohen's κ。两轮各产出一份 `dataset.csv`（同一个项目剖面、同一批抽样材料）：模型初编码与之后的独立复读算两轮；有两名编码员更好。
 
-有第二名编码者时：
+```bash
+python scripts/compute_kappa.py --a output/coding-r1/dataset.csv \
+    --b output/coding-r2/dataset.csv \
+    --a-evidence output/coding-r1/evidence.jsonl \
+    --b-evidence output/coding-r2/evidence.jsonl \
+    --out output/kappa
+```
+
+产出三件：`kappa_report.csv`（每变量 n/一致数/一致率/κ）、`disagreements.csv`（逐条分歧 + 双方证据行，裁决从这里开始）、`coding-sample.md`（抽样复核记录骨架）。脚本不判断谁对：分歧只列出来，裁决仍由人/模型做并记录理由。
+
+空值与列不对齐的约定：单元格写 `（未编码）` 表示该变量在这份材料上没有编码（不算「无/0」，也不算缺失一致）；两轮都会跳过这种单元格。`rel_path`/`relpath`/`file`/`doc_id`/`id`/`name`/`filename` 只作对齐键，`*_src`、`doc_type`、`run_order` 是溯源列，这些列一律不进 κ。只有一轮编了的变量不会静默消失：stdout 和 `coding-sample.md` 会点名「仅 A 编了 / 仅 B 编了」。
 
 1. 随机抽 10%–15% 资料（不少于 30 份；材料很少时写明实际份数，不要为了凑数重复计算）。
-2. 两名编码员独立编码，或同一人隔两周重编码。
-3. κ < 0.6 的变量回到 codebook 修规则。
+2. 两名编码员独立编码、同一人隔两周重编码、或模型初编码后独立复读，都算两轮。
+3. κ < 0.6 的变量回到 codebook 修规则（compute_kappa 会在输出里点名）。
 4. 分歧逐条裁决，记录裁决理由；codebook 升版本。
-5. 在论文方法部分报告抽样比例、κ 和分歧处理方式。没有 κ 时报告抽样设计和“不是 κ”。
+5. 在论文方法部分报告抽样比例、κ 和分歧处理方式。没有第二轮编码时报告抽样设计和“不是 κ”；分层重读不能写成 κ。
 
 ## LLM 辅助编码的边界
 

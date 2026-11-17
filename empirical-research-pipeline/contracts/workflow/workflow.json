@@ -1084,8 +1084,6 @@
         {
           "script": "scripts/suggest_profiles.py",
           "args": [
-            "--audit",
-            "output/audit/corpus_files.csv",
             "--out",
             "output/coding/profile_candidates.json"
           ],

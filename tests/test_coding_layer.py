@@ -17,6 +17,7 @@ from _helpers import TempCase, run, write_csv, read_csv, make_text_pdf
 import contextlib
 import io
 import json
+import shutil
 
 import numpy as np
 import pandas as pd
@@ -160,27 +161,22 @@ class TestMakeCodingSheetCLI(TempCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("missing a path column", proc.stderr)
 
-    # -- B6: --doc-type is a whitelist, not a single "drop other" switch ---
-    def test_doc_type_whitelist_skips_other_types(self):
-        self._doc("a.txt", BODY + "\n依照刑法规定，判决如下：\n一、判处有期徒刑一年。\n")
-        self._doc("b.txt", BODY + "\n依照刑事诉讼法规定，裁定如下：\n一、撤销原判。\n")
-        proc = self._run("--profile", "legal", "--doc-type", "judgment",
-                         "--min-chars", "1")
+    # -- B6: one generic reading for every genre, no built-in field readers --
+    def test_genre_text_gets_no_special_fields(self):
+        self._doc("a.txt", LEGAL_TEXT)
+        proc = self._run("--min-chars", "1")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        rows = self._rows()
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["doc_type"], "judgment")
-        skipped = self._skipped()
-        self.assertEqual(len(skipped), 1)
-        self.assertEqual(skipped[0]["skip_stage"], "doc_type")
-        self.assertIn("not in --doc-type", skipped[0]["reason"])
+        row = self._rows()[0]
+        self.assertEqual(row["doc_type"], "document")
+        for gone in ("court", "case_no", "province", "crime_candidates"):
+            self.assertNotIn(gone, row)
 
-    def test_doc_type_all_keeps_every_type(self):
-        self._doc("a.txt", BODY + "\n依照刑法规定，判决如下：\n一、判处有期徒刑一年。\n")
-        self._doc("b.txt", BODY + "\n依照刑事诉讼法规定，裁定如下：\n一、撤销原判。\n")
-        proc = self._run("--profile", "legal", "--doc-type", "all", "--min-chars", "1")
+    def test_no_shipped_keyword_dictionary_is_loaded(self):
+        self._doc("a-判决书.txt", LEGAL_TEXT)
+        proc = self._run("--min-chars", "1")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(len(self._rows()), 2)
+        self.assertNotIn("SHIPPED EXAMPLE", proc.stderr)
+        self.assertEqual(self._rows()[0]["category_candidates"], "")
 
     # -- B13: skipped rows carry a stage and a file kind -------------------
     def test_skipped_rows_carry_stage_and_file_kind(self):
@@ -236,46 +232,6 @@ class TestMakeCodingSheetCLI(TempCase):
         self.assertEqual(len(rec["text"]), 50)
         self.assertTrue(rec["text_truncated"])
 
-    # -- legal profile: sourced fields and contract evidence ---------------
-    def test_legal_profile_extracts_sourced_fields_and_evidence(self):
-        rel = "黑龙江省/2021/（2021）黑01刑初12号-刑事判决书.txt"
-        self._doc(rel, LEGAL_TEXT)
-        keywords = self.p("kw.json")
-        with open(keywords, "w", encoding="utf-8") as fh:
-            json.dump({"赔偿": ["赔偿"]}, fh, ensure_ascii=False)
-        proc = self._run("--profile", "legal", "--keywords", keywords,
-                         "--min-chars", "1")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        row = self._rows()[0]
-        self.assertEqual(row["rel_path"], rel)
-        self.assertEqual(row["relpath"], rel)
-        self.assertEqual(row["doc_type"], "judgment")
-        self.assertEqual(row["doc_type_src"], "filename")
-        self.assertEqual(row["court"], "黑龙江省哈尔滨市中级人民法院")
-        self.assertEqual(row["court_src"], "body")
-        self.assertEqual(row["case_no"], "（2021）黑01刑初12号")
-        self.assertEqual(row["case_no_src"], "filename")
-        self.assertEqual(row["province"], "黑龙江")
-        self.assertEqual(row["province_src"], "path")
-        self.assertEqual(row["year"], "2021")
-        self.assertEqual(row["year_src"], "case_no")
-        self.assertEqual(row["title"], "刑事判决书")
-        rec = self._jsonl()[0]
-        evidence = rec["evidence"]["赔偿"]
-        self.assertTrue(evidence)
-        self.assertRegex(evidence[0], r"^赔偿=.+@\d+-\d+$")
-        self.assertTrue(any(hit["negated"] for hit in rec["signals"]["赔偿"]))
-        self.assertIn("text", rec)
-
-    def test_legal_profile_loads_default_category_keywords(self):
-        self._doc("a-判决书.txt", LEGAL_TEXT)
-        proc = self._run("--profile", "legal", "--min-chars", "1")
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        # The shipped dictionary is a placeholder; saying so is the difference
-        # between "it worked" and "the categories mean nothing".
-        self.assertIn("SHIPPED EXAMPLE keyword dictionary", proc.stderr)
-        self.assertIn("placeholders", proc.stderr)
-
     def test_pdf_is_extracted(self):
         make_text_pdf(os.path.join(self.corpus, "doc.pdf"),
                       "故意伤害罪 判决如下 赔偿损失。")
@@ -289,54 +245,10 @@ class TestMakeCodingSheetCLI(TempCase):
 class TestCodingFunctions(unittest.TestCase):
     """Unit tests for the extractor rules (no subprocess needed)."""
 
-    def test_case_numbers_cover_every_docket_family(self):
-        cases = [
-            "（2021）最高法民申1234号",
-            "（2022）黑01执123号",
-            "（2018）黑民终字第88号",
-            "（2019）京行终123号之一",
-            "（2020）粤民初1号",
-            "（2023）最高法刑他12号",
-            "（2020）苏民特3号",
-            "（2022）浙破申1号",
-            "（2021）沪诉前调8号",
-            "（2020）粤知行5号",
-            "（2019）黑执异7号",
-            "（2021）京民辖终2号",
-            "（2020）川刑更3号",
-            "（2021）鲁刑再1号",
-        ]
-        for case in cases:
-            with self.subTest(case=case):
-                self.assertEqual(mcs.find_case_no("本案案号：" + case + "。"), case)
-
-    def test_court_ignores_boilerplate_phrases(self):
-        for text in ("原审法院认为", "该案经法院审理", "一审法院判决", "本院认为"):
-            with self.subTest(text=text):
-                self.assertEqual(mcs.find_court("", text)[0], "")
-
-    def test_redacted_court_is_empty_not_fabricated(self):
-        court, source = mcs.find_court("", "黑****人民法院")
-        self.assertEqual(court, "")
-        self.assertEqual(source, "redacted")
-
-    def test_province_never_takes_a_city(self):
-        self.assertEqual(mcs.normalize_province("广州市"), "")
-        self.assertEqual(mcs.normalize_province("黑龙江省"), "黑龙江")
-        self.assertEqual(mcs.infer_province(["广州市", "2021"], "", "a.txt"), "")
-
     def test_year_needs_word_boundaries(self):
         self.assertIsNone(mcs.find_year(("filename", "身份证110101198001011234"))[0])
         self.assertIsNone(mcs.find_year(("filename", "1948年档案"))[0])
         self.assertEqual(mcs.find_year(("filename", "2021年度报告"))[0], 2021)
-
-    def test_doc_type_reads_the_dispositive_tail(self):
-        ruling = ("本院认为，原审判决如下：一、判处有期徒刑一年。\n"
-                  "依照法律规定，裁定如下：撤销原判。")
-        self.assertEqual(mcs.detect_doc_type(ruling), "ruling")
-        self.assertEqual(
-            mcs.detect_doc_type("本院认为，事实清楚。判决如下：驳回上诉。"),
-            "judgment")
 
     def test_sentences_keep_offsets_and_the_legacy_shape(self):
         text = "甲赔偿损失、乙未赔偿损失。"
@@ -371,15 +283,21 @@ class TestCodingFunctions(unittest.TestCase):
                                    {"支持": ["支持"]})["支持"][0]
         self.assertEqual(support["polarity"], "negative")
 
-    def test_categories_merge_filename_and_charge(self):
+    def test_categories_prefer_filename_hits_then_text(self):
         cmap = {"故意伤害": ["故意伤害"], "盗窃": ["盗窃"]}
-        found = mcs.detect_categories("案由：故意伤害罪。", "盗窃-刑事判决书.txt", cmap)
-        self.assertIn("盗窃", found)
-        self.assertIn("故意伤害", found)
+        self.assertEqual(
+            mcs.detect_categories("案由：故意伤害罪。", "盗窃-刑事判决书.txt", cmap),
+            ["盗窃"])
+        self.assertEqual(
+            mcs.detect_categories("案由：故意伤害罪。", "a.txt", cmap),
+            ["故意伤害"])
 
-    def test_title_skips_the_court_header(self):
-        text = "黑龙江省哈尔滨市中级人民法院\n刑事判决书\n正文"
-        self.assertEqual(mcs.first_title(text, "x.txt"), "刑事判决书")
+    def test_title_is_the_first_meaningful_line(self):
+        # No genre word list picks titles any more: the first meaningful line
+        # wins, whatever the document genre is.
+        self.assertEqual(mcs.first_title("黑龙江省哈尔滨市中级人民法院\n刑事判决书\n正文",
+                                         "x.txt"),
+                         "黑龙江省哈尔滨市中级人民法院")
         self.assertEqual(mcs.first_title("某某公司2021年度报告\n正文", "x.txt"),
                          "某某公司2021年度报告")
 
@@ -421,6 +339,31 @@ class TestAnalysisUtils(unittest.TestCase):
 
     def test_entirely_missing_binary_returns_none(self):
         self.assertEqual(au.encode_binary(pd.Series([np.nan, None])), (None, {}))
+
+    # -- outcome_map: null declares a missing label instead of killing the run
+    def test_outcome_map_null_declares_missing_not_crash(self):
+        s = pd.Series(["有效", "无效", "不适用", "有效", np.nan])
+        kind, encoded, mapping, message = au.outcome_kind(
+            s, mapping={"有效": 1, "无效": 0, "不适用": None})
+        self.assertEqual(kind, "binary", message)
+        self.assertEqual(mapping, {"有效": 1, "无效": 0})
+        self.assertEqual(int(encoded.isna().sum()), 2)
+        self.assertEqual(list(encoded.dropna()), [1.0, 0.0, 1.0])
+
+    def test_outcome_map_uncovered_value_lists_it(self):
+        s = pd.Series(["有效", "无效", "未知"])
+        kind, _series, _mapping, message = au.outcome_kind(
+            s, mapping={"有效": 1, "无效": 0})
+        self.assertEqual(kind, "unsupported")
+        self.assertIn("uncovered: ['未知']", message)
+
+    def test_outcome_map_invalid_code_is_named(self):
+        s = pd.Series(["有效", "无效"])
+        kind, _series, _mapping, message = au.outcome_kind(
+            s, mapping={"有效": 1, "无效": 2})
+        self.assertEqual(kind, "unsupported")
+        self.assertIn("invalid entries", message)
+        self.assertIn("无效=2", message)
 
     def test_filter_coerces_dtype_and_records_row_counts(self):
         df = pd.DataFrame({"year": [2021, 2021, 2022], "in_analysis": [1, 1, 1]})
@@ -508,6 +451,27 @@ class TestAnalysisUtils(unittest.TestCase):
                                            {"是": 1, "否": 0})
         self.assertEqual(list(encoded), [1.0, 0.0])
         self.assertEqual(mapping, {"是": 1, "否": 0})
+
+    def test_all_null_outcome_map_declares_no_code(self):
+        # JSON null marks a label missing; a map of only nulls codes nothing,
+        # and the message must say so instead of "invalid entries: []".
+        self.assertEqual(au.encode_binary(pd.Series(["是", "否"]),
+                                          {"是": None, "否": None}), (None, {}))
+        kind, _encoded, _mapping, message = au.outcome_kind(
+            pd.Series(["是", "否"]), mapping={"是": None, "否": None})
+        self.assertEqual(kind, "unsupported")
+        self.assertIn("declares no 0/1 code", message)
+        kind, _encoded, _mapping, message = au.outcome_kind(
+            pd.Series(["是", "否"]), mapping={"是": 1, "否": "no"})
+        self.assertEqual(kind, "unsupported")
+        self.assertIn("invalid entries", message)
+
+    def test_category_map_reads_only_category_keys(self):
+        # Domain aliases (a legacy "crime" key) must not smuggle a keyword
+        # dictionary in; only the neutral "category"/"categories" keys count.
+        self.assertEqual(mcs.category_map_from({"crime": {"a": ["a"]}}), {})
+        self.assertEqual(mcs.category_map_from(
+            {"categories": {"a": ["a"]}}), {"a": ["a"]})
 
     def test_categorical_dtype_is_opt_in(self):
         series = pd.Series([1, 2, 3])
@@ -677,9 +641,15 @@ class TestExtractPipeline(TempCase):
         self.corpus = self.p("corpus")
         os.makedirs(self.corpus, exist_ok=True)
         self.out = self.p("out")
-        self.profile = os.path.join(
+        # Shipped profiles are shape examples and --extract refuses them, so
+        # the pipeline tests copy one into the project's draft/ first -- the
+        # same thing a real project does after reading its samples.
+        self.profile = self.p("draft", "fields.json")
+        os.makedirs(os.path.dirname(self.profile), exist_ok=True)
+        shutil.copyfile(os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "empirical-research-pipeline", "profiles", "legal-judgment.json")
+            "empirical-research-pipeline", "profiles", "legal-judgment.json"),
+            self.profile)
 
     def _doc(self, rel, text):
         path = os.path.join(self.corpus, *rel.split("/"))
@@ -749,6 +719,50 @@ class TestExtractPipeline(TempCase):
         stages = [row["stage"] for row in read_csv(
             os.path.join(self.out, "sample_flow.csv"))]
         self.assertIn("抽取字段完成", stages)
+
+    def test_shipped_profile_is_refused(self):
+        self._doc("a.txt", self.HEADER + BODY)
+        shipped = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "empirical-research-pipeline", "profiles", "legal-judgment.json")
+        proc = self._run("--min-chars", "1", "--extract", shipped)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("refuses profiles shipped with the skill", proc.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.out, "dataset.csv")))
+
+    def test_shipped_profile_refusal_survives_path_variants(self):
+        # The guard must hold against lexical tricks, not just the exact path.
+        self._doc("a.txt", self.HEADER + BODY)
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        shipped = os.path.join(here, "empirical-research-pipeline",
+                               "profiles", "legal-judgment.json")
+        variants = [
+            # a ..-hop that lands back inside the shipped directory
+            os.path.join(here, "empirical-research-pipeline", "profiles",
+                         "..", "profiles", "legal-judgment.json"),
+        ]
+        if os.name == "nt":
+            # lower-case drive + mixed-case directory (case-insensitive FS)
+            variants.append(shipped.replace(
+                here[:2], here[:2].lower()).replace("profiles", "Profiles"))
+            # the \\?\ extended-length prefix
+            variants.append("\\\\?\\" + shipped)
+        for target in variants:
+            self.assertTrue(os.path.isfile(target), target)
+            proc = self._run("--min-chars", "1", "--extract", target)
+            self.assertEqual(proc.returncode, 2, target)
+            self.assertIn("refuses profiles shipped with the skill", proc.stderr)
+
+    def test_project_owned_profiles_directory_is_allowed(self):
+        # A project may name its own directory "profiles" -- the guard fences
+        # the skill's shipped directory, not the name.
+        self._doc("a.txt", self.HEADER + "判决如下：一、判处罚金5000元。\n" + BODY)
+        own = self.p("profiles", "fields.json")
+        os.makedirs(os.path.dirname(own), exist_ok=True)
+        shutil.copyfile(self.profile, own)
+        proc = self._run("--min-chars", "1", "--extract", own)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(os.path.isfile(os.path.join(self.out, "dataset.csv")))
 
     def test_missing_profile_exits_2(self):
         self._doc("a.txt", BODY)

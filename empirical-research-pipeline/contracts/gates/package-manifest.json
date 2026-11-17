@@ -3,7 +3,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "ff8de75f912ff6ef8f40dcf11e047180aa291cc4c61dc404eae8883895537a4a"
+      "sha256": "7d1ee5df77e44434f28e3f5dad7386cefde29e973d15ca2268c8395a5abfc820"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -15,11 +15,11 @@
     },
     {
       "path": "assets/codebook-template.md",
-      "sha256": "893a31be43309af9e907ed7bba7c63b1581334ae9ef8d3b98b6570f57f6b8b01"
+      "sha256": "cf45818fff94766cac754f1293e238ae69e59696c3bca72e6e96e1bec22f0f9e"
     },
     {
       "path": "assets/coding-keywords.json",
-      "sha256": "fc7022c151ee8e658b1c490c5b92617e1bb4de66caf760d44cc9587ccd8e54e2"
+      "sha256": "72d4ae51c60f43df2d5b8ebd585521d1e022111f94efb11bed122da2336f39ac"
     },
     {
       "path": "assets/delivery-checklist.md",
@@ -71,11 +71,15 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "a93bdd9cbff5f9c43aa0f4964d99da4a92c1a66ac24d8b61feeafe19f5b749fc"
+      "sha256": "063711536ba86e23a29620dd633e2ce2eb20353e1549cde869b9c2961fce9b3e"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
       "sha256": "32a80141ad2c90143e198cc72fb15efcfc962eb840fe06c3914905aea9da7268"
+    },
+    {
+      "path": "evals/evals.json",
+      "sha256": "1c734975cdc1b5c4b239073c2c3d1a92a37bec6302b23a3a57e95453233aeddd"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -95,7 +99,7 @@
     },
     {
       "path": "references/02-coding-protocol.md",
-      "sha256": "1871c0b963d69234e1628b741f79df954a2b891d25d6418ef197a4bcf17863d2"
+      "sha256": "138cd911f4f294388247f4fd529e14d385247a780d99f2f6078289505a728e5a"
     },
     {
       "path": "references/03-analysis-spss.md",
@@ -111,7 +115,7 @@
     },
     {
       "path": "references/06-qa-checklist.md",
-      "sha256": "97e11e7ef743f68300e2d822af4610ed268bafbe561246e268f314e1f80708fb"
+      "sha256": "00634983072cfb27c05202ec81c9453b6fc91d91db064f47db1e60e458100f09"
     },
     {
       "path": "references/07-chart-atlas.md",
@@ -119,15 +123,15 @@
     },
     {
       "path": "references/08-analysis-expansion.md",
-      "sha256": "e1b2a3cbce2851e2a3fa718b899b082066c8094c166048ec80e2d33d6f1759c2"
+      "sha256": "774cbefadda2db87bc789f4f7669448528260d7695f5655cd7d5d94929834ff0"
     },
     {
       "path": "references/09-field-extraction.md",
-      "sha256": "b33829d58da9057150c7eaf4056cd2c01e02ced78fe47fae99aad415ce578787"
+      "sha256": "9af2eadb490b289edb2417c2c0410990b4276335ac79983eaa35fe4ce2450a94"
     },
     {
       "path": "references/10-contracts.md",
-      "sha256": "bb396a7a79057ce1fdc2111207cb17cd798cb800e20961becac36e13bf56572f"
+      "sha256": "448136ae3563db1fef89f085fdea40eae30fbfc341bcb11794abce14ce25c88d"
     },
     {
       "path": "references/11-methods-catalog.md",
@@ -151,7 +155,7 @@
     },
     {
       "path": "scripts/analysis_utils.py",
-      "sha256": "a10531bc4646188058350311b3a85c8746dcf73cdd0031c3a4a012c3929fc4a2"
+      "sha256": "1cc8f35411d38cfbba01deeb172ede42c69a1890862c0f715ba4ee1e140daa71"
     },
     {
       "path": "scripts/asr_provider.py",
@@ -171,11 +175,11 @@
     },
     {
       "path": "scripts/auto_chart_pack.py",
-      "sha256": "fd9e0ef1191cbd2f16c412f4422c5e500d91cfc88de28ff97a6e3f58fc523482"
+      "sha256": "9ea87d3cc809fc91ca909f5342f01af03131e526e4790926f7fea433499907d6"
     },
     {
       "path": "scripts/auto_stats.py",
-      "sha256": "91f80430d353e82caaf362804ca096eb2676fad561a08781465ae701db9087d2"
+      "sha256": "5258d4c90892f06f21642c12198467ccdcac9149585d96f719bf0e021a7930e0"
     },
     {
       "path": "scripts/check_decisions.py",
@@ -184,6 +188,10 @@
     {
       "path": "scripts/claims.py",
       "sha256": "7c052cf3b28c7d14ac61d9277a1f9820aa8070be48d9aba51b6cc336ea1ca5d6"
+    },
+    {
+      "path": "scripts/compute_kappa.py",
+      "sha256": "7c2617705e939f18aea3399262920c25bf069c589ff711afe06f98ccc91c2065"
     },
     {
       "path": "scripts/contract_v2.py",
@@ -279,7 +287,7 @@
     },
     {
       "path": "scripts/make_coding_sheet.py",
-      "sha256": "47af4c5fb481fc370be215dff173d0cd279b3d36905ae3c479bfc71a25ce3001"
+      "sha256": "d38800fe778b3bb7112695020b4dc1625c012b2b8a60c6bb417c06a51249e98c"
     },
     {
       "path": "scripts/manuscript.py",
@@ -351,7 +359,7 @@
     },
     {
       "path": "scripts/suggest_profiles.py",
-      "sha256": "f6709d1ca8e77022db512df995f90cf7da1df3d498b5c0e1740ca1f30bfd4bc2"
+      "sha256": "502e13a46f722efbe7985ad08f0d9e26e6d43eeff5c00d993ad11756a60d5eeb"
     },
     {
       "path": "scripts/support_review.py",
@@ -379,7 +387,7 @@
     },
     {
       "path": "scripts/verify_numbers.py",
-      "sha256": "9b5036d728a3e677038b46b40d8910c1d63566d8fa7c9c4f8febf32673d2afbb"
+      "sha256": "de6660963edd1cff83d41283683174c4253ffccf6fea83a3a7d5bfb069f1baac"
     },
     {
       "path": "scripts/workflow_contract.py",

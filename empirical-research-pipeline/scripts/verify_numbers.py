@@ -14,7 +14,7 @@
 - V-04 图号连续且被引用：图号必须从 1 连续；正文至少引用每个图号一次。
 - V-05 样本 N 跨表一致：同一 n_scope 的模型表 N 必须一致，除非显式
         标注了 sample/subset。
-- V-06 漏斗对账：sample_flow.csv 的 n 必须单调不增。
+- V-06 漏斗对账：sample_flow.csv 每条漏斗内的 n 必须单调不增（note 写 funnel=名 分链）。
 
 输出：
     number_issues.csv  severity,check,where,expected,actual,detail
@@ -1170,12 +1170,22 @@ def check_model_n(tables, report: Report):
 # V-06 漏斗对账
 # --------------------------------------------------------------------------
 
-KIND_HINT = ("；修法：累计漏斗写 kind=stage；本步剔除写 kind=excluded；"
+KIND_HINT = ("；修法：在 sample_flow.csv 加一列 kind（stage/excluded/model）；"
+             "累计漏斗写 kind=stage；本步剔除写 kind=excluded；"
              "人数会回升的子集写 kind=model，"
-             "note 用分号写成 stage=阶段名；说明")
-KIND_MISSING = ("该行缺 kind，按 stage 处理；若人数会回升，改成 "
-                "kind=model，并在 note 里用分号写 stage=对应的累计阶段")
+             "note 用分号写成 stage=阶段名；说明"
+             "；不同口径的独立漏斗在 note 写 funnel=漏斗名 分链")
+KIND_MISSING = ("该行缺 kind，按 stage 处理；若此行不是漏斗阶段请补 "
+                "kind=excluded|model；人数会回升的子集写 kind=model，"
+                "并在 note 里用分号写 stage=对应的累计阶段")
 STAGE_REF_RE = re.compile(r"stage\s*[=＝:：]\s*([^;；,，。．.]+)")
+FUNNEL_RE = re.compile(r"funnel\s*[=＝:：]\s*([^;；,，。．.]+)")
+
+
+def funnel_name(note) -> str:
+    """Return the funnel a row declares ("note=...;funnel=线上;..."), or ""."""
+    match = FUNNEL_RE.search(str(note or ""))
+    return match.group(1).strip() if match else ""
 
 
 def model_stage_ref(note) -> str:
@@ -1185,42 +1195,50 @@ def model_stage_ref(note) -> str:
 
 
 def check_sample_flow(stages, report: Report, has_kind=True, source="sample_flow.csv"):
-    """Stages never grow; excluded rows fit inside their stage; models fit a stage.
+    """Stages never grow within one funnel; excluded rows fit inside their
+    stage; models fit a stage.
 
     A file without a kind column mixes cumulative stages with exclusion counts,
     which produced six cascading errors on the real project.  Collapse them into
     one summary error plus per-row infos so the defect stays visible without
     drowning the report (R3-15).  Every affected row also gets a trace line, so
     the reader can see which row of sample_flow.csv needs a kind.
+
+    ``note`` 里 ``funnel=名`` 把该行归入一条独立漏斗；未声明的行进默认链。
+    不同口径的多条漏斗各自单调、互不比较——漏斗怎么分链由写表的人声明，
+    本检查器不替研究决定口径。
     """
-    stage_ns = {}
+    stage_ns: dict[tuple[str, str], int] = {}
     for item in stages:
         kind = item[2] if len(item) > 2 else "stage"
         if kind == "stage":
-            stage_ns[item[0].strip()] = item[1]
-    last_stage_n = None
-    last_stage_name = ""
+            note = item[3] if len(item) > 3 else ""
+            stage_ns[(funnel_name(note), item[0].strip())] = item[1]
+    last_seen: dict[str, tuple[int, str]] = {}
     violations = []
     for index, item in enumerate(stages, start=2):
         stage, n = item[0], item[1]
         kind = item[2] if len(item) > 2 else "stage"
         note = item[3] if len(item) > 3 else ""
-        where = f"stage:{index}:{stage}"
+        chain = funnel_name(note)
+        where = f"stage:{index}:{stage}" + (f"@{chain}" if chain else "")
         if n < 0:
             report.error("V-06", where, "n >= 0", n, f"stage「{stage}」n={n} 不能为负")
             continue
         if kind == "excluded":
-            if last_stage_n is not None and n > last_stage_n:
-                report.error("V-06", where, last_stage_n, n,
-                             f"剔除行「{stage}」n={n} 大于上一条 stage「{last_stage_name}」"
-                             f"n={last_stage_n}；剔除数不能超过该步的累计样本")
+            previous = last_seen.get(chain)
+            if previous is not None and n > previous[0]:
+                report.error("V-06", where, previous[0], n,
+                             f"剔除行「{stage}」n={n} 大于上一条 stage「{previous[1]}」"
+                             f"n={previous[0]}；剔除数不能超过该步的累计样本")
             continue
         if kind == "model":
-            _check_model_row(stage, n, note, stage_ns, where, report)
+            _check_model_row(stage, n, note, stage_ns, where, report, chain)
             continue
-        if last_stage_n is not None and n > last_stage_n:
-            violations.append((index, where, stage, n, last_stage_n, last_stage_name))
-        last_stage_n, last_stage_name = n, stage
+        previous = last_seen.get(chain)
+        if previous is not None and n > previous[0]:
+            violations.append((index, where, stage, n, previous[0], previous[1]))
+        last_seen[chain] = (n, stage)
     if not violations:
         return
     if has_kind or len(violations) == 1:
@@ -1257,7 +1275,7 @@ def _trace_missing_kind(report, source, index, stage, n, has_kind):
     })
 
 
-def _check_model_row(stage, n, note, stage_ns, where, report):
+def _check_model_row(stage, n, note, stage_ns, where, report, chain=""):
     """A model row is a subset of one declared stage, not a funnel step."""
     ref = model_stage_ref(note)
     if not ref:
@@ -1266,12 +1284,28 @@ def _check_model_row(stage, n, note, stage_ns, where, report):
                      "例如 stage=分析样本；这是该阶段的子集。"
                      "句号后面的字不会留在阶段名里")
         return
-    ref_n = stage_ns.get(ref)
-    if ref_n is None:
-        available = "、".join(list(stage_ns)[:6]) or "（无 stage 行）"
-        report.error("V-06", where, "note 指向已存在的 stage", ref,
-                     f"note 指向的 stage「{ref}」不在 sample_flow 里；可用：{available}")
-        return
+    if chain:
+        ref_n = stage_ns.get((chain, ref))
+        if ref_n is None:
+            available = "、".join(name for c, name in stage_ns if c == chain)[:200]
+            report.error("V-06", where, f"funnel={chain} 里的 stage", ref,
+                         f"note 指向的 stage「{ref}」不在 funnel={chain} 里；"
+                         f"可用：{available or '（无）'}")
+            return
+    else:
+        owners = [c for c, name in stage_ns if name == ref]
+        if not owners:
+            available = "、".join(
+                list(dict.fromkeys(name for _c, name in stage_ns))[:6]) or "（无 stage 行）"
+            report.error("V-06", where, "note 指向已存在的 stage", ref,
+                         f"note 指向的 stage「{ref}」不在 sample_flow 里；可用：{available}")
+            return
+        if len(owners) > 1:
+            report.error("V-06", where, "note 里写 funnel=<漏斗名>", ref,
+                         f"stage「{ref}」出现在多条漏斗（{'、'.join(owners)}）；"
+                         "model 行的 note 需要用分号写 funnel=漏斗名 指明是哪一条")
+            return
+        ref_n = stage_ns[(owners[0], ref)]
     if n > ref_n:
         report.error("V-06", where, ref_n, n,
                      f"模型行「{stage}」n={n} 大于其来源 stage「{ref}」n={ref_n}；"

@@ -345,27 +345,30 @@ def encode_binary(series: pd.Series, mapping: dict | None = None):
         return None, {}
 
     if mapping:
-        table: dict[str, int] = {}
+        table: dict[str, int | None] = {}
         for key, value in mapping.items():
+            if value is None:
+                # JSON null declares the label itself missing ("不适用"):
+                # it must map to NaN, not crash the run or fabricate a code.
+                table[str(key).strip()] = None
+                continue
             try:
                 number = float(value)
                 if number not in (0.0, 1.0):
                     return None, {}
-                code = int(number)
             except (TypeError, ValueError):
                 return None, {}
-            if code not in (0, 1):
-                return None, {}
-            table[str(key).strip()] = code
-        if not table:
+            table[str(key).strip()] = int(number)
+        if not any(code is not None for code in table.values()):
             return None, {}
         as_str = s.astype(str).str.strip()
+        # Every observed level must be declared: coded 0/1, or null=missing.
+        if not set(as_str[s.notna()]) <= set(table):
+            return None, {}
         mapped = as_str.map(table)
         # Preserve missing values instead of turning them into NaN by design.
         mapped[s.isna()] = np.nan
-        if mapped.notna().sum() == s.notna().sum():
-            return mapped.astype(float), table
-        return None, {}
+        return mapped.astype(float), {k: v for k, v in table.items() if v is not None}
 
     numeric = pd.to_numeric(s, errors="coerce")
     if numeric.notna().sum() == s.notna().sum():
@@ -489,9 +492,39 @@ def outcome_kind(
 
     levels = int(series.nunique(dropna=True))
     if mapping:
+        keys = {str(key).strip() for key in mapping}
+        observed = sorted({str(value).strip() for value in series.dropna()})
+        uncovered = [value for value in observed if value not in keys]
+        if uncovered:
+            return "unsupported", series, {}, (
+                "outcome_map did not declare every non-missing value; "
+                f"uncovered: {uncovered}"
+            )
+        invalid = []
+        coded = False
+        for key, value in mapping.items():
+            if value is None:
+                continue
+            try:
+                valid = float(value) in (0.0, 1.0)
+            except (TypeError, ValueError):
+                valid = False
+            if valid:
+                coded = True
+            else:
+                invalid.append(f"{key}={value!r}")
+        if invalid:
+            return "unsupported", series, {}, (
+                "outcome_map codes must be 0, 1, or null (declared missing); "
+                f"invalid entries: {invalid}"
+            )
+        if not coded:
+            return "unsupported", series, {}, (
+                "outcome_map declares no 0/1 code - null only marks a label "
+                "missing; at least one entry must code 0 or 1"
+            )
         return "unsupported", series, {}, (
-            "outcome_map did not cover every non-missing value with a 0/1 "
-            f"code; values seen: {sorted(map(str, series.dropna().unique()))}"
+            "outcome_map did not produce a binary encoding"
         )
     if levels == 2:
         return "unsupported", series, {}, (

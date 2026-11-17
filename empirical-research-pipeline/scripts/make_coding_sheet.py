@@ -4,13 +4,11 @@
 
 This script does NOT assign final codes. It produces one JSONL record per
 document with the extracted text, basic metadata, and keyword-hit sentences so a
-human or an LLM can code against the codebook with traceable evidence.
-
-Profiles:
-  generic (default) — any text-bearing material: PDF, DOCX, ODT, PPTX, HTML,
-                      TXT/MD/RTF and similar. No legal fields are assumed.
-  legal             — additionally extract court, docket number, province and
-                      case-type candidates from Chinese judgment-style text.
+human or an LLM can code against the codebook with traceable evidence. Every
+text-bearing material is read the same generic way: PDF, DOCX, ODT, PPTX,
+HTML, TXT/MD/RTF and similar. No genre gets special fields or special
+segmentation; structured fields come from a project-authored --extract profile
+only, never from this script.
 
 Tabular files (CSV/TSV/JSON/XLSX) are skipped here; use auto_stats.py /
 csv_to_spss_syntax.py for those. Images and audio/video must be OCR'd or
@@ -23,8 +21,7 @@ passed.
 
 Usage:
     python make_coding_sheet.py --root "资料目录" --out "output/coding" \\
-        --keywords assets/coding-keywords.json
-    python make_coding_sheet.py --root "裁判文书目录" --out "output/coding" --profile legal
+        --keywords my-keywords.json --extract draft/fields.json
 """
 from __future__ import annotations
 
@@ -44,40 +41,11 @@ from check_decisions import (
 )
 
 # Stamped into run.json so an output directory names the code that built it.
-SCRIPT_VERSION = "2.0.0"
+SCRIPT_VERSION = "2.1.0"
 
-# Docket number: (year) + optional court/region code + case type + number.
-# Covers 刑初/刑终/刑再/刑更/刑他/刑申/民初/民终/民再/民特/民辖/行初/行终/知行/
-# 执/执异/破申/诉前调, the optional 字第 form, and the 之一 suffix.
-CASE_NO_RE = re.compile(
-    r"[（(]\s*(?:19|20)\d{2}\s*[）)]\s*"
-    r"[\u4e00-\u9fa5A-Za-z0-9*＊×\s]{0,30}?"
-    r"(?:刑初|刑终|刑再|刑更|刑他|刑申|民初|民终|民再|民特|民辖终|民辖|民申"
-    r"|行初|行终|知行|执异|执|破申|诉前调)"
-    r"\s*(?:字第)?\s*\d+\s*号"
-    r"(?:之[一二三四五六七八九十]+)?"
-)
 # A year must stand alone: 1990 inside an ID number or 2020 inside an amount
 # must not be read as a year.
 YEAR_RE = re.compile(r"(?<!\d)(19[4-9]\d|20\d{2})(?!\d)")
-# Court names end in 人民法院. The leading junk ("不服", "该案经", ...) is
-# stripped afterwards, so the pattern can start anywhere in a Chinese run.
-COURT_RE = re.compile(r"([\u4e00-\u9fa5]{2,60}?人民法院)")
-REDACT_RE = re.compile(r"[*＊×]{2,}")
-PROVINCE_RE = re.compile(r"^([\u4e00-\u9fa5]{2,12}?(?:省|市|自治区|特别行政区))")
-PROVINCE_SHORT = {
-    "北京", "天津", "上海", "重庆", "河北", "山西", "辽宁", "吉林", "黑龙江",
-    "江苏", "浙江", "安徽", "福建", "江西", "山东", "河南", "湖北", "湖南",
-    "广东", "海南", "四川", "贵州", "云南", "陕西", "甘肃", "青海", "台湾",
-    "内蒙古", "广西", "西藏", "宁夏", "新疆", "香港", "澳门",
-}
-PROVINCE_FULL_TO_SHORT = {
-    "北京市": "北京", "天津市": "天津", "上海市": "上海", "重庆市": "重庆",
-    "内蒙古自治区": "内蒙古", "广西壮族自治区": "广西", "西藏自治区": "西藏",
-    "宁夏回族自治区": "宁夏", "新疆维吾尔自治区": "新疆",
-    "香港特别行政区": "香港", "澳门特别行政区": "澳门",
-}
-OWN_CASE_RE = re.compile(r"(?:本院|我院|本案)[^\n。]{0,40}?" + CASE_NO_RE.pattern)
 # Sentences are split after Chinese and ASCII sentence punctuation, and also
 # after the enumerating comma/dunhao so one clause cannot hide a negation.
 SENT_SPLIT_RE = re.compile(r"(?<=[。；;！？!?、，,])|(?<=[.!?])\s+|\n+")
@@ -93,21 +61,8 @@ except Exception:                                     # pragma: no cover
     def _evidence_line(name, snippet, span):
         return f"{name}={snippet}@{int(span[0])}-{int(span[1])}"
 
-# Words that may precede a court name in running text. Only stripped when the
-# remainder still looks like a court name (see _court_ok), so 本溪市 is safe.
-COURT_JUNK_PREFIXES = tuple(sorted((
-    "不服", "该案经", "本案经", "本院", "该院", "原审", "一审", "二审", "再审",
-    "认为", "判决", "裁定", "查明", "认定", "审理", "依照", "根据", "以及",
-    "经", "由", "向", "在", "与", "和", "对", "据", "了", "的", "是", "称",
-    "见", "及", "或", "其", "此", "我", "你", "他", "本",
-), key=len, reverse=True))
-BAD_COURT = {
-    "原审法院", "一审法院", "二审法院", "再审法院", "本院", "该院",
-    "法院", "人民法院", "上级法院", "下级法院",
-}
+# Key columns used to align audit/dedupe/keyword rows with extracted documents.
 KEY_COLUMNS = ("rel_path", "relpath", "file", "path", "doc_id", "id")
-DEFAULT_KEYWORDS_PATH = os.path.normpath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "assets", "coding-keywords.json"))
 
 
 def _push_span(text: str, start: int, end: int, spans: list) -> None:
@@ -144,59 +99,6 @@ def sentences(text: str, with_offsets: bool = False):
     return [re.sub(r"\s+", " ", part).strip() for part, _s, _e in spans if part.strip()]
 
 
-def detect_doc_type(text: str, name: str = "", with_source: bool = False):
-    """Legal profile: classify by title/filename, then dispositive language.
-
-    The dispositive check looks at the END of the document: a ruling quotes the
-    original "判决如下" in its body, so only the closing language decides.
-    """
-    head = (text or "")[:150]
-    tail = (text or "")[-1500:]
-
-    def result(doc_type: str, source: str):
-        return (doc_type, source) if with_source else doc_type
-
-    for marker, doc_type in (
-        ("调解协议", "mediation"),
-        ("调解书", "mediation"),
-        ("判决书", "judgment"),
-        ("裁定书", "ruling"),
-        ("决定书", "decision"),
-    ):
-        if marker in name:
-            return result(doc_type, "filename")
-        if marker in head:
-            return result(doc_type, "title")
-    if "裁定如下" in tail:
-        return result("ruling", "body")
-    if "判决如下" in tail:
-        return result("judgment", "body")
-    if "调解" in name or "调解协议" in text:
-        return result("mediation", "body")
-    if "刑事" in name and ("一审" in name or "二审" in name or "判决" in name):
-        return result("judgment", "filename")
-    return result("other", "fallback")
-
-
-def find_case_no(text: str, name: str = "", with_source: bool = False):
-    """Return the docket number (and its source when asked)."""
-    def result(value: str, source: str):
-        return (value, source) if with_source else value
-
-    match = CASE_NO_RE.search(name or "")
-    if match:
-        return result(match.group(0).strip(), "filename")
-    own = OWN_CASE_RE.search((text or "")[:1200])
-    if own:
-        found = CASE_NO_RE.search(own.group(0))
-        if found:
-            return result(found.group(0).strip(), "body")
-    match = CASE_NO_RE.search((text or "")[:1200]) or CASE_NO_RE.search(text or "")
-    if match:
-        return result(match.group(0).strip(), "body")
-    return result("", "")
-
-
 def find_year(*sources: tuple[str, str]) -> tuple[int | None, str]:
     """Return (year, source label) for the first plausible year in 1949..now."""
     current = date.today().year
@@ -210,105 +112,8 @@ def find_year(*sources: tuple[str, str]) -> tuple[int | None, str]:
     return None, ""
 
 
-def normalize_province(value: str) -> str:
-    """Normalize a place name to a province short name, or "" when unsure.
-
-    A city name such as 广州市 must NOT become 广州: only the province
-    whitelist is accepted, so a city never masquerades as a province.
-    """
-    value = (value or "").strip()
-    if value in PROVINCE_SHORT:
-        return value
-    if value in PROVINCE_FULL_TO_SHORT:
-        return PROVINCE_FULL_TO_SHORT[value]
-    match = PROVINCE_RE.match(value)
-    if not match:
-        return ""
-    candidate = PROVINCE_FULL_TO_SHORT.get(match.group(1), match.group(1).rstrip("省市"))
-    return candidate if candidate in PROVINCE_SHORT else ""
-
-
-def infer_province_with_source(parts: list[str], court: str, name: str) -> tuple[str, str]:
-    for part in parts:
-        if part == name:
-            continue
-        found = normalize_province(part)
-        if found:
-            return found, "path"
-    found = normalize_province(court)
-    if found:
-        return found, "court"
-    found = normalize_province(name)
-    if found:
-        return found, "filename"
-    return "", ""
-
-
-def infer_province(parts: list[str], court: str, name: str) -> str:
-    return infer_province_with_source(parts, court, name)[0]
-
-
-def _court_ok(value: str) -> bool:
-    if not value or value in BAD_COURT:
-        return False
-    if value == "最高人民法院":
-        return True
-    match = re.search(r"(?:省|市|自治区|自治州|区|县)", value)
-    if not match:
-        return False
-    head = value[:match.start()]
-    return 2 <= len(head) <= 8
-
-
-def _strip_court_junk(value: str) -> str:
-    value = (value or "").strip()
-    for _ in range(6):
-        if _court_ok(value):
-            return value
-        for prefix in COURT_JUNK_PREFIXES:
-            if value.startswith(prefix) and len(value) > len(prefix):
-                candidate = value[len(prefix):]
-                if _court_ok(candidate):
-                    value = candidate
-                    break
-        else:
-            return ""
-    return value if _court_ok(value) else ""
-
-
-def _extract_court(raw: str) -> str:
-    raw = (raw or "").strip()
-    if not raw:
-        return ""
-    starts = sorted(
-        (raw.find(name), name) for name in PROVINCE_SHORT if 0 <= raw.find(name) <= 20
-    )
-    for position, _name in starts:
-        found = _strip_court_junk(raw[position:])
-        if found:
-            return found
-    return _strip_court_junk(raw)
-
-
-def find_court(name: str, text: str) -> tuple[str, str]:
-    """Return (court, source). A redacted name yields "" with source=redacted."""
-    sources = (("filename", name or ""), ("body", (text or "")[:5000]))
-    redacted = bool(REDACT_RE.search(name or "")) or bool(REDACT_RE.search((text or "")[:5000]))
-    for label, source in sources:
-        if not source:
-            continue
-        masked = REDACT_RE.sub("\x00", source)
-        for match in COURT_RE.finditer(masked):
-            court = _extract_court(match.group(1))
-            if court:
-                return court, label
-    if redacted:
-        return "", "redacted"
-    return "", ""
-
-
 def detect_categories(text: str, name: str, category_map: dict) -> list[str]:
-    """Filename hits win; 案由 hits are added, text hits are only a fallback."""
+    """Filename hits first, then full-text hits; both are only candidates."""
     def hits_in(source: str):
         found = []
         for canon, variants in (category_map or {}).items():
@@ -323,12 +128,7 @@ def detect_categories(text: str, name: str, category_map: dict) -> list[str]:
         found.sort(key=lambda x: x[0])
         return [canon for _, canon in found]
 
-    charge = re.search(r"案\s*由[：:]\s*([^\n]{0,200})", (text or "")[:2000])
-    hits = hits_in(name or "")
-    if charge:
-        hits = hits + hits_in(charge.group(1))
-    elif not hits:
-        hits = hits_in(text or "")
+    hits = hits_in(name or "") or hits_in(text or "")
     seen, out = set(), []
     for canon in hits:
         if canon not in seen:
@@ -338,21 +138,11 @@ def detect_categories(text: str, name: str, category_map: dict) -> list[str]:
 
 
 def category_map_from(keywords: dict) -> dict:
-    for key in ("category", "crime", "categories"):
+    for key in ("category", "categories"):
         value = keywords.get(key)
         if isinstance(value, dict):
             return value
     return {}
-
-
-def load_default_category_map() -> dict:
-    """Load the bundled coding keywords (used when --keywords is not given)."""
-    try:
-        with open(DEFAULT_KEYWORDS_PATH, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return {}
-    return category_map_from(data) if isinstance(data, dict) else {}
 
 
 def _clip(text: str, max_chars: int) -> tuple[str, bool]:
@@ -517,22 +307,22 @@ def read_valid_paths(audit: str | None,
 
 
 def first_title(text: str, name: str) -> str:
-    """Pick a title line: a document-type line first, never the court header."""
-    lines = []
+    """First meaningful line of the document; no genre word list picks titles."""
     for line in (text or "").splitlines():
         line = re.sub(r"\s+", " ", line).strip()
         if len(line) >= 2:
-            lines.append(line)
-        if len(lines) >= 12:
-            break
-    for line in lines:
-        if re.search(r"(判决书|裁定书|调解书|决定书|调解协议)$", line):
             return line[:120]
-    for line in lines:
-        if re.search(r"(人民法院|人民检察院)$", line):
-            continue
-        return line[:120]
     return os.path.splitext(name)[0][:120]
+
+
+def _strip_extended_prefix(path: str) -> str:
+    # os.path.realpath keeps a \\?\ prefix when the input has one, which makes
+    # commonpath() see a different drive and skips the containment check.
+    if path.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path[len("\\\\?\\UNC\\"):]
+    if path.startswith("\\\\?\\"):
+        return path[len("\\\\?\\"):]
+    return path
 
 
 def main() -> int:
@@ -545,12 +335,6 @@ def main() -> int:
                              "(corpus_audit.csv is its legacy alias); rows with "
                              "status=valid are kept, the rest are reported as excluded")
     parser.add_argument("--dedupe-plan", default=None, help="dedupe_plan.csv (skip move/copy rows)")
-    parser.add_argument("--profile", choices=["generic", "legal"], default="generic",
-                        help="generic = any text material; legal = also extract court/docket fields")
-    parser.add_argument("--doc-type", action="append", default=None,
-                        choices=["judgment", "ruling", "mediation", "decision", "other", "all"],
-                        help="legal profile only: keep only these document types "
-                             "(repeatable; 'all' = no filter)")
     parser.add_argument("--ext", action="append", default=None,
                         help="extension(s) to extract; default: all document-like text types")
     parser.add_argument("--min-chars", type=int, default=100)
@@ -611,14 +395,6 @@ def main() -> int:
             return 2
         keywords.pop("_note", None)
     cat_map = category_map_from(keywords)
-    if args.profile == "legal" and not cat_map:
-        cat_map = load_default_category_map()
-        if cat_map:
-            print(f"note: --profile legal loaded the SHIPPED EXAMPLE keyword "
-                  f"dictionary ({DEFAULT_KEYWORDS_PATH}).  Its categories are "
-                  f"placeholders (示例类别A/B) and do not describe your material; "
-                  f"pass --keywords with your own dictionary for real coding.",
-                  file=sys.stderr)
     try:
         keep_paths, removed_paths, listed_paths = read_valid_paths(
             args.audit, args.dedupe_plan)
@@ -631,6 +407,24 @@ def main() -> int:
     if args.extract:
         if not os.path.isfile(args.extract):
             print(f"ERROR: --extract profile not found: {args.extract}", file=sys.stderr)
+            return 2
+        shipped_profiles = _strip_extended_prefix(os.path.realpath(os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "profiles")))
+        target_profile = _strip_extended_prefix(
+            os.path.realpath(os.path.abspath(args.extract)))
+        try:
+            inside_shipped = os.path.commonpath(
+                [shipped_profiles, target_profile]) == shipped_profiles
+        except ValueError:
+            inside_shipped = False
+        if inside_shipped:
+            print("ERROR: --extract refuses profiles shipped with the skill: "
+                  f"{args.extract}. Shipped profiles are field-shape examples, "
+                  "not extraction rules for this corpus. Read your samples, "
+                  "write the segmentation into draft/fields.json (copy a "
+                  "shipped profile there first if the shapes help), and pass "
+                  "that file instead. See SKILL.md section 2.2.",
+                  file=sys.stderr)
             return 2
         try:
             from extract_lib import (ProfileError, apply_profile, evidence_line,
@@ -785,31 +579,12 @@ def main() -> int:
                          skip_stage="min_chars", file_kind=kind)
                     continue
 
-                if args.profile == "legal":
-                    doc_type, doc_type_src = detect_doc_type(text, name, with_source=True)
-                    wanted = {value for value in (args.doc_type or []) if value != "all"}
-                    if wanted and doc_type not in wanted:
-                        skip(rel, name, doc_type, chars,
-                             f"document type '{doc_type}' not in --doc-type "
-                             f"{sorted(wanted)}",
-                             detail=f"doc_type={doc_type}", skip_stage="doc_type")
-                        continue
-                    parts = rel.split("/")[:-1]
-                    court, court_src = find_court(name, text)
-                    province, province_src = infer_province_with_source(parts, court, name)
-                    case_no, case_no_src = find_case_no(text, name, with_source=True)
-                    year, year_src = find_year(
-                        ("case_no", case_no), ("filename", name), ("body", text[:800])
-                    )
-                else:
-                    # `doc_type` is a document kind, not a file format: writing
-                    # "pdf" here made every downstream group-by useless and was
-                    # indistinguishable from a real classification.
-                    doc_type = "document"
-                    doc_type_src = "default"
-                    court = court_src = province = province_src = ""
-                    case_no = case_no_src = ""
-                    year, year_src = find_year(("filename", name), ("body", text[:800]))
+                # `doc_type` is a document kind, not a file format: writing
+                # "pdf" here made every downstream group-by useless and was
+                # indistinguishable from a real classification.
+                doc_type = "document"
+                doc_type_src = "default"
+                year, year_src = find_year(("filename", name), ("body", text[:800]))
 
                 stats: dict = {}
                 signals = find_signals(text, keywords, stats=stats) if keywords else {}
@@ -827,7 +602,6 @@ def main() -> int:
                     for category, hits in signals.items()
                 }
                 rec = {
-                    "profile": args.profile,
                     "file": name,
                     "relpath": rel,
                     "rel_path": rel,
@@ -837,18 +611,11 @@ def main() -> int:
                     "doc_type": doc_type,
                     "doc_type_src": doc_type_src,
                     "title": title,
-                    "province": province,
-                    "province_src": province_src,
                     "year": year,
                     "year_src": year_src,
-                    "case_no": case_no,
-                    "case_no_src": case_no_src,
-                    "court": court,
-                    "court_src": court_src,
                     "chars": chars,
                     "han_chars": han,
                     "category_candidates": categories,
-                    "crime_candidates": categories if args.profile == "legal" else [],
                     "text": stored_text,
                     "text_truncated": text_truncated,
                     "signals": signals,
@@ -860,15 +627,11 @@ def main() -> int:
                     "file": name, "relpath": rel, "rel_path": rel,
                     "source_type": ext or kind,
                     "doc_type": doc_type, "title": title, "year": year,
-                    "province": province, "case_no": case_no, "court": court,
                     "chars": chars, "han_chars": han,
                     "category_candidates": ",".join(categories),
-                    "crime_candidates": ",".join(categories) if args.profile == "legal" else "",
                     "signal_categories": ",".join(sorted(signals.keys())),
                     "signal_hits": sum(len(v) for v in signals.values()),
                     "year_src": year_src, "doc_type_src": doc_type_src,
-                    "case_no_src": case_no_src, "court_src": court_src,
-                    "province_src": province_src,
                 })
                 extracted += 1
                 if extract_profile is not None:
@@ -956,11 +719,9 @@ def main() -> int:
 
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as fh:
         fields = ["file", "relpath", "source_type", "doc_type", "title", "year",
-                  "province", "case_no", "court", "chars", "han_chars",
-                  "category_candidates", "crime_candidates",
+                  "chars", "han_chars", "category_candidates",
                   "signal_categories", "signal_hits", "rel_path",
-                  "year_src", "doc_type_src", "case_no_src", "court_src",
-                  "province_src"]
+                  "year_src", "doc_type_src"]
         writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
@@ -981,7 +742,7 @@ def main() -> int:
         {"stage": "有效文件", "n": effective,
          "note": "--audit status=valid and not excluded by --dedupe-plan"},
         {"stage": "通过筛选", "n": filtered,
-         "note": "after extension/format/size/--min-chars/--doc-type filters"},
+         "note": "after extension/format/size/--min-chars filters"},
         {"stage": "编码完成", "n": len(rows),
          "note": "records written to coding_sheet.jsonl"},
     ]

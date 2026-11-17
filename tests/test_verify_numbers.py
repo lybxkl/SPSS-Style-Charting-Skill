@@ -455,6 +455,71 @@ class TestSampleFlow(VerifyCase):
         for word in ("stage", "excluded", "model"):
             self.assertIn(word, detail)
 
+    # -- funnel= 分链：不同口径的人数不被迫排成一列 -----------------------
+    def test_interleaved_funnels_pass_without_a_fake_rise(self):
+        # Global order 100, 50, 80, 40 rises twice; each declared funnel only
+        # compares against itself, so different counting bases coexist.
+        flow = self.p("sample_flow.csv")
+        write_csv(flow, ["stage", "n", "kind", "note"],
+                  [["线上发放", "100", "stage", "funnel=线上"],
+                   ["线下发放", "50", "stage", "funnel=线下"],
+                   ["线上回收", "80", "stage", "funnel=线上"],
+                   ["线下回收", "40", "stage", "funnel=线下"]])
+        proc = self.verify("--sample-flow", flow, "--check", "flow")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(self.issues(), [])
+
+    def test_within_one_funnel_a_rise_is_still_an_error(self):
+        flow = self.p("sample_flow.csv")
+        write_csv(flow, ["stage", "n", "kind", "note"],
+                  [["干预组", "60", "stage", "funnel=干预"],
+                   ["干预组完成", "70", "stage", "funnel=干预"]])
+        proc = self.verify("--sample-flow", flow, "--check", "flow")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("70", self.issues()[0]["detail"])
+
+    def test_excluded_rows_track_their_own_funnel(self):
+        flow = self.p("sample_flow.csv")
+        write_csv(flow, ["stage", "n", "kind", "note"],
+                  [["线上", "100", "stage", "funnel=线上"],
+                   ["线下", "50", "stage", "funnel=线下"],
+                   ["线上乱码", "90", "excluded", "funnel=线上"],
+                   ["线下乱码", "10", "excluded", "funnel=线下"]])
+        proc = self.verify("--sample-flow", flow, "--check", "flow")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(self.issues(), [])
+
+    def test_model_row_disambiguates_same_named_stage_by_funnel(self):
+        flow = self.p("sample_flow.csv")
+        write_csv(flow, ["stage", "n", "kind", "note"],
+                  [["分析样本", "80", "stage", "funnel=线上"],
+                   ["分析样本", "50", "stage", "funnel=线下"],
+                   ["模型1", "40", "model", "stage=分析样本；funnel=线下"]])
+        proc = self.verify("--sample-flow", flow, "--check", "flow")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertEqual(self.issues(), [])
+
+    def test_model_row_with_ambiguous_stage_requires_funnel(self):
+        flow = self.p("sample_flow.csv")
+        write_csv(flow, ["stage", "n", "kind", "note"],
+                  [["分析样本", "80", "stage", "funnel=线上"],
+                   ["分析样本", "50", "stage", "funnel=线下"],
+                   ["模型1", "40", "model", "stage=分析样本"]])
+        proc = self.verify("--sample-flow", flow, "--check", "flow")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("funnel", self.issues()[0]["detail"])
+
+    def test_model_row_funnel_must_not_fall_back_to_the_default_chain(self):
+        # stage=分析样本 exists, but only on the default chain: funnel=线上
+        # must fail loudly instead of silently matching the other chain.
+        flow = self.p("sample_flow.csv")
+        write_csv(flow, ["stage", "n", "kind", "note"],
+                  [["分析样本", "80", "stage", ""],
+                   ["模型1", "40", "model", "stage=分析样本；funnel=线上"]])
+        proc = self.verify("--sample-flow", flow, "--check", "flow")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("不在 funnel=线上", self.issues()[0]["detail"])
+
 
 class TestContract(VerifyCase):
     """输入/输出契约与退出码."""

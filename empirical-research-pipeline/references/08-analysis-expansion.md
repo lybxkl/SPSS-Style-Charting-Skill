@@ -78,7 +78,7 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - [ ] 异常值：连续变量箱线/散点；是否截断/缩尾。
 - [ ] 重复：MD5/稳定标识；重复率与去重后 N。
 - [ ] 年份/地区/类别覆盖：是否存在空档、极端集中。
-- [ ] 编码一致性：κ/一致率；分歧案例。
+- [ ] 编码一致性：`compute_kappa.py` 的 κ/一致率；分歧案例（disagreements.csv）。
 
 ## 2. 描述统计
 

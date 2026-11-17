@@ -19,7 +19,7 @@
     {
       "id": 4,
       "prompt": "我有一批访谈转写稿和网页资料，想编码三个变量：是否提到某类经历、涉及金额、是否形成明确决定。能不能用你这套流程？",
-      "expected_output": "可以。默认 generic profile 从 PDF/Word/TXT/HTML 等抽取全文和关键词证据句；先定分析单位与样本口径，再写 codebook、保存证据句、做信度检验，最后进入 CSV/SPSS/图表/QA 流程。"
+      "expected_output": "可以。make_coding_sheet.py 对任何文体一视同仁，不内置读法：先审读材料，再让模型读样本后自己决定切段起点与字段，写进项目自己的剖面（--extract draft/fields.json；示例剖面只是字段形状模板）。然后定分析单位与样本口径，写 codebook、保存证据句，双人编码用 compute_kappa.py 做信度检验，最后进入 CSV/SPSS/图表/QA 流程。"
     },
     {
       "id": 5,

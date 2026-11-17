@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-11-18 批次1：数据清洗引擎与全量报表（提交 182194a 之上）
+
+- 新增 `scripts/clean_data.py`：配方驱动清洗——七种步骤（去重/值映射/类型转换/越界标记/缺行剔除/重命名/弃列）全部执行项目自写的 `draft/cleaning.json`，不做任何未声明清洗；`max_drop_fraction` 必填护栏、`id_columns` 每步后与结束时查唯一、空串恒缺失（na_values 只追加）；`cleaning_log.jsonl` 记录行数入出/改格数/丢行 id 样本/sha_in→sha_out 内容指纹链，同一数据集+同一配方重放逐位相同；`--flow-out` 把清洗行幂等并入 sample_flow.csv（认 kind 列变体、gb18030/big5 解码）。
+- 新增 `scripts/report_tables.py`：全量数据报表——变量档案/描述统计（SPSS 式 G1/G2）/频率表（缺失记(缺失)、基数上限可跳过并写明原因）/交叉表/缺失两表/重复表（含 id_missing 行）/缺失来源四列/`data_report.md`；`report_index.json` 用 sha256 把每张表锚定数据集字节并上溯清洗链；清洗结束行数与数据集行数不符时写陈旧警告。
+- 新增 `analysis_utils.validate_csv_shape`/`validate_csv_header`：stdlib 逐行字段数与表头名校验，拒绝 pandas 静默吸收/补齐/改名的行（含溢出成 inf 的值与 `1_000` 字面分隔符拒收）；两个 CLI 读表前必调。
+- workflow.json dataset 阶段挂两步（clean_data 带 --flow-out、report_tables 带 cleaning-log/missing-reasons）+ manualInstructions 重写；rerunRules 补 output/dataset/、output/cleaning/、draft/cleaning.json 规则；SKILL.md 与 references/03「数据清洗与全量报表」节同口径；evals id19/20 基准。
+- 经五轮独立审计（行为正确性、代码级复检、端到端实跑、细节专项、修复复核）：第一轮 F1-F14/S1-S5、第二轮 N1-N11/G1-G11 全部修复（含台账 header 列快照、manifest 过期致 gate 层 33 例假失败两个真缺陷）；第三轮端到端通过（指纹链逐环咬合、26 组负路径探针零失守、无判断权残留）；第四轮 18 项细节（输出路径守卫、死键拒绝、generated_at 时间戳约定、md 单元格转义等）全部修复；新增 90 个回归用例。
+- `tools/build_gate_contract.py` 把 evals/ 纳入 manifest 扫描（成员 100）；package-manifest/catalog/policy 由该工具统一重建。
+
+## 2026-11-18 批次0：判断权收口（提交 182194a）
+
+- 删除 CLI 特权档与领域默认：`make_coding_sheet.py` 移除 `--profile/--doc-type` 读者、裁判文书嗅探（法院正则/省份表/案由词典）与 court/case_no/province 输出列；包内 profiles/ 作为 `--extract` 输入被拒绝（realpath+扩展前缀防御，指向 draft/）；词表与 evals 基准同步中性化；`suggest_profiles.py` 改为无条件提示「示例剖面只是字段形状模板」。
+- 新增 `scripts/compute_kappa.py`：双人编码信度（Cohen's κ，KEY_COLUMNS 对齐、单侧变量点名、(未编码) 约定、disagreements 与 coding-sample.md 产出）。
+- `verify_numbers.py` V-06 支持多链漏斗（funnel= 消歧、kind=excluded/model、跨链单调性）；`analysis_utils.py` 支持 outcome_map null=声明缺失并分型错误消息。
+- 独立审计 8 项发现全部修复；1037 项回归 OK；manifest 98/98。
+
 ## 2026-11-15 跨功能逻辑审计
 
 - 修复严格文本解码、重复 JSON 键、同名字段覆盖、活跃来源/恢复代次、不可变表示及逐单元覆盖；PPTX 正文/表格/备注恢复与未解视觉范围分别记录。

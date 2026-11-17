@@ -12,6 +12,8 @@ Contract notes (docs/CONTRACTS.md):
 """
 from __future__ import annotations
 
+import csv
+import io
 import re
 import sys
 
@@ -107,6 +109,90 @@ def _han_score(df: pd.DataFrame) -> float:
             if "\u4e00" <= char <= "\u9fff" and char in _COMMON_HAN:
                 common += 1
     return common / total if total else 0.0
+
+
+def validate_csv_shape(path: str, max_report: int = 10) -> list[int]:
+    """Line numbers (1-based, row start) whose field count differs from
+    the header; empty list when the shape is consistent.
+
+    pandas absorbs rows with more fields than the header by promoting the
+    extra fields to an index column, and pads shorter rows - silent
+    structural rewriting a provenance tool must refuse. This validator
+    uses the stdlib csv module over the same encoding candidates as
+    read_csv_auto (utf-8-sig first because it is self-validating), so a
+    mismatched row is refused, not absorbed; whitespace-only rows are
+    treated as data and refused too (stricter than pandas, on purpose).
+    Unclosed quotes are NOT detected here - pandas itself refuses those
+    at read time. A -1 sentinel in the result means more offenders exist
+    beyond the first max_report. Raises ValueError when no candidate
+    encoding decodes the file at all.
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    text = None
+    for encoding in CSV_ENCODINGS:
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise ValueError(f"{path}: not decodable as utf-8/gb18030/big5")
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header = next(reader, None)
+    if header is None:
+        return []
+    offenders: list[int] = []
+    while True:
+        start_line = reader.line_num
+        try:
+            row = next(reader)
+        except StopIteration:
+            break
+        if not row:
+            continue                      # blank line, not a data row
+        if len(row) != len(header):
+            if len(offenders) < max_report:
+                offenders.append(start_line + 1)
+            elif len(offenders) == max_report:
+                offenders.append(-1)      # more exist; caller reports "+"
+    return offenders
+
+
+def validate_csv_header(path: str) -> list[str]:
+    """Problems with the header row: duplicate names, empty names.
+
+    pandas renames duplicate headers (id -> id.1) and invents 'Unnamed: N'
+    for empty ones before any caller can see them, so the raw header is
+    re-read with the stdlib csv module over the same encoding candidates
+    as read_csv_auto. Returns a list of problem descriptions; an empty
+    list means the header is usable verbatim. Raises ValueError when no
+    candidate encoding decodes the file.
+    """
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    text = None
+    for encoding in CSV_ENCODINGS:
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise ValueError(f"{path}: not decodable as utf-8/gb18030/big5")
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header = next(reader, None)
+    if header is None:
+        return []
+    problems: list[str] = []
+    seen: set[str] = set()
+    for index, name in enumerate(header, start=1):
+        if not name:
+            problems.append(f"empty header name at position {index}")
+        elif name in seen:
+            problems.append(f"duplicate header name: {name}")
+        seen.add(name)
+    return problems
 
 
 def read_csv_auto(path: str, **kwargs):

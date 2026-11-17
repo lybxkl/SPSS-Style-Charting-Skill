@@ -349,6 +349,10 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 每个数据集写明单位、主键和 codebook。长表/面板用复合键，网络/矩阵等保留原生文件并提供无损审计视图。逐格 provenance 和全格复核记录只在归档档建立，契约见 references/12。可投稿档把分析表登记进 `research_registry.json` 后即可进入统计。
 
+**清洗：先声明，后执行**。要清洗就先写 `draft/cleaning.json`（`python scripts/clean_data.py --emit-template draft/cleaning.json` 起步）：去重键、值映射、类型转换、越界范围、缺行规则全部由你读过样本后声明；引擎只执行声明过的步骤，不做任何未声明的清洗。每一步记进 `cleaning_log.jsonl`（行数入出、改格数、丢行 id 样本、内容指纹链），同一数据集+同一配方重跑即得同一指纹链——复核靠重放，不靠信任。`max_drop_fraction` 必填：累计丢行超限立即中止；`id_columns` 声明后在每步之后与结束时必须唯一（初始重复 id 只能靠去重步消除）。`steps` 留空 = 不执行任何步骤（`na_values` 词汇表仍生效）。产出 `output/cleaning/clean_dataset.csv`，行数用 `--flow-out output/coding/sample_flow.csv` 自动并入（有 `kind` 列时清洗行补 `kind=stage`，重跑替换上一轮清洗行），不要手抄。
+
+**全量数据报表**：分析表建好后、登记 `research_registry.json` 之前先跑 `python scripts/report_tables.py --dataset output/dataset/analysis.csv --out output/reports`（`--id`/`--outcome` 声明角色列，`--crosstab "A,B"` 指定交叉对，`--cleaning-log`/`--missing-reasons` 接清洗链与缺失来源），一次性产出：变量清单（`variable_report.csv`）、描述统计（`descriptive_stats.csv`）、频率表（`frequency_tables.csv`）、交叉表（`crosstabs.csv`）、缺失（`missing_report.csv`/`missing_patterns.csv`）、重复（`duplicate_report.csv`）、可读的 `data_report.md`，以及 `report_index.json`——它用 sha256 把每张表锚定到数据集字节（有清洗链时再上溯到原始数据集）。报表的 N 与后续文稿数字用 verify_numbers 对表，不手抄。协议细节见 references/03-analysis-spss.md 的「数据清洗与全量报表」节。
+
 主键与标记列（`references/10-contracts.md` §1、§5）：
 
 | 列 | 含义 | 谁产生 |
@@ -635,6 +639,8 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
 | `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句（对任何文体读法一致，不内置领域字段）；`--extract profile.json` 走字段抽取层（只接受项目剖面，拒绝包内示例），产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
 | `scripts/compute_kappa.py` | 两轮独立编码对齐：按文档+字段算每变量一致率与 Cohen's κ，逐条分歧带双方证据行，生成 `kappa_report.csv`/`disagreements.csv`/`coding-sample.md` |
+| `scripts/clean_data.py` | 按项目配方（draft/cleaning.json）执行清洗：去重/值映射/类型转换/越界标记/缺行剔除，逐步写台账（cleaning_log.jsonl 指纹链）与 flow.csv；未声明的清洗一律拒绝，max_drop_fraction 超限中止，`--emit-template` 起步 |
+| `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source） |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |
 | `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |

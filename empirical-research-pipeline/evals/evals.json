@@ -90,6 +90,16 @@
       "id": 18,
       "prompt": "我修改了一格数据后能沿用旧的已复核记录与图表吗？",
       "expected_output": "不能。输入、codebook、证据、适配器等哈希和复核签名绑定版本；重新 prepare、实际复核并 final。任意模型执行前重验 final；旧代码/数据/输出回执、模型样本与图表指纹不能复用，重建受影响产物。"
+    },
+    {
+      "id": 19,
+      "prompt": "编码表抽出来的 dataset.csv 混乱：有整行重复、城市名有空格、“不详”当年龄、年龄有 200 这种填错、结果列有缺失。帮我清洗一下，随便怎么弄都行，弄干净点。",
+      "expected_output": "不能“随便弄”。清洗是研究判断：先让模型读过样本后写 draft/cleaning.json（clean_data.py --emit-template 起步），逐项声明去重键、值映射、类型转换、越界范围与缺行规则；引擎只执行声明并留 cleaning_log.jsonl 指纹链，max_drop_fraction 必填防手滑，未声明的清洗一律拒绝（unmapped=error 时表外值直接中止）。行数进 flow.csv 并入 sample_flow；清洗靠重放复核，不靠信任。"
+    },
+    {
+      "id": 20,
+      "prompt": "分析表建好了。我要一份完整的数据报表：每个变量什么情况、描述统计、频率、缺失、重复都要有，而且之后正文里每个数字我要能查到出处。",
+      "expected_output": "跑 report_tables.py --dataset analysis.csv：variable_report（角色/类型/n/缺失/唯一值）、descriptive_stats（SPSS 式调整统计量，n 不足留空）、frequency_tables（缺失记 (缺失)，分母=全部行）、crosstabs（声明的列对，非 categorical 跳过并写明原因）、missing_report/missing_patterns、duplicate_report、data_report.md 可读总表；report_index.json 用 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source）。正文数字用 verify_numbers 对表，不手抄。"
     }
   ]
 }

@@ -284,9 +284,64 @@
       "index": 4,
       "name": "数据集",
       "short": "数据集",
-      "purpose": "分析表，并在 research_registry.json 登记 id、path、key。后续统计、图表、终检和文稿读这份登记",
+      "purpose": "清洗并构建分析表，产出全量数据报表，并在 research_registry.json 登记 id、path、key。后续统计、图表、终检和文稿读这份登记",
       "script": null,
       "args": [],
+      "steps": [
+        {
+          "script": "scripts/clean_data.py",
+          "args": [
+            "--dataset",
+            "output/coding/dataset.csv",
+            "--recipe",
+            "draft/cleaning.json",
+            "--out",
+            "output/cleaning",
+            "--flow-out",
+            "output/coding/sample_flow.csv"
+          ],
+          "whenFile": "draft/cleaning.json",
+          "produces": [
+            "output/cleaning/clean_dataset.csv",
+            "output/cleaning/cleaning_log.jsonl",
+            "output/cleaning/cleaning_log.md",
+            "output/cleaning/flow.csv"
+          ],
+          "continueOnError": true
+        },
+        {
+          "script": "scripts/report_tables.py",
+          "args": [
+            "--dataset",
+            "output/dataset/analysis.csv",
+            "--out",
+            "output/reports"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--cleaning-log",
+              "file": "output/cleaning/cleaning_log.jsonl"
+            },
+            {
+              "flag": "--missing-reasons",
+              "file": "output/coding/missing_by_source.csv"
+            }
+          ],
+          "whenFile": "output/dataset/analysis.csv",
+          "produces": [
+            "output/reports/report_index.json",
+            "output/reports/variable_report.csv",
+            "output/reports/descriptive_stats.csv",
+            "output/reports/frequency_tables.csv",
+            "output/reports/crosstabs.csv",
+            "output/reports/missing_report.csv",
+            "output/reports/missing_patterns.csv",
+            "output/reports/duplicate_report.csv",
+            "output/reports/data_report.md"
+          ],
+          "continueOnError": true
+        }
+      ],
       "artifacts": [
         "output/dataset/analysis.csv"
       ],
@@ -303,8 +358,10 @@
         "dataset"
       ],
       "manualInstructions": [
-        "分析表不在时，才从 output/coding/dataset.csv 构建 output/dataset/analysis.csv：一行一个分析单位，保留 in_analysis（0/1）。",
-        "dataset.csv 和编码脚本抽出的罪名、刑期、情节等是候选值，不能直接当成已经核对的分析事实。进入分析表的语义字段要能对上 evidence.jsonl 的原文位置，或在 decisions.jsonl 里有一条判断。",
+        "分析表不在时才构建 output/dataset/analysis.csv：清洗过就从 output/cleaning/clean_dataset.csv 构建（没写 draft/cleaning.json 时才直接从 output/coding/dataset.csv）；一行一个分析单位，保留 in_analysis（0/1）。",
+        "要清洗就先写 draft/cleaning.json（用 clean_data.py --emit-template 起步）：哪些列去重、哪些值映射、哪些范围算越界，都由你读过样本后声明，引擎只执行并把每一步记进 cleaning_log.jsonl。清洗不写配方 = 不执行任何清洗步骤（na_values 词汇表仍生效）。行数用 --flow-out output/coding/sample_flow.csv 自动并入，不要手抄。",
+        "分析表建好后登记 research_registry.json 之前，先跑 report_tables.py 产出全量数据报表（output/reports/）：变量清单、描述统计、频率表、缺失、重复都在里面，report_index.json 把每张表锚到数据集字节。报表的 N 与文稿数字用 verify_numbers 对。",
+        "dataset.csv 和编码脚本抽出的字段是候选值，不能直接当成已经核对的分析事实。进入分析表的语义字段要能对上 evidence.jsonl 的原文位置，或在 decisions.jsonl 里有一条判断。",
         "分析表已经在时，写 research_registry.json：datasets 至少一条，含 id、path、key。path 指向这张表，key 是表里真实存在且不重复的列。可投稿档不填写逐格证据账。",
         "注册表 path 是后续统计、图表、终检和文稿读取的分析表。它与另一张表并存时，只留注册表指向的那一张。",
         "登记完成后调用 data_analysis_gates(action=\"inspect\")。宽表不要放进 data/，那里是语料根。派生变量写进 docs/codebook.md。"
@@ -1274,6 +1331,18 @@
       ]
     },
     {
+      "match": "exact",
+      "pattern": "draft/cleaning.json",
+      "stages": [
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
       "match": "prefix",
       "pattern": "output/datasets/",
       "stages": [
@@ -1338,6 +1407,19 @@
       "match": "prefix",
       "pattern": "output/dataset/",
       "stages": [
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "prefix",
+      "pattern": "output/cleaning/",
+      "stages": [
+        "dataset",
         "verify",
         "stats",
         "figures",

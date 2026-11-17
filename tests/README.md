@@ -39,6 +39,9 @@ python -m unittest discover -s tests -p "test_chart_pack*.py" -v
 | `test_coding_layer.py` | `make_coding_sheet.py`、`analysis_utils.py`、`csv_to_spss_syntax.py` |
 | `test_stats_charts.py` | `auto_stats.py`、`pubfig.py` |
 | `test_chart_pack.py` | `auto_chart_pack.py` |
+| `test_kappa.py` | `compute_kappa.py`（κ 数学、KEY_COLUMNS/单侧字段、coding-sample.md） |
+| `test_clean_data.py` | `clean_data.py`（配方执行、拒绝路径、台账指纹链、flow 合并） |
+| `test_report_tables.py` | `report_tables.py`（报表包、溯源锚、skipped/warnings 可见性） |
 
 ## 新增用例时
 

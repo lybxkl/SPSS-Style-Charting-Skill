@@ -10,10 +10,10 @@
       "implemented": true,
       "label": "project 阶段声明与实际输出登记",
       "migrationBatch": "W",
+      "minTier": "submission",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false,
-      "minTier": "submission"
+      "required": false
     },
     {
       "allowNa": false,
@@ -25,10 +25,10 @@
       "implemented": true,
       "label": "去重计划、排除依据和真实范围",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -40,10 +40,10 @@
       "implemented": true,
       "label": "审计样本流程完整且口径合法",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -55,10 +55,10 @@
       "implemented": true,
       "label": "文件内容与新增删除的完整集合",
       "migrationBatch": "S3",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -70,10 +70,10 @@
       "implemented": true,
       "label": "源文件哈希完整且可核",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -85,10 +85,10 @@
       "implemented": true,
       "label": "明确样本流程口径，禁止把不同类别直接比较",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -100,10 +100,10 @@
       "implemented": true,
       "label": "当前审计范围与汇总一致",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -115,10 +115,10 @@
       "implemented": true,
       "label": "解析截断和未恢复范围明确保留",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": true,
@@ -130,10 +130,10 @@
       "implemented": true,
       "label": "按当前材料形态给适用依据",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": true,
@@ -145,10 +145,10 @@
       "implemented": true,
       "label": "来源与编码引用能交叉定位",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -160,10 +160,10 @@
       "implemented": true,
       "label": "编码对象与纳入排除流一致",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -175,10 +175,10 @@
       "implemented": true,
       "label": "适用时编码表存在且非空",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -190,10 +190,10 @@
       "implemented": true,
       "label": "跳过有真实原因，不冒充已编码",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -205,10 +205,10 @@
       "implemented": true,
       "label": "注册数据读取能力，兼容原生非表格与审计视图",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -220,10 +220,10 @@
       "implemented": true,
       "label": "标记列存在且取值语义明确",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -235,10 +235,10 @@
       "implemented": true,
       "label": "排除规则、实际模型输入及样本身份对应",
       "migrationBatch": "S1",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -250,10 +250,10 @@
       "implemented": true,
       "label": "主键、唯一性和空值规则",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -265,10 +265,10 @@
       "implemented": true,
       "label": "数据登记指向当前实际对象",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -280,10 +280,10 @@
       "implemented": true,
       "label": "所有当前登记数据集均纳入检查",
       "migrationBatch": "S3",
+      "minTier": "explore",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -295,10 +295,10 @@
       "implemented": true,
       "label": "成稿实际引用关系",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -310,10 +310,10 @@
       "implemented": true,
       "label": "最终范围有效 dpi；计划宽度另建源图检查",
       "migrationBatch": "S1",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -325,10 +325,10 @@
       "implemented": true,
       "label": "交付图清单对应实际文件",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -340,10 +340,10 @@
       "implemented": true,
       "label": "实际安置字号；无法测量如实未判",
       "migrationBatch": "S1",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -355,10 +355,10 @@
       "implemented": true,
       "label": "当前数据、配置与真实图像身份",
       "migrationBatch": "S3",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -370,10 +370,10 @@
       "implemented": true,
       "label": "完整交付对象与状态分母",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -385,10 +385,10 @@
       "implemented": true,
       "label": "声明与可测事实；设计偏好不得冒充普遍硬标准",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": false,
-      "minTier": "submission"
+      "required": false
     },
     {
       "allowNa": true,
@@ -400,10 +400,10 @@
       "implemented": true,
       "label": "明确选择的多面板输出必须真实存在",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -415,10 +415,10 @@
       "implemented": true,
       "label": "源图在计划宽度的有效分辨率",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -430,10 +430,10 @@
       "implemented": true,
       "label": "源图在计划宽度的可测字号",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -445,10 +445,10 @@
       "implemented": true,
       "label": "skipped 与 error 分开，不隐藏渲染失败",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -460,10 +460,10 @@
       "implemented": true,
       "label": "图题与交付要求一致",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -475,10 +475,10 @@
       "implemented": true,
       "label": "所要求的正文结构存在，不自动证明理论质量",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -490,10 +490,10 @@
       "implemented": true,
       "label": "实际成稿文件可读取",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -505,10 +505,10 @@
       "implemented": true,
       "label": "实际文稿图表与登记一致",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -520,10 +520,10 @@
       "implemented": true,
       "label": "文稿与当前数据图表版本",
       "migrationBatch": "S3",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -535,10 +535,10 @@
       "implemented": true,
       "label": "工作台资料来源登记；内容抽取事实引用技能",
       "migrationBatch": "W",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": true,
@@ -550,10 +550,10 @@
       "implemented": true,
       "label": "所选挂载均有来源登记，不能替代内容溯源",
       "migrationBatch": "W",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": true,
@@ -565,10 +565,10 @@
       "implemented": true,
       "label": "当前挂载与选入项目范围的登记一致",
       "migrationBatch": "W",
+      "minTier": "explore",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -580,10 +580,10 @@
       "implemented": true,
       "label": "方法依据与实际实施对应，机器只核可验证部分",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": false,
-      "minTier": "submission"
+      "required": false
     },
     {
       "allowNa": false,
@@ -595,10 +595,10 @@
       "implemented": true,
       "label": "全部当前模型的结果与状态",
       "migrationBatch": "S3",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -610,10 +610,10 @@
       "implemented": true,
       "label": "计划、缺口与处置记录一致",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -625,10 +625,10 @@
       "implemented": true,
       "label": "保留失败、不可估和不适用，不宣称穷尽全部模型",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": false,
-      "minTier": "submission"
+      "required": false
     },
     {
       "allowNa": false,
@@ -640,10 +640,10 @@
       "implemented": true,
       "label": "数值格的来源或派生依据",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -655,10 +655,10 @@
       "implemented": true,
       "label": "机器可核的论断绑定，不取代语境复读",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -670,10 +670,10 @@
       "implemented": true,
       "label": "判断台账机器检查无错误",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "qa",
-      "required": false,
-      "minTier": "archive"
+      "required": false
     },
     {
       "allowNa": false,
@@ -685,10 +685,10 @@
       "implemented": true,
       "label": "技能核机器台账事实；真实裁定留工作台，禁止同一 id 混合覆盖",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false,
-      "minTier": "archive"
+      "required": false
     },
     {
       "allowNa": false,
@@ -700,10 +700,10 @@
       "implemented": true,
       "label": "当前全部终检输入和实现",
       "migrationBatch": "S3",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -715,10 +715,10 @@
       "implemented": true,
       "label": "当前数字检查与完整覆盖",
       "migrationBatch": "S1",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -730,10 +730,10 @@
       "implemented": true,
       "label": "正式 PDF 真实可读及可测范围",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -745,10 +745,10 @@
       "implemented": true,
       "label": "旧终检报告格式和实际检查完成性",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -760,10 +760,10 @@
       "implemented": true,
       "label": "复核包及当前证据，不把文件存在当完成复核",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "qa",
-      "required": false,
-      "minTier": "submission"
+      "required": false
     },
     {
       "allowNa": false,
@@ -775,10 +775,10 @@
       "implemented": true,
       "label": "真正人工签收，绑定交付快照",
       "migrationBatch": "W",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -790,10 +790,10 @@
       "implemented": true,
       "label": "N 的字段语义与可核范围",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": true,
@@ -805,10 +805,10 @@
       "implemented": true,
       "label": "实际识图复核事件，引用当前技能事实",
       "migrationBatch": "W",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false,
-      "minTier": "archive"
+      "required": false
     },
     {
       "allowNa": false,
@@ -820,10 +820,10 @@
       "implemented": true,
       "label": "覆盖表不能覆盖机器失败或未判",
       "migrationBatch": "R",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -835,10 +835,10 @@
       "implemented": true,
       "label": "问题台账与尚未解决的硬问题",
       "migrationBatch": "R",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -850,10 +850,10 @@
       "implemented": true,
       "label": "聚合当前 R 项事实，所有子项完整才可过",
       "migrationBatch": "R",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -865,10 +865,10 @@
       "implemented": true,
       "label": "实际复核报告与当前范围",
       "migrationBatch": "R",
+      "minTier": "archive",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": false,
-      "minTier": "archive"
+      "required": false
     },
     {
       "allowNa": true,
@@ -880,10 +880,10 @@
       "implemented": true,
       "label": "实际图注样本量与登记口径一致",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "recheck",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": true,
@@ -895,10 +895,10 @@
       "implemented": true,
       "label": "实际图注含明确样本量",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "recheck",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -910,10 +910,10 @@
       "implemented": true,
       "label": "按项目契约检查注册表必需性",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -925,10 +925,10 @@
       "implemented": true,
       "label": "coverage 与 receipt 事实，v2 模式另核当前发布",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -940,10 +940,10 @@
       "implemented": true,
       "label": "范围文档存在且非空",
       "migrationBatch": "S2",
+      "minTier": "explore",
       "owner": "workbench",
       "reportStage": "scope",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -955,10 +955,10 @@
       "implemented": true,
       "label": "覆盖已登记范围，公开未恢复与未处理部分",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -970,10 +970,10 @@
       "implemented": true,
       "label": "实际资料挂载与可访问性",
       "migrationBatch": "W",
+      "minTier": "explore",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -985,10 +985,10 @@
       "implemented": true,
       "label": "原件与项目输出隔离",
       "migrationBatch": "W",
+      "minTier": "explore",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true,
-      "minTier": "explore"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1000,10 +1000,10 @@
       "implemented": true,
       "label": "宿主运行身份与产物来源，按阶段实例化",
       "migrationBatch": "W",
+      "minTier": "explore",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false,
-      "minTier": "explore"
+      "required": false
     },
     {
       "allowNa": true,
@@ -1015,10 +1015,10 @@
       "implemented": true,
       "label": "实际估计 N，不以 n_dropna 代替",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -1030,10 +1030,10 @@
       "implemented": true,
       "label": "样本流与实际使用键一致",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1045,10 +1045,10 @@
       "implemented": true,
       "label": "数据、规格、代码和环境绑定",
       "migrationBatch": "S3",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1060,10 +1060,10 @@
       "implemented": true,
       "label": "模型结果存在且执行状态明确",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1075,10 +1075,10 @@
       "implemented": true,
       "label": "必需表真实存在且结构完整",
       "migrationBatch": "S2",
+      "minTier": "submission",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true,
-      "minTier": "submission"
+      "required": true
     },
     {
       "allowNa": true,
@@ -1090,10 +1090,10 @@
       "implemented": true,
       "label": "当前 v2 发布评估确实就绪",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1105,10 +1105,10 @@
       "implemented": true,
       "label": "当前目标的逐格覆盖，不用零分母通过",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1120,10 +1120,10 @@
       "implemented": true,
       "label": "真实 final 与完整复核记录",
       "migrationBatch": "S2",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     },
     {
       "allowNa": false,
@@ -1135,10 +1135,10 @@
       "implemented": true,
       "label": "原件、数据、代码和复核绑定当前有效",
       "migrationBatch": "S3",
+      "minTier": "archive",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true,
-      "minTier": "archive"
+      "required": true
     }
   ],
   "schema": "dsa.gate-catalog/1"

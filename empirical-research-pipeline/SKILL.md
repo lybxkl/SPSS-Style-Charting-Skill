@@ -268,7 +268,7 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 1. 先写 `assets/codebook-template.md` 的实例：每个变量都要有**定义、取值、判断规则、证据位置、正例、反例、缺失规则**。
 2. 用 `scripts/make_coding_sheet.py` 抽取全文和候选证据句，生成编码工作表；它只提供证据片段，不替你做最终判断。
    - 默认 `--profile generic`：适用于访谈、新闻、政策、报告、网页、会议记录等任意文本资料。
-   - `--profile legal`：额外抽取法院、案号、省份、案由候选；只在处理中国裁判文书时使用。
+   - `--profile legal`：多抽法院、案号、省份、案由候选。词表是随包示例，类别要对着这批材料自己改；不需要这些候选就用默认的 `generic`。
    - CSV/TSV/JSON/XLSX 等表格会跳过并提示走统计流程；图片/音视频会提示先 OCR/转写。
 3. 人工/LLM 编码时，每条记录至少保存 `*_ev` 证据句；没有证据句的编码视为未完成。证据句的格式是 `<字段>=<原文片段>@<char_start>-<char_end>`（片段超 200 字会加「…」，但偏移量始终指向整句），同一句先判否定再判肯定，命中项带 `negated`/`polarity`——**两个编码员的结果可以逐条按字段+偏移对齐，不必人工翻原文**。
 4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。**这一步是人工协议：本 skill 没有任何脚本计算 κ**，需要自己算（或让 SPSS/R/Python 跑 `sklearn.metrics.cohen_kappa_score`），流程见 `references/02-coding-protocol.md` 的「信度检验」节。
@@ -276,13 +276,17 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 
 ### 2.2 字段抽取（`--extract`，一行一个观测）
 
-如果研究要的是**结构化字段**（每份材料的 X 等于几），不要停在"候选证据句"上——再加一步 `--extract`，把字段取出来：
+如果研究要的是**结构化字段**（每份材料的 X 等于几），不要停在"候选证据句"上。切段从哪开始、取第一次还是最后一次、在哪个词停下，由你读过这批样本后写进项目自己的剖面或 `draft/` 解析器。技能包里的剖面只展示字段可以长什么样，不是这批材料的抽取规则。
+
+下面这条命令只说明 `--extract` 怎么调用：
 
 ```bash
 python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
-    --profile legal --doc-type all \
-    --extract profiles/legal-judgment.json
+    --profile generic \
+    --extract draft/fields.json
 ```
+
+`draft/fields.json` 由你读样本后写成。不要把 `profiles/legal-judgment.json` 传给 `--extract`。
 
 产出六件套（三件数据 + 三件复审；与 `coding_sheet.*` 并列，不替代）：
 

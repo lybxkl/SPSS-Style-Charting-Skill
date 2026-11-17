@@ -3,7 +3,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "af092d796e9b0dac3a69c8d9d329732dceb9f3a01365f4d2dfa7f1c57916fa73"
+      "sha256": "ff8de75f912ff6ef8f40dcf11e047180aa291cc4c61dc404eae8883895537a4a"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -71,7 +71,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "3d711782a3d5959e8f29c4b66c874be4eb008bf5de141a74acb5b7659711b96d"
+      "sha256": "a93bdd9cbff5f9c43aa0f4964d99da4a92c1a66ac24d8b61feeafe19f5b749fc"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -83,7 +83,7 @@
     },
     {
       "path": "profiles/legal-judgment.json",
-      "sha256": "a2fc9f218167141c4297605aa27524b3365f42c07d4f416770de49d02287e24a"
+      "sha256": "eaa5cc9eea98a3c2b44e45449c4a4fb715cfec47d5c0dc1264c212adbba4d9ac"
     },
     {
       "path": "profiles/vocab-satisfaction.json",
@@ -171,7 +171,7 @@
     },
     {
       "path": "scripts/auto_chart_pack.py",
-      "sha256": "c2f02e2f44b9c12434a15ec13f45567e249e20a8a68288aca9ef45c1104916f9"
+      "sha256": "fd9e0ef1191cbd2f16c412f4422c5e500d91cfc88de28ff97a6e3f58fc523482"
     },
     {
       "path": "scripts/auto_stats.py",
@@ -227,7 +227,7 @@
     },
     {
       "path": "scripts/extract_lib.py",
-      "sha256": "7df9f3ff7e5a13a6025440a3fa6a0a9d3d0d7cbb3e2b6827638723ae99f4fcd8"
+      "sha256": "b6063db9bc5372c6af56b1d8af36af53a0e79f01fcbf51519e31488be5b88f78"
     },
     {
       "path": "scripts/faults.py",
@@ -351,7 +351,7 @@
     },
     {
       "path": "scripts/suggest_profiles.py",
-      "sha256": "638fe2e8febcdf328a0bdcc75e3e975a24ba4905deea2cc71330f9245246d9f5"
+      "sha256": "f6709d1ca8e77022db512df995f90cf7da1df3d498b5c0e1740ca1f30bfd4bc2"
     },
     {
       "path": "scripts/support_review.py",
@@ -379,7 +379,7 @@
     },
     {
       "path": "scripts/verify_numbers.py",
-      "sha256": "9d8f546ef28e4a308a66372b8397d54b1a92fc3ca87eade388d77ccf11114b96"
+      "sha256": "9b5036d728a3e677038b46b40d8910c1d63566d8fa7c9c4f8febf32673d2afbb"
     },
     {
       "path": "scripts/workflow_contract.py",

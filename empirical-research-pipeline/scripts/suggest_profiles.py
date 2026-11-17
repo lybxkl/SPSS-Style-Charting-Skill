@@ -34,7 +34,7 @@ def main(argv=None) -> int:
     if audit.is_file():
         text = audit.read_text(encoding='utf-8', errors='replace')[:200_000]
         if '人民法院' in text or '判决书' in text or '裁定书' in text:
-            hint = '审计文本里出现裁判文书用语。profiles/legal-judgment.json 能抽取部分字段，不含罪名归类；未覆盖的字段写在项目自己的剖面或 draft/ 解析器里。'
+            hint = '审计文本里出现裁判文书用语。profiles/legal-judgment.json 只是字段形状示例，不决定怎么切段。读样本后把起点、结束符和字段写进项目自己的剖面或 draft/ 解析器。'
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = {'profiles': profiles, 'hint': hint}

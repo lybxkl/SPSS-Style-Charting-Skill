@@ -2328,15 +2328,20 @@ def main() -> int:
         "max_charts": pack.max_charts,
         "only": pack.only_selectors,
         "sections": pack.wanted_sections,
-        "cjk_bold": has_bold_face("SimSun"),
     }
+    families = plt.rcParams.get("font.family") or []
+    if isinstance(families, str):
+        families = [families]
+    cjk_font = str(families[-1]) if families else ""
+    meta["cjk_font"] = cjk_font
+    meta["cjk_bold"] = bool(cjk_font) and has_bold_face(cjk_font)
     mpath = pack.write(meta)
     total_errors = counts["error"] + pack.errors
     print(f"charts: {counts['ok']}  skipped: {len(pack.skipped)}"
           f"  filtered: {pack.filtered}  limited: {pack.limited}"
           f"  errors: {total_errors}")
-    if not meta["cjk_bold"]:
-        print("字体：宋体没有粗体字重，标题按常规字重绘制；字号检查不证明用了粗体。")
+    if cjk_font and not meta["cjk_bold"]:
+        print(f"字体：{cjk_font} 没有粗体字重，标题按常规字重绘制；字号检查不证明用了粗体。")
     print(f"data_hash: {pack.data_hash}  n_scope: {pack.n_scope_default}"
           f"  manifest rows: {len(pack.manifest)}")
     print(f"manifest: {mpath}")

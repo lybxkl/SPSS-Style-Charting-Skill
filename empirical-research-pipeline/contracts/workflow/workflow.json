@@ -264,7 +264,7 @@
       },
       "manualInstructions": [
         "先写 docs/decisions/inclusion.md，正文含「纳入确认：」和排除口径。没有这份确认不能全量抽取。",
-        "跑已登记动作 suggest-profiles，看剖面覆盖了哪些字段、哪些没有。领域不预设；不够的字段写在项目自己的剖面或 draft/ 解析器里，不要改技能包。",
+        "跑已登记动作 suggest-profiles，只看示例剖面有哪些字段。抽取规则由你读样本后决定：切段起点、取第一次还是最后一次、结束符，写进项目自己的剖面或 draft/ 解析器。不要改技能包，也不要把示例剖面当成这批材料的规则。",
         "在 draft/ 上对冻结样本试跑，把误差写进 draft/sample_errors.md。draft/ 的修改不使审计失效。",
         "样本可接受后调用 data_analysis_adopt_command，把解析器冻成该阶段命令并全量跑一次。不要手跑脚本代替回执。"
       ],

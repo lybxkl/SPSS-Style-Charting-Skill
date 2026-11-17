@@ -231,11 +231,29 @@ def resolve_text(text: str, numbers: dict, where: str) -> str:
     return PLACEHOLDER.sub(sub, text or "")
 
 
-def read_table(spec: dict, base_dir: str) -> tuple[list, list, str]:
+def resolve_asset(path: str, root: str, spec_dir: str) -> str:
+    """Relative spec paths are from the project root, not the spec file's folder.
+
+    A spec saved under draft/ must still point at output/tables/... in the
+    project. If that file is absent, the old location next to the spec is
+    still accepted.
+    """
+    if os.path.isabs(path):
+        return path
+    at_root = os.path.normpath(os.path.join(root, path))
+    if os.path.exists(at_root):
+        return at_root
+    at_spec = os.path.normpath(os.path.join(spec_dir, path))
+    if os.path.exists(at_spec):
+        return at_spec
+    return at_root
+
+
+def read_table(spec: dict, base_dir: str, root: str | None = None) -> tuple[list, list, str]:
     path = spec.get("csv")
     if not path:
         raise SpecError("table block needs 'csv'")
-    path = path if os.path.isabs(path) else os.path.join(base_dir, path)
+    path = resolve_asset(path, root or base_dir, base_dir)
     if not os.path.exists(path):
         raise SpecError(f"table CSV not found: {path}")
     from verify_dataset import read_csv
@@ -395,7 +413,7 @@ class Builder:
         paragraph.add_run().add_break(WD_BREAK.PAGE)
 
     def add_table(self, block: dict) -> None:
-        rows, cols, path = read_table(block, self.base_dir)
+        rows, cols, path = read_table(block, self.base_dir, getattr(self, "root", None))
         self.table_no += 1
         number = int(block.get("number") or self.table_no)
         caption = self._text(block, "caption")
@@ -453,7 +471,7 @@ class Builder:
             raise SpecError(
                 f"figure {path} is a PDF; Word cannot embed it — use the matching PNG"
             )
-        full = path if os.path.isabs(path) else os.path.join(self.base_dir, path)
+        full = resolve_asset(path, getattr(self, "root", None) or self.base_dir, self.base_dir)
         if not os.path.exists(full):
             raise SpecError(f"figure image not found: {full}")
         self.figure_no += 1
@@ -570,6 +588,8 @@ def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build a Word manuscript from a JSON spec (stage 6).")
     parser.add_argument("--spec", required=True, help="manuscript spec JSON")
+    parser.add_argument("--root", default=".",
+                        help="project root for relative csv/png paths (default: working directory)")
     parser.add_argument("--out", required=True, help="output .docx")
     parser.add_argument("--numbers", default=None,
                         help="CSV with key,value used by {placeholders}")
@@ -590,10 +610,15 @@ def main(argv: "list[str] | None" = None) -> int:
         print(f"ERROR: spec is not valid JSON: {exc}", file=sys.stderr)
         return 2
 
-    base_dir = os.path.dirname(os.path.abspath(args.spec))
+    spec_dir = os.path.dirname(os.path.abspath(args.spec))
+    root = os.path.abspath(args.root)
     try:
-        numbers = load_numbers(args.numbers)
-        builder = Builder(spec, base_dir, numbers, args.out)
+        numbers_path = args.numbers
+        if numbers_path and not os.path.isabs(numbers_path):
+            numbers_path = resolve_asset(numbers_path, root, spec_dir)
+        numbers = load_numbers(numbers_path)
+        builder = Builder(spec, spec_dir, numbers, args.out)
+        builder.root = root
         builder.build()
     except SpecError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

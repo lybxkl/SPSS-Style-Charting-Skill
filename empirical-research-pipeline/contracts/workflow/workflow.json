@@ -596,6 +596,8 @@
       "args": [
         "--spec",
         "manuscript.json",
+        "--root",
+        ".",
         "--out",
         "output/manuscript.docx"
       ],
@@ -605,6 +607,8 @@
           "args": [
             "--spec",
             "manuscript.json",
+            "--root",
+            ".",
             "--out",
             "output/manuscript.docx"
           ],

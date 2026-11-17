@@ -37,6 +37,7 @@ from scipy import stats
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pubfig import (  # noqa: E402
     set_style, ensure_style, save_fig, wilson_ci, style_axis, figure_color_metadata,
+    has_bold_face,
     bar_counts, plot_distribution, plot_violin, stacked_bar, line_ci,
     heatmap, corr_heatmap, scatter_fit, roc_curve, calibration_plot,
     pareto, scree_plot, forest_plot, dumbbell,
@@ -178,6 +179,18 @@ def png_pixel_info(path: str) -> tuple[int, int]:
         return (int(round(float(dpi[0]))), width) if dpi else (0, width)
     except Exception:
         return 0, 0
+
+
+def finite_count(series) -> tuple[int, int] | None:
+    """(event count, n) after dropping missing values. None when nothing is numeric."""
+    values = pd.to_numeric(series, errors="coerce")
+    values = values[np.isfinite(pd.to_numeric(values, errors="coerce"))]
+    if len(values) == 0:
+        return None
+    total = float(values.sum())
+    if not np.isfinite(total):
+        return None
+    return int(total), int(len(values))
 
 
 def data_fingerprint(df: pd.DataFrame, key_cols: list[str] | None = None) -> str:
@@ -1043,10 +1056,10 @@ class ChartPack:
             sub = self.df[[group, outcome]].dropna()
             rows = []
             for g, s in sub.groupby(group):
-                y = pd.to_numeric(s[outcome], errors="coerce").dropna()
-                if len(y) < self.min_n:
+                counted = finite_count(s[outcome])
+                if counted is None or counted[1] < self.min_n:
                     continue
-                k, n = int(y.sum()), len(y)
+                k, n = counted
                 a, b = wilson_ci(k, n)
                 rows.append((str(g), k / n, a, b, n))
             rows.sort(key=lambda x: -x[1])
@@ -1073,10 +1086,10 @@ class ChartPack:
             sub = self.df[[group, outcome]].dropna()
             rows = []
             for g, s in sub.groupby(group):
-                y = pd.to_numeric(s[outcome], errors="coerce").dropna()
-                if len(y) < self.min_n:
+                counted = finite_count(s[outcome])
+                if counted is None or counted[1] < self.min_n:
                     continue
-                k, n = int(y.sum()), len(y)
+                k, n = counted
                 rows.append((str(g), k / n * 100, n))
             if len(rows) >= 2:
                 rows.sort(key=lambda x: -x[1])
@@ -1092,10 +1105,10 @@ class ChartPack:
             sub = self.df[[treatment, outcome]].dropna()
             rows = []
             for t, s in sub.groupby(treatment):
-                y = pd.to_numeric(s[outcome], errors="coerce").dropna()
-                if len(y) < self.min_n:
+                counted = finite_count(s[outcome])
+                if counted is None or counted[1] < self.min_n:
                     continue
-                k, n = int(y.sum()), len(y)
+                k, n = counted
                 a, b = wilson_ci(k, n)
                 rows.append((t, k / n, a, b, n))
             rows.sort(key=lambda x: x[0])
@@ -1168,10 +1181,10 @@ class ChartPack:
             sub = self.df[[region, outcome]].dropna()
             rows = []
             for g, s in sub.groupby(region):
-                y = pd.to_numeric(s[outcome], errors="coerce").dropna()
-                if len(y) < self.min_n:
+                counted = finite_count(s[outcome])
+                if counted is None or counted[1] < self.min_n:
                     continue
-                k, n = int(y.sum()), len(y)
+                k, n = counted
                 a, b = wilson_ci(k, n)
                 rows.append((str(g), k / n, a, b, n))
             rows.sort(key=lambda x: -x[1])
@@ -1196,10 +1209,10 @@ class ChartPack:
             sub = self.df[[trial, outcome]].dropna()
             rows = []
             for g, s in sub.groupby(trial):
-                y = pd.to_numeric(s[outcome], errors="coerce").dropna()
-                if len(y) < self.min_n:
+                counted = finite_count(s[outcome])
+                if counted is None or counted[1] < self.min_n:
                     continue
-                k, n = int(y.sum()), len(y)
+                k, n = counted
                 a, b = wilson_ci(k, n)
                 rows.append((str(g), k / n, a, b, n))
             rows.sort(key=lambda x: x[0])
@@ -1228,8 +1241,10 @@ class ChartPack:
             self.skip("C 双变量", "变量之间是否存在明显相关？", "可用数值变量不足")
             return
         dat = self.df[cols].apply(pd.to_numeric, errors="coerce")
+        dat = dat.replace([np.inf, -np.inf], np.nan)
         dat = dat.dropna(axis=1, how="all")
-        dat = dat.loc[:, dat.std() > 0]
+        std = dat.std()
+        dat = dat.loc[:, std.notna() & (std > 0)]
         if dat.shape[1] < 2 or len(dat) < self.min_n:
             self.skip("C 双变量", "变量之间是否存在明显相关？",
                       f"有效数值列不足或 N<{self.min_n}")
@@ -1237,9 +1252,13 @@ class ChartPack:
         heat = dat.copy()
         heat.columns = [self.vlabel(c) for c in heat.columns]
         n_complete = int(dat.dropna().shape[0])
-        available = dat.notna().astype(int)
-        pair_counts = available.T.dot(available).to_numpy()
+        available = dat.notna().to_numpy(dtype=bool).astype(np.int64)
+        pair_counts = available.T.dot(available)
         pair_ns = pair_counts[np.triu_indices(dat.shape[1], k=1)]
+        pair_ns = pair_ns[np.isfinite(pair_ns)]
+        if pair_ns.size == 0:
+            self.skip("C 双变量", "变量之间是否存在明显相关？", "变量对没有可计数的有效样本")
+            return
         pair_note = f"变量对有效样本数 {int(pair_ns.min())}–{int(pair_ns.max())}；全列完整案例 {n_complete}"
         fig, ax = plt.subplots(figsize=(FIG_W, 6.2))
         corr_heatmap(ax, heat)
@@ -1593,10 +1612,10 @@ class ChartPack:
             sub = self.df[[time, outcome]].dropna()
             rows = []
             for y, s in sub.groupby(time):
-                v = pd.to_numeric(s[outcome], errors="coerce").dropna()
-                if len(v) < self.min_n:
+                counted = finite_count(s[outcome])
+                if counted is None or counted[1] < self.min_n:
                     continue
-                k, n = int(v.sum()), len(v)
+                k, n = counted
                 a, b = wilson_ci(k, n)
                 rows.append((y, k / n, a, b, n))
             rows.sort()
@@ -2309,12 +2328,15 @@ def main() -> int:
         "max_charts": pack.max_charts,
         "only": pack.only_selectors,
         "sections": pack.wanted_sections,
+        "cjk_bold": has_bold_face("SimSun"),
     }
     mpath = pack.write(meta)
     total_errors = counts["error"] + pack.errors
     print(f"charts: {counts['ok']}  skipped: {len(pack.skipped)}"
           f"  filtered: {pack.filtered}  limited: {pack.limited}"
           f"  errors: {total_errors}")
+    if not meta["cjk_bold"]:
+        print("字体：宋体没有粗体字重，标题按常规字重绘制；字号检查不证明用了粗体。")
     print(f"data_hash: {pack.data_hash}  n_scope: {pack.n_scope_default}"
           f"  manifest rows: {len(pack.manifest)}")
     print(f"manifest: {mpath}")

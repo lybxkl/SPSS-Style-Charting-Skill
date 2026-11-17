@@ -621,8 +621,10 @@ def _first_index(text: str, markers, start: int):
 def section(text: str, start, end=None, after=None, last: bool = True):
     """Slice a section between marker sets.
 
-    ``start`` is matched from the **last** occurrence by default: documents
-    often repeat a heading in a running header, and the body is the later one.
+    ``start`` is matched from the **last** occurrence by default: a repeated
+    ``判决如下`` in a header is not the operative order. ``本院认为`` is the
+    opposite: pass ``last=False``, or the plea sitting in the first reasoning
+    block falls outside the slice.
     Returns ``(subtext, offset)``; ``(None, -1)`` when the start marker is
     absent.
     """
@@ -922,7 +924,7 @@ NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _FIELD_KEYS = {"name", "func", "type", "scope", "na", "label", "labels", "hint",
                "start", "fallback", "window", "negate", "redacted_is_na",
                "exclude", "description", "na_negated", "na_redacted",
-               "drop_negated"}
+               "drop_negated", "clause"}
 _FUNC_KEYS = {
     "num": {"pattern"},
     "quantity": {"unit", "unit_table", "pattern"},
@@ -1687,9 +1689,48 @@ def _finalize(result: dict) -> dict:
     return result
 
 
+def _penalty_clause(text: str):
+    """Announced sentence: 决定执行 if present, otherwise the first 判处.
+
+    决定执行只在句号或下一名被告人处截断，分号仍留在同一宣告刑里。
+    没有决定执行时，第一处判处或单处在分号、句号或下一名被告人处截断。
+    """
+    if not text:
+        return None
+    combined = text.rfind("决定执行")
+    if combined >= 0:
+        start = combined
+        # 宣告刑里的分号常隔开主刑和罚金，不能在这里截断。
+        stops = ("。",)
+    else:
+        found = [text.find(token) for token in ("判处", "单处") if text.find(token) >= 0]
+        start = min(found) if found else -1
+        stops = ("。", "；")
+    if start < 0:
+        return None
+    end = len(text)
+    for token in stops:
+        pos = text.find(token, start + 2)
+        if pos >= 0:
+            end = min(end, pos)
+    nxt = text.find("被告人", start + 2)
+    if nxt >= 0:
+        end = min(end, nxt)
+    if end <= start:
+        return None
+    return start, end
+
+
 def _apply_one(field: dict, text: str, scope_text: str, offset: int,
                base_dir: str):
     """Run one field and attach the review flags derived from its candidates."""
+    if field.get("clause") == "penalty":
+        span = _penalty_clause(scope_text)
+        if span is None:
+            scope_text = ""
+        else:
+            scope_text = scope_text[span[0]:span[1]]
+            offset += span[0]
     result = _apply_one_raw(field, text, scope_text, offset, base_dir)
     result["scope"] = field.get("scope", "full")
     return _finalize(result)

@@ -1,9 +1,14 @@
 {
   "profile": "legal-judgment",
   "version": "1.0",
-  "description": "中国裁判文书的通用抽取包。示例包：只做字段抽取，不做罪名归类、不做编码决策。",
+  "description": "中国裁判文书的示例抽取包。字段只是候选，不做罪名归类。多名被告人时刑罚只读「决定执行」，没有则只读第一处「判处」，不把后一名被告人的刑记到前一名头上。本院认为取第一次，避免把认罪认罚切到段外。",
   "sections": {
     "header": {"lines": 40},
+    "reasoning": {
+      "start": ["本院认为"],
+      "end": ["判决如下", "裁定如下"],
+      "last": false
+    },
     "dispositive": {
       "start": ["判决如下", "裁定如下"],
       "end": ["如不服本判决", "如不服本裁定", "审判人员", "扫一扫", "书记员"],
@@ -71,7 +76,8 @@
       "type": "numeric",
       "unit": "月",
       "scope": "dispositive",
-      "hint": "有期徒刑|拘役",
+      "hint": "有期徒刑|拘役|管制",
+      "clause": "penalty",
       "na": "未判处自由刑"
     },
     {
@@ -89,6 +95,7 @@
       "unit": "元",
       "scope": "dispositive",
       "hint": "罚金",
+      "clause": "penalty",
       "na": "未判处罚金"
     },
     {
@@ -97,8 +104,17 @@
       "type": "numeric",
       "unit": "元",
       "scope": "dispositive",
-      "hint": "修复|放流|补植|补种|赔偿",
+      "hint": "修复|放流|补植|补种|生态修复",
       "na": "未涉及修复费用"
+    },
+    {
+      "name": "guilty_plea",
+      "func": "contains",
+      "type": "bool",
+      "scope": "reasoning",
+      "needle": "认罪认罚",
+      "exclude": "不认罪认罚|未认罪认罚|拒不认罪认罚",
+      "na": "未记载"
     },
     {
       "name": "claim_items",

@@ -1170,10 +1170,12 @@ def check_model_n(tables, report: Report):
 # V-06 漏斗对账
 # --------------------------------------------------------------------------
 
-KIND_HINT = "；修法：在 sample_flow.csv 加一列 kind，剔除行写 excluded，累计行写 stage"
-KIND_MISSING = ("该行缺 kind，按 stage 处理；若此行不是漏斗阶段请补 "
-                "kind=excluded|model")
-STAGE_REF_RE = re.compile(r"stage\s*[=＝:：]\s*([^;；,，]+)")
+KIND_HINT = ("；修法：累计漏斗写 kind=stage；本步剔除写 kind=excluded；"
+             "缓刑、自由刑、罚金这类会回升的子集写 kind=model，"
+             "note 用分号写成 stage=阶段名；说明")
+KIND_MISSING = ("该行缺 kind，按 stage 处理；若人数会回升，改成 "
+                "kind=model，并在 note 里用分号写 stage=对应的累计阶段")
+STAGE_REF_RE = re.compile(r"stage\s*[=＝:：]\s*([^;；,，。．.]+)")
 
 
 def model_stage_ref(note) -> str:
@@ -1260,8 +1262,9 @@ def _check_model_row(stage, n, note, stage_ns, where, report):
     ref = model_stage_ref(note)
     if not ref:
         report.error("V-06", where, "note 里写 stage=<阶段名>", note or "（空）",
-                     "kind=model 的行必须在 note 里写明对应的累计 stage，"
-                     "例如 note=stage=分析样本")
+                     "kind=model 的行必须在 note 里用分号写明累计阶段，"
+                     "例如 stage=一审刑事判决分析样本；缓刑是该阶段的子集。"
+                     "句号后面的字不会留在阶段名里")
         return
     ref_n = stage_ns.get(ref)
     if ref_n is None:

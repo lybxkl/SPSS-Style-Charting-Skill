@@ -3,7 +3,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "7963ffb45fef1ac769d20c7c511cb8b073d7d39754b8f15b39ccd2aea9be414e"
+      "sha256": "af092d796e9b0dac3a69c8d9d329732dceb9f3a01365f4d2dfa7f1c57916fa73"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -71,7 +71,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "dc94516c0e0eeb024da857686740115bfc806e93567a5f7294330fa5a5f6ca36"
+      "sha256": "3d711782a3d5959e8f29c4b66c874be4eb008bf5de141a74acb5b7659711b96d"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -83,7 +83,7 @@
     },
     {
       "path": "profiles/legal-judgment.json",
-      "sha256": "3ddef0843104a87eace252950ddca5cc7783177d24adcb7fde4543620ce7809c"
+      "sha256": "a2fc9f218167141c4297605aa27524b3365f42c07d4f416770de49d02287e24a"
     },
     {
       "path": "profiles/vocab-satisfaction.json",
@@ -95,7 +95,7 @@
     },
     {
       "path": "references/02-coding-protocol.md",
-      "sha256": "bdb7d56117f7c60d572122acbae5e9cef00950e35fa3a6e2b483cd939e1910c7"
+      "sha256": "1871c0b963d69234e1628b741f79df954a2b891d25d6418ef197a4bcf17863d2"
     },
     {
       "path": "references/03-analysis-spss.md",
@@ -159,7 +159,7 @@
     },
     {
       "path": "scripts/assemble_manuscript.py",
-      "sha256": "ff01177d152f7d1f7a7ac1ac7b839aa6c2aaf27daba9f9f03b39febcfcf8d48e"
+      "sha256": "3857e563199f6ccea396d358cf23705a2699ec05006d7c8d997c811edf48c420"
     },
     {
       "path": "scripts/audit_corpus.py",
@@ -171,7 +171,7 @@
     },
     {
       "path": "scripts/auto_chart_pack.py",
-      "sha256": "6f960bad78c265493d01785ade3c4ff2e7026085f3f04668a665cb2c9fc9edd9"
+      "sha256": "c2f02e2f44b9c12434a15ec13f45567e249e20a8a68288aca9ef45c1104916f9"
     },
     {
       "path": "scripts/auto_stats.py",
@@ -227,7 +227,7 @@
     },
     {
       "path": "scripts/extract_lib.py",
-      "sha256": "6d18c66bb83d0d57957cb985bd490455f48e435ab0a4992883c7142346d52d51"
+      "sha256": "7df9f3ff7e5a13a6025440a3fa6a0a9d3d0d7cbb3e2b6827638723ae99f4fcd8"
     },
     {
       "path": "scripts/faults.py",
@@ -379,7 +379,7 @@
     },
     {
       "path": "scripts/verify_numbers.py",
-      "sha256": "4d6ad4ae011a2293d932e43bb08eaf532d43584ae965a4ea72d760c82b5fed09"
+      "sha256": "9d8f546ef28e4a308a66372b8397d54b1a92fc3ca87eade388d77ccf11114b96"
     },
     {
       "path": "scripts/workflow_contract.py",

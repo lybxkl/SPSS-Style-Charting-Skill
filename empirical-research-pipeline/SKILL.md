@@ -5,7 +5,7 @@ description: 从混合研究资料中尽可能完整地发现、整合任意数�
 
 # 实证研究数据流水线
 
-在 DSH 中使用且工具表提供 `data_analysis_status` / `data_analysis_start` 时：用户明确调用本技能或要求开始研究后，先用可见文字说明正在启动，并调用 `data_analysis_start`。启动后以每一回合的任务卡为唯一规程，只做卡上的下一步。完整工作流要用 `data_analysis_workflow(action="describe", full=true)` 才返回。未关联时不要静默改走手工 Python。启动失败应立即说明具体原因；已有成果只作待验证输入，不能冒充本次执行。独立 CLI 环境没有这些工作台工具时，按本技能自身流程执行并明确交付方式。
+在 DSH 中使用且工具表里看得到 `data_analysis_status` 和 `data_analysis_start` 时：用户明确调用本技能或要求开始研究后，先用可见文字说明正在启动，并调用 `data_analysis_start`。启动后以每一回合的任务卡为唯一规程，只做卡上的下一步。完整工作流要用 `data_analysis_workflow(action="describe", full=true)` 才返回。未关联时不要静默改走手工 Python。启动失败应立即说明具体原因；已有成果只作待验证输入，不能冒充本次执行。工具表里没有这两个名字时，当前宿主没有挂上工作台，不要反复寻找它们；按本文件后面的命令行流程做，并在范围说明里写明交付方式。
 
 工作台的阶段、顺序、依赖、命令、条件步骤、检查点、工具动作、任务说明和重跑范围由本技能的 [workflow.json](contracts/workflow/workflow.json) 唯一声明，结构契约见 [workflow.schema.json](contracts/workflow/workflow.schema.json)。修改研究流程时维护这份声明并重新构建发布清单，插件按当前契约读取；不要另在插件中维护一份阶段表。
 

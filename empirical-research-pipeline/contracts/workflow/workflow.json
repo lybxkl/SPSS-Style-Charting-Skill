@@ -284,7 +284,7 @@
       "index": 4,
       "name": "数据集",
       "short": "数据集",
-      "purpose": "分析宽表 output/dataset/analysis.csv（一行一个分析单位，含 in_analysis 标记）",
+      "purpose": "分析表，并在 research_registry.json 登记 id、path、key。后续统计、图表、终检和文稿读这份登记",
       "script": null,
       "args": [],
       "artifacts": [
@@ -303,11 +303,11 @@
         "dataset"
       ],
       "manualInstructions": [
-        "从 output/coding/dataset.csv（逐份抽取结果）构建 output/dataset/analysis.csv：一行一个分析单位。",
-        "必须保留 in_analysis 标记（0/1）并说明排除理由；派生变量（分组、对数等）要写进 docs/codebook.md。",
-        "dataset.csv 和编码脚本抽出的罪名、刑期、情节等是候选值，不能直接当成已经核对的分析事实。进入 analysis.csv 的语义字段要能对上 evidence.jsonl 的原文位置，或在 decisions.jsonl 里有一条判断。",
-        "不要改动 evidence.jsonl 里的原文证据；分析表只做可追溯的转换。",
-        "构建脚本放 scripts/ 并在 project.json 里登记（可选），但产物必须是 output/dataset/analysis.csv——data/ 是语料根，宽表放进去会被下一次审计当成一份资料。"
+        "分析表不在时，才从 output/coding/dataset.csv 构建 output/dataset/analysis.csv：一行一个分析单位，保留 in_analysis（0/1）。",
+        "dataset.csv 和编码脚本抽出的罪名、刑期、情节等是候选值，不能直接当成已经核对的分析事实。进入分析表的语义字段要能对上 evidence.jsonl 的原文位置，或在 decisions.jsonl 里有一条判断。",
+        "分析表已经在时，写 research_registry.json：datasets 至少一条，含 id、path、key。path 指向这张表，key 是表里真实存在且不重复的列。可投稿档不填写逐格证据账。",
+        "注册表 path 是后续统计、图表、终检和文稿读取的分析表。它与另一张表并存时，只留注册表指向的那一张。",
+        "登记完成后调用 data_analysis_gates(action=\"inspect\")。宽表不要放进 data/，那里是语料根。派生变量写进 docs/codebook.md。"
       ],
       "ui": {
         "panels": [
@@ -323,7 +323,7 @@
       "minTier": "archive",
       "name": "全格复核",
       "short": "复核数据",
-      "purpose": "逐格回源 + 独立复算：prepare 生成待核模板，final 通过后数据才允许进入统计",
+      "purpose": "仅归档档。逐格回源与独立复算。可投稿档不进入本阶段，统计不依赖这里的 final",
       "script": "scripts/verify_dataset.py",
       "args": [
         "--registry",
@@ -474,7 +474,7 @@
       ],
       "resumeFile": "docs/decisions/primary-models.md",
       "manualInstructions": [
-        "先写 docs/decisions/primary-models.md，正文含「主分析：」，写明结局、对照和放弃的规格。",
+        "先写 docs/decisions/primary-models.md，正文含「主分析：」，写明结局、对照和放弃的规格。数据使用 research_registry.json 里第一份数据集。",
         "调用 data_analysis_sweep 给模型族表态，再用 data_analysis_register 登记实际估计的模型。",
         "登记之后用 data_analysis_run_stage(stageId=\"stats\") 留下回执。手跑 auto_stats 不会被闸门采信。"
       ],
@@ -654,7 +654,7 @@
         "先写 docs/decisions/figure-selection.md，正文含「正文图：」，列出进入正文的图号。",
         "先调 data_analysis_manuscript action=scaffold 生成骨架（按图表清单的 section 分组，figure 块的 png/caption 照抄清单，正文留「待补」；png 缺失或 status 不是 ok 的图会被跳过）。",
         "再按 action=brief 的改稿说明把「待补」写成正文，只改 manuscript.json；不要凭空手写一份 spec 绕过骨架。",
-        "正文里的每个数字都要能落到 output/models/*.csv 或 output/dataset/analysis.csv 的原值；图注里的 N 不要重复加。",
+        "正文里的每个数字都要能落到 output/models/*.csv 或 research_registry.json 所登记分析表的原值；图注里的 N 不要重复加。",
         "改完必须重跑文稿阶段（data_analysis_run_stage(stageId=\"manuscript\")）生成 output/manuscript.docx。终检只核可投稿档的数字和报告；研究总闸门、判断台账和逐格复核属于归档档，不要为了它们补全量来源处置。",
         "不要手改 docx 绕过统计结果；数字对不上就回到 stats/figures 修产物。"
       ],
@@ -683,7 +683,7 @@
       "index": 9,
       "name": "终检",
       "short": "终检",
-      "purpose": "图表合规 + 数字溯源 + 研究总闸门 + 复核包，任何未过项都不许报成功",
+      "purpose": "可投稿档核对图表、数字和文稿。研究总闸门只在归档档单独调用，不要为了终检去生成逐格复核文件",
       "script": "scripts/qa_outputs.py",
       "steps": [
         {
@@ -742,24 +742,6 @@
           "produces": [
             "output/verify/number_issues.csv",
             "output/verify/number_trace.csv"
-          ],
-          "continueOnError": true
-        },
-        {
-          "script": "scripts/research_gate.py",
-          "args": [
-            "--registry",
-            "research_registry.json",
-            "--root",
-            ".",
-            "--verification",
-            "output/data_verification/dataset_verification.json",
-            "--out",
-            "output/research_gate.json"
-          ],
-          "whenFile": "output/data_verification/dataset_verification.json",
-          "produces": [
-            "output/research_gate.json"
           ],
           "continueOnError": true
         },
@@ -824,7 +806,6 @@
       "artifacts": [
         "output/qa/qa_report.json",
         "output/verify/number_issues.csv",
-        "output/research_gate.json",
         "output/review/review_pack.md"
       ],
       "dependsOn": [
@@ -1498,16 +1479,16 @@
       "token": "output/dataset/analysis.csv",
       "select": "first-existing",
       "paths": [
+        {
+          "json": "research_registry.json",
+          "array": "datasets",
+          "field": "path"
+        },
         "output/dataset/analysis.csv",
         {
           "json": "output/datasets/index.json",
           "array": "datasets",
           "field": "file"
-        },
-        {
-          "json": "research_registry.json",
-          "array": "datasets",
-          "field": "path"
         },
         "data/analysis.csv"
       ],
@@ -1530,6 +1511,7 @@
     "验收档为 archive 时才阅读 references/12 与 references/14 的全覆盖契约。",
     "阶段、依赖、执行步骤、可选动作和重跑范围以本次工作流声明为准，不凭旧阶段编号继续。",
     "用工作台执行登记命令，记录实际生产和体检；人工步骤按 manualInstructions 完成，不伪造人工签收。",
+    "数据集先落成分析表，再写入 research_registry.json 的 id、path、key。统计、图表、终检和文稿读取注册表里第一份实际存在的数据集。可投稿档不要求逐格证据账。",
     "缺失、失效或不兼容的契约需要修复或升级；不能沿用另一版的旧通过结果。"
   ]
 }

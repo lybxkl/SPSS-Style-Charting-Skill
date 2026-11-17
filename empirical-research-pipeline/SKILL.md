@@ -1,6 +1,6 @@
 ---
 name: empirical-research-pipeline
-description: 从混合研究资料中尽可能完整地发现、整合任意数量和形态的数据集，由 Agent 自选数学/统计模型与实现，回原材料补齐模型所需数据，逐格回源复核后产出论文级图集、分析报告和完整论文式 DOCX/PDF。适用于资料整理、编码抽取、问卷/访谈/实证分析、统计建模制图、论文组稿及追加材料；每个值保留来源、位置、变换与版本绑定的复核记录。
+description: 从混合研究资料中尽可能完整地发现、整合任意数量和形态的数据集，由 Agent 自选数学/统计模型与实现，回原材料补齐模型所需数据，按验收档产出论文级图集、分析报告和完整论文式 DOCX/PDF。可投稿档做抽样复核、注册表、模型、数字与图表；逐格回源只在归档档。适用于资料整理、编码抽取、问卷/访谈/实证分析、统计建模制图、论文组稿及追加材料。
 ---
 
 # 实证研究数据流水线
@@ -9,13 +9,13 @@ description: 从混合研究资料中尽可能完整地发现、整合任意数�
 
 工作台的阶段、顺序、依赖、命令、条件步骤、检查点、工具动作、任务说明和重跑范围由本技能的 [workflow.json](contracts/workflow/workflow.json) 唯一声明，结构契约见 [workflow.schema.json](contracts/workflow/workflow.schema.json)。修改研究流程时维护这份声明并重新构建发布清单，插件按当前契约读取；不要另在插件中维护一份阶段表。
 
-验收档写在项目里，默认是可投稿（submission）。explore 只核审计和数据集骨架；submission 增加文件级来源处置、模型登记、数字回溯、图表和文稿；archive 才要求逐格全覆盖。低于当前档的判据标为不适用。降低档位必须有用户确认。有工作台时，下面的阶段图只供对照，不代替任务卡。
+验收档写在项目里，默认是可投稿（submission）。explore 只核审计和数据集骨架；submission 增加文件级来源处置、模型登记、数字回溯、图表和文稿；archive 才要求逐格全覆盖。低于当前档的判据标为不适用。降低档位要由用户自己改 `.workbench/acceptance.json`，不要调用工具把降档说成已经确认。有工作台时，下面的阶段图只供对照，不代替任务卡。
 
 工作台门禁报告的入口、覆盖范围、迁移与恢复见 [门禁报告与兼容状态](references/15-gate-reports.md)。技能是研究质量判定的唯一实现来源，工作台保留挂载、工作流与真实裁定。报告只证明实际检查过的事实；缺失或失效证据保持未判。校验器读错原文时用 `data_analysis_dispute_gate` 登记争议，争议不把判据改成通过，也不再当作下一步。
 
 自定义脚本、任意引擎、项目覆盖和兼容模式均可使用。选用兼容/对照模式时说明原因和实际验收范围，模式迁移成功不等于研究质量通过。自定义产物不必迁回默认目录：在 `research_registry.json.artifact_paths` 声明“默认逻辑路径 → 实际项目相对路径”，例如 `{"output/chart_pack/chart_manifest.csv":"output/figures/chart_manifest.csv","output/models":"output/analysis_pack","output/qa/qa_report.json":"output/qa"}`。审计清单和生成文件放在产物目录，保留原材料扫描范围；材料通过已登记挂载读取。
 
-自定义逐格复算适配器可在注册表 `verification.adapters` 声明名称与脚本，供 CLI 与工作台共享，例如 `{"envcell":"scripts/envcell_adapter.py"}`。解析器重放可登记 `method=parser_replay`，如实说明它能核一致性、不能独立证明语义；`independent_reextract` 只描述实际独立实施的检查。适配器自动绑定已导入的本项目代码，其他依赖可在适配器的 `verification_dependencies` 列出。注册表、codebook、解析器或数据在 final 后改变时，重新 prepare/final；最终答复同时列出当前通过、未通过和未评估项。
+归档档才使用逐格复算适配器。可在注册表 `verification.adapters` 声明名称与脚本，供 CLI 与工作台共享，例如 `{"envcell":"scripts/envcell_adapter.py"}`。解析器重放可登记 `method=parser_replay`，如实说明它能核一致性、不能独立证明语义；`independent_reextract` 只描述实际独立实施的检查。适配器自动绑定已导入的本项目代码，其他依赖可在适配器的 `verification_dependencies` 列出。归档档里注册表、codebook、解析器或数据在 final 后改变时，重新 prepare/final。最终答复同时列出当前通过、未通过和未评估项。可投稿档不要为了这些句子去跑 prepare/final。
 
 把“一堆杂乱资料”变成“可复核的样本流程 + 可追溯的编码/字段数据 + 可复现的模型 + 可投稿的图表与文稿”。本 skill 不限定学科、语言或文件格式；法律裁判文书只是“文本编码”的一个示例，问卷、访谈、新闻、政策文件、实验记录、开放数据、网页和数据库导出同样适用。
 
@@ -59,7 +59,7 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 
 ## 硬规则
 
-v2 任务同时读取 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)。它规定当前版本的复核签名、搜索范围、执行绑定、独立校核、语境复读和发布行为；不能用台账里的 `verified/passed` 字样代替这些实际检查。
+归档档的 v2 任务才读取 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)。它规定该档的复核签名、搜索范围、执行绑定、独立校核、语境复读和发布行为；不能用台账里的 `verified/passed` 字样代替这些实际检查。可投稿档不要打开这份文档来补做全格复核。
 
 1. **先审计，再编码/建模。** 没弄清文件数、可读文本数、重复数、字段缺失和排除原因之前，不要开始统计。
 2. **按内容去重，不按文件名。** 同名不同文、同文不同名都很常见；至少用 MD5，再用标题/关键字段/正文抽样复核。
@@ -67,7 +67,7 @@ v2 任务同时读取 [references/14-reviewed-workflow.md](references/14-reviewe
 4. **每个编码/抽取值要有证据。** 原文没有记载就记 `NA/未记载`，不要默认记 0；否定表述、他人建议、转述不能当作最终事实。
 5. **描述样本 N ≠ 模型样本 N。** 每个模型单独报告 N 和筛选条件；正文、表、图、摘要必须用同一套口径。
 6. **关联 ≠ 因果。** 写“关联/对应/更可能”，不写“导致/使得/证明有效”。
-7. **整合后全格回源再核对一遍。** 主键、空值、标记、编码和派生值全部覆盖；每格有来源哈希/位置/原值，派生值有可复算输入。prepare 之后逐格重新读原材料与上下文，完成版本绑定复核再跑 final；禁止抽查十行代替全检、只检查 flags、自动批量盖 verified 或沿用旧复核。只有 `verify_dataset.py --stage final` 和资料/模型覆盖闸门通过的版本才可用于正式结果。脚本不可能证明所有语义正确，必须如实完成复读。
+7. **按验收档复核，可投稿档不做全格回源。** explore 与 submission 的正式结果以注册表、抽样复核、模型回执、数字和图表为准。submission 把脚本抽出的语义值当作候选：写 `docs/decisions/coding-sample.md`，正文包含「抽样复核：」，记下抽查原文、脚本值是否一致和残留误差。archive 才要求主键、空值、标记、编码和派生值逐格回源，prepare 之后实际重读原材料再跑 final；这一档禁止用十行抽查、只看 flags、批量盖 verified 或旧复核代替全检。脚本不可能证明所有语义正确。可投稿档不要调用 `verify_dataset.py`、`verify_source` 或 `research_gate.py` 来换取统计或交付通过。
 
 ## 判断权：谁决定，谁举证
 
@@ -119,11 +119,11 @@ python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目�
 
 每个阶段都有“闸门”。当前验收档以内的闸门不过，不进入下一阶段。低于当前档的判据不适用。有工作台时按任务卡推进；下面这张图是没有工作台时的 CLI 对照。
 
-这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段，补数后全格重核；用户补充资料/数据形态时重算受影响的模型、图表、报告和 DOCX。内置脚本可被等价、自选实现替换，但来源、复核、样本与运行回执契约不能省略。
+这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段。可投稿档补数后重跑受影响的统计、图表和文稿，并更新抽样复核。归档档才在补数后做全格复核。内置脚本可被等价、自选实现替换，但来源、样本与运行回执契约不能省略。
 
 ### 可选的 v2 契约层
 
-需要在混合资料里做「可审计的中间结论」时（扫描页/音视频/跨页表、逐格复核、
+归档档需要在混合资料里做「可审计的中间结论」时（扫描页/音视频/跨页表、逐格复核、
 多输入模型、独立数值校核、发布范围），用 `scripts/` 下的 v2 模块把每一步落成
 带内容哈希与状态机的记录：`source_units → ocr_provider/asr_provider →
 table_recovery → audit_view → discovery → search_index → gaps →
@@ -331,7 +331,7 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 模型读 `extraction_review.csv` 与原文，逐条写 `decisions.jsonl`；`value` 必须是 `alternatives` 或当前值里出现过的候选，否则 `check_decisions.py` 直接拒绝——这是“不许凭空取值”的机器闸门。`na` 判断不需要候选，但必须给出原文 span。
 
-**闸门**：全部编码/抽取值能从 `值 → 证据句/原始字段 → 原文/原始行` 完整回溯，整合后逐格重新核对；每个 `needs_review=true` 字段的歧义都有记录且已解决。现有 `evidence.jsonl` 与 `decisions.jsonl` 是输入证据，不自动等于全格复核；按 references/12 导出 provenance，运行 prepare、实际逐格复读、再运行 final。
+**闸门**：编码抽取值要能从 `值 → 证据句/原始字段 → 原文/原始行` 回查。可投稿档用抽样复核记录抽查结果，`needs_review=true` 的字段要有处理记录。`evidence.jsonl` 与 `decisions.jsonl` 是候选证据，不自动等于分析事实，也不等于全格复核。全格 provenance、prepare 和 final 只在归档档，契约在 references/12。
 
 详见 `references/02-coding-protocol.md`。
 
@@ -345,7 +345,7 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 - `data/analysis.csv`：分析用宽表，一行一个分析单位。
 - `data/analysis.sav`：需要 SPSS 时执行生成的 `.sps` 得到，带变量标签/值标签；不需要 SPSS 时不强制。
 
-每个数据集另有独立 codebook、逐格 provenance 和整合完成后的全格复核记录；长表/面板用复合键，网络/矩阵等保留原生文件并提供无损审计视图。具体契约见 references/12。
+每个数据集写明单位、主键和 codebook。长表/面板用复合键，网络/矩阵等保留原生文件并提供无损审计视图。逐格 provenance 和全格复核记录只在归档档建立，契约见 references/12。可投稿档把分析表登记进 `research_registry.json` 后即可进入统计。
 
 主键与标记列（`references/10-contracts.md` §1、§5）：
 
@@ -363,7 +363,7 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 
 用 `scripts/csv_to_spss_syntax.py` 生成 `.sps`，避免手写 `GET DATA` 时列类型错位。CSV 里若是“是/否、有/无、支持/不支持”等二值文本，脚本会自动追加 `RECODE ... ('是'=1) ('否'=0) INTO *_num`，Logistic 直接用数值列；不需要时加 `--no-recode`。
 
-**闸门**：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释。先运行 `verify_dataset.py --stage prepare`，逐格复读后再跑 final；数据不变而复核完整通过才可建模。每个模型 N 从实际样本键与筛选条件重算。
+**闸门**：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释。可投稿档在注册表和抽样复核完成后进入统计，不运行 `verify_dataset.py`。归档档才先 prepare、逐格复读、再 final，通过后才把该版本用于正式结果。每个模型 N 从实际样本键与筛选条件重算。
 
 ---
 
@@ -578,7 +578,7 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 
 ## 阶段 7：终检
 
-先按 references/12 完成全格数据 final 复核和 `research_gate.py` 的资料/模型覆盖检查；正文与图表核查不能替代回源核查。交付包含全部数据集、codebook、证据与复核、模型/回查清单、代码环境/运行回执、完整图集、分析报告与最终 DOCX，不以图数或模型数够了作为结束条件。
+可投稿档的终检核对数字、图表、文稿和注册表，不先做全格 final，也不运行 `research_gate.py`。归档档才先按 references/12 完成全格复核和研究总闸门；正文与图表核查不能替代那一档的回源核查。交付包含当前验收档要求的数据集、codebook、模型回执、图集、分析报告与最终 DOCX，不以图数或模型数够了作为结束条件。
 
 运行：
 
@@ -648,7 +648,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |
 | `scripts/check_decisions.py` | 校验 `decisions.jsonl`：schema、证据 span/引文、候选值是否真的出现过、重复 target、`needs_human` 未决；有 error 退出 2 |
 | `scripts/review_pack.py` | 交付前审稿包：样本/缺失、模型 N、图表状态、数字溯源、未决 decisions、五个审稿人问题；Markdown + JSON 双出 |
-| `scripts/verify_dataset.py` | 对任意数量 CSV 审计视图逐格回读原始来源/哈希/位置、复算派生值；prepare 生成待复核任务，final 要求整合后的逐格复读且版本一致；支持显式自定义适配器 |
+| `scripts/verify_dataset.py` | 仅归档档：对 CSV 审计视图逐格回读来源、哈希、位置并复算派生值。可投稿档不要运行 |
 | `scripts/run_model.py` | 执行 Agent 自选的任意分析命令，记录实际输入、代码、输出的 SHA256、退出码与日志；不限制引擎或模型族 |
 | `scripts/research_gate.py` | 检查原始文件全覆盖、数据复核版本、开放模型清单、缺数回查、样本键与实际运行回执 |
 
@@ -667,8 +667,8 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `references/09-field-extraction.md` | 要把材料取成一行一个观测的结构化数据（写 profile、查证据、判 NA）时 |
 | `references/10-contracts.md` | 查脚本之间的键列/漏斗/N/缺失值/退出码约定时 |
 | `references/11-methods-catalog.md` | 选方法、查变量要求与前置判据、写结果句式、避开常见误用时 |
-| `references/12-exhaustive-research.md` | 使用本 skill 时先读：全资料发现、开放数据集/模型、全格回源复核、补数闭环与交付契约 |
-| `references/14-reviewed-workflow.md` | v2 当前维护流程：真实复核、开放执行器、版本失效、结论支持与成稿发布 |
+| `references/12-exhaustive-research.md` | 只在归档档阅读：全资料发现、开放数据集/模型、全格回源复核、补数闭环与交付契约 |
+| `references/14-reviewed-workflow.md` | 只在归档档阅读：v2 当前维护流程、真实复核、版本失效与成稿发布 |
 
 ## 模板
 

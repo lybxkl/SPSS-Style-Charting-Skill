@@ -1,6 +1,6 @@
 # 跨脚本契约（v1.1）
 
-内置脚本与 Agent 自选实现通过文件契约衔接。数据集形态、数量、模型与引擎开放；来源、版本、逐格复核和样本口径必须统一。
+内置脚本与 Agent 自选实现通过文件契约衔接。数据集形态、数量、模型与引擎开放；来源、版本和样本口径各档统一。逐格复核只在归档档统一，见第 11 节。
 下面是硬契约：**生成方必须写、消费方必须认、缺了必须报错**。
 所有实现与测试都以本文件为准；修改本文件需要同步 `SKILL.md` 与相应脚本。
 
@@ -130,6 +130,8 @@
 - `make_coding_sheet.py --decisions` 把 `value` 写进 `dataset.csv` 并把 `<field>_src` 记为 `decision`，`na` 记为 `decision:na`；`exclude` 的 target 是整份文档的 `rel_path`，该行从 `dataset.csv` 移除，并在 `run.json.review.documents_excluded_by_decision` 计数。
 
 ## 11. 全资料、全数据集与整合后的逐格复核
+
+本节只在验收档 archive 执行。explore 与 submission 不把逐格 final 当作统计或交付的前提。
 
 - 完整 schema 与例子见 `references/12-exhaustive-research.md`；入口 `assets/research_registry.example.json`。registry 不限制数据集数量，`unit/key/codebook/path/provenance/review` 各自声明；原生格式自由，为每个经验字段提供无损 CSV 审计视图。
 - `source_inventory` 的每份文件都有 `source_coverage` 记录；来源必须真的参与声明的数据集，遗漏、新文件和 excluded 仍供值均报错。原件与产出分目录，原件不移动。

@@ -3,7 +3,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "c82745c9cbb5f5771982b844a4739708422931108dd1bc8a829f204fbb67a17a"
+      "sha256": "7963ffb45fef1ac769d20c7c511cb8b073d7d39754b8f15b39ccd2aea9be414e"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -23,7 +23,7 @@
     },
     {
       "path": "assets/delivery-checklist.md",
-      "sha256": "63c4e1738b723e31a718e380341497f8d372143912fbe95355f5f696427ae1c8"
+      "sha256": "3d90a10e26ab16842f03c81ab61ff0747af6b86d8426882606a1c03b7723e953"
     },
     {
       "path": "assets/figure-spec-template.md",
@@ -71,7 +71,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "53d0192ded4d585e6485385f10cc7f6e82c2727e807ff15cebdbd9f1217d9a3a"
+      "sha256": "dc94516c0e0eeb024da857686740115bfc806e93567a5f7294330fa5a5f6ca36"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -111,7 +111,7 @@
     },
     {
       "path": "references/06-qa-checklist.md",
-      "sha256": "614e7b89c0898b5a098466a303a2d6ddef13dc4c954e228e9be98a6a2e683dc5"
+      "sha256": "97e11e7ef743f68300e2d822af4610ed268bafbe561246e268f314e1f80708fb"
     },
     {
       "path": "references/07-chart-atlas.md",
@@ -119,7 +119,7 @@
     },
     {
       "path": "references/08-analysis-expansion.md",
-      "sha256": "a4c30b3fd9f70109512757628eee2a4a09f55ee083e07a49be75c349a933f39b"
+      "sha256": "e1b2a3cbce2851e2a3fa718b899b082066c8094c166048ec80e2d33d6f1759c2"
     },
     {
       "path": "references/09-field-extraction.md",
@@ -127,7 +127,7 @@
     },
     {
       "path": "references/10-contracts.md",
-      "sha256": "630405eba2bb7b065512e6ed7cc7a39d91308c1406a08604455dc97b1338719c"
+      "sha256": "bb396a7a79057ce1fdc2111207cb17cd798cb800e20961becac36e13bf56572f"
     },
     {
       "path": "references/11-methods-catalog.md",
@@ -135,7 +135,7 @@
     },
     {
       "path": "references/12-exhaustive-research.md",
-      "sha256": "4e93d95eaad64ad63eafee0146449589ebecd26aab88a076efa640c23046a3f5"
+      "sha256": "33373286e5af40fab476f65d35e52bc5b0313d0831662c237b83a94952d28679"
     },
     {
       "path": "references/13-contract-v2.md",
@@ -143,7 +143,7 @@
     },
     {
       "path": "references/14-reviewed-workflow.md",
-      "sha256": "af8de1425c74b73706fb398a3a4d4f9916d433b38badbd4c79eee91a8ec35dba"
+      "sha256": "ffb61f11e0a021b065198ba0735aba9bbb263bf9e11f9f192952e5b7b2aec104"
     },
     {
       "path": "references/15-gate-reports.md",

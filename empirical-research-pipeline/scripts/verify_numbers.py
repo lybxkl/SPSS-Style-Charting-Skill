@@ -97,12 +97,12 @@ THOUSAND_GAP_RE = re.compile(r"(?<=\d)[ \u00a0](?=\d)")
 
 TEXT_PATTERNS = (
     ("N", re.compile(r"[NＮnｎ]\s*[=＝]\s*([0-9][0-9,，\u00a0 ]*)")),
-    ("N", re.compile(r"([0-9][0-9,，\u00a0 ]*)\s*(?:份|个|件|人|条)")),
+    ("N", re.compile(r"(?<![\d.])([0-9][0-9,，\u00a0 ]*)\s*(?:份|件|人|条|个(?!月))")),
     ("stat", re.compile(r"(?<![A-Za-z0-9_])(?:OR|HR|RR|β|B|r|t|z|F)\s*[=＝]\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)", re.I)),
     ("p<=", re.compile(r"[pP]\s*(?:<=|≤|≦)\s*(\d*\.?\d+)")),
     ("p<", re.compile(r"[pP]\s*[<＜]\s*(\d*\.?\d+)")),
     ("p=", re.compile(r"[pP]\s*[=＝]\s*(\d*\.?\d+)")),
-    ("pct", re.compile(r"(\d+(?:\.\d+)?)\s*[%％]")),
+    ("pct", re.compile(r"(\d+(?:\.\d+)?)\s*[%％](?!\s*(?:CI|置信))", re.I)),
 )
 
 

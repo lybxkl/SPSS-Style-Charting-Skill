@@ -12,7 +12,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false
+      "required": false,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -26,7 +27,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -40,7 +42,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -54,7 +57,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -68,7 +72,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -82,7 +87,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -96,7 +102,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -110,7 +117,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": true,
@@ -124,7 +132,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": true,
@@ -138,7 +147,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -152,7 +162,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -166,7 +177,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -180,7 +192,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "coding",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -194,7 +207,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -208,7 +222,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -222,7 +237,8 @@
       "migrationBatch": "S1",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -236,7 +252,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -250,7 +267,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -264,7 +282,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -278,7 +297,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -292,7 +312,8 @@
       "migrationBatch": "S1",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -306,7 +327,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -320,7 +342,8 @@
       "migrationBatch": "S1",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -334,7 +357,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -348,7 +372,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -362,7 +387,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": false
+      "required": false,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -376,7 +402,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -390,7 +417,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -404,7 +432,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -418,7 +447,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -432,7 +462,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "figures",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -446,7 +477,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -460,7 +492,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -474,7 +507,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -488,7 +522,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -502,7 +537,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": true,
@@ -516,7 +552,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": true,
@@ -530,7 +567,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -544,7 +582,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "stats",
-      "required": false
+      "required": false,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -558,7 +597,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -572,7 +612,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -586,7 +627,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "stats",
-      "required": false
+      "required": false,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -600,7 +642,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -614,7 +657,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -628,7 +672,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": false
+      "required": false,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -642,7 +687,8 @@
       "migrationBatch": "S2",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false
+      "required": false,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -656,7 +702,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -670,7 +717,8 @@
       "migrationBatch": "S1",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -684,7 +732,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -698,7 +747,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -712,7 +762,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": false
+      "required": false,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -726,7 +777,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -740,7 +792,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": true,
@@ -754,7 +807,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false
+      "required": false,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -768,7 +822,8 @@
       "migrationBatch": "R",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -782,7 +837,8 @@
       "migrationBatch": "R",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -796,7 +852,8 @@
       "migrationBatch": "R",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -810,7 +867,8 @@
       "migrationBatch": "R",
       "owner": "workbench",
       "reportStage": "recheck",
-      "required": false
+      "required": false,
+      "minTier": "archive"
     },
     {
       "allowNa": true,
@@ -824,7 +882,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "recheck",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": true,
@@ -838,7 +897,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "recheck",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -852,7 +912,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "dataset",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -866,7 +927,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -880,7 +942,8 @@
       "migrationBatch": "S2",
       "owner": "workbench",
       "reportStage": "scope",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -894,7 +957,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -908,7 +972,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -922,7 +987,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "audit",
-      "required": true
+      "required": true,
+      "minTier": "explore"
     },
     {
       "allowNa": false,
@@ -936,7 +1002,8 @@
       "migrationBatch": "W",
       "owner": "workbench",
       "reportStage": "qa",
-      "required": false
+      "required": false,
+      "minTier": "explore"
     },
     {
       "allowNa": true,
@@ -950,7 +1017,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -964,7 +1032,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -978,7 +1047,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -992,7 +1062,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "stats",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": false,
@@ -1006,7 +1077,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "manuscript",
-      "required": true
+      "required": true,
+      "minTier": "submission"
     },
     {
       "allowNa": true,
@@ -1020,7 +1092,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "qa",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -1034,7 +1107,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -1048,7 +1122,8 @@
       "migrationBatch": "S2",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     },
     {
       "allowNa": false,
@@ -1062,7 +1137,8 @@
       "migrationBatch": "S3",
       "owner": "skill",
       "reportStage": "verify",
-      "required": true
+      "required": true,
+      "minTier": "archive"
     }
   ],
   "schema": "dsa.gate-catalog/1"

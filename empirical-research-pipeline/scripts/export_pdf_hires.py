@@ -201,6 +201,15 @@ def image_widths(pdf) -> list[dict]:
     return out
 
 
+def measure_saved_pdf(path: str) -> tuple[list[dict], int]:
+    """量已经写到磁盘上的 PDF。内存里刚替换过的文档仍可能报旧像素。"""
+    saved = fitz.open(path)
+    try:
+        return image_widths(saved), saved.page_count
+    finally:
+        saved.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Word→PDF with 600 dpi figure backfill.")
     parser.add_argument("--docx", required=True)
@@ -279,8 +288,9 @@ def main() -> int:
                 replaced.append({"tag": tag, "page": page.number + 1, "image": image})
         # garbage=4 also drops the now-unreferenced image objects.
         pdf.save(out_pdf, garbage=4, deflate=True)
-        widths = image_widths(pdf)
         pdf.close()
+        # replace_image 后的内存对象仍可能报回填前的像素。只量已经写盘的文件。
+        widths, pages = measure_saved_pdf(out_pdf)
         low = [w for w in widths if args.min_width and w["width"] < args.min_width]
         low_dpi = [w for w in widths if args.min_dpi and w["dpi"] < args.min_dpi * .995]
         report = {
@@ -298,9 +308,6 @@ def main() -> int:
         report_path = os.path.splitext(out_pdf)[0] + "_export_report.json"
         with open(report_path, "w", encoding="utf-8") as fh:
             json.dump(report, fh, ensure_ascii=False, indent=2)
-        check = fitz.open(out_pdf)
-        pages = check.page_count
-        check.close()
         print(f"pages: {pages}")
         print(f"figures replaced: {len(replaced)}")
         print(f"embedded figures: {len(widths)}; "

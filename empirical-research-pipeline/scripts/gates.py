@@ -192,6 +192,36 @@ def next_generation(root,stage):
     return maximum+1
 
 
+def project_tier(inputs):
+    """未写验收档时返回 None，表示不豁免任何判据。"""
+    path=inputs.file('.workbench/acceptance.json')
+    if not path.is_file():
+        return None
+    try:
+        tier=read_json(path).get('tier')
+    except (OSError, ValueError, UnicodeError):
+        return None
+    return tier if tier in ('explore','submission','archive') else None
+
+
+def open_dispute_ids(inputs):
+    path=inputs.file('output/gates/disputes.jsonl')
+    if not path.is_file():
+        return set()
+    found=set()
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line=line.strip()
+        if not line:
+            continue
+        try:
+            row=json.loads(line)
+        except ValueError:
+            continue
+        if row.get('status','open')=='open' and isinstance(row.get('gateId'),str):
+            found.add(row['gateId'])
+    return found
+
+
 def evaluate(root,stage,checkpoint,run_id=None):
     from gate_checks import evaluate as checks, verdict, structure
     root=Path(root).resolve()
@@ -231,9 +261,22 @@ def evaluate(root,stage,checkpoint,run_id=None):
         from gate_facts import evaluate_artifacts
         actual.update({g['id']: g for g in evaluate_artifacts(inputs, policy, definitions)})
         gates=[]
+        tier_rank={'explore':1,'submission':2,'archive':3}
+        current_tier=project_tier(inputs)
+        open_disputes=open_dispute_ids(inputs)
         for definition in definitions:
             ident=definition['id']
-            gates.append(actual.get(ident) or verdict(ident,'unjudged','本版本尚未实现此判据',[],[structure('.workbench/gates/policy.json','implemented evaluator',ident)],'not-supported'))
+            gate=actual.get(ident) or verdict(ident,'unjudged','本版本尚未实现此判据',[],[structure('.workbench/gates/policy.json','implemented evaluator',ident)],'not-supported')
+            minimum=definition.get('minTier') or 'explore'
+            if current_tier and tier_rank.get(minimum,1)>tier_rank.get(current_tier,0):
+                gate=verdict(ident,'na',f'当前验收档 {current_tier} 不适用（此判据属于 {minimum}）',gate.get('inputRefs') or ['.workbench/gates/policy.json'],gate.get('evidence') or [structure('.workbench/gates/policy.json','tier',minimum)],'tier')
+                gate['applicability']={'rule':f'minTier:{minimum}','evidenceRefs':list(gate['inputRefs']),'scope':{'tier':current_tier,'minTier':minimum}}
+                gate['advice']=''
+            elif ident in open_disputes:
+                gate=dict(gate)
+                gate['detail']='争议已登记，不作为下一步。原结论：'+str(gate.get('detail') or definition['label'])
+                gate['reason']=gate.get('reason') or 'disputed'
+            gates.append(gate)
         for gate in gates:
             gate['inputRefs']=sorted({inputs.aliases.get(ref,ref) for ref in gate['inputRefs']}|{'.workbench/gates/policy.json','.workbench/gates/roots.json'})
             gate['collectionRefs']=sorted(inputs.collection_aliases.get(ref,ref) for ref in gate['collectionRefs'])

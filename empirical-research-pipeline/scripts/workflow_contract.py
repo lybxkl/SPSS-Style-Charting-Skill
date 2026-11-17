@@ -43,6 +43,15 @@ def validate(package):
         if set(stage['ui']['panels'])-PANELS:raise ValueError('unsupported UI panel')
         for value in stage['artifacts']+stage['ui'].get('requiredFiles',[])+[p.rstrip('/') for p in stage['ui'].get('artifactPrefixes',[])]:relative(value)
         if stage['ui'].get('legacySkipWhenMissing'):relative(stage['ui']['legacySkipWhenMissing'])
+        if stage.get('resumeFile'):relative(stage['resumeFile'])
+        if stage.get('minTier') and stage['minTier'] not in ('explore','submission','archive'):raise ValueError('invalid stage tier')
+        loop=stage.get('loop') or {}
+        for key in ('draftDir','freezeFile','sampleReport'):
+            if loop.get(key):relative(loop[key])
+        host=stage.get('hostCall') or {}
+        if host:
+            relative(host['input'])
+            if not host.get('tool') or not host.get('returns'):raise ValueError('incomplete host call')
     actions=set();tools=set()
     for action in spec['actions']:
         if action['id'] in actions or action['stage'] not in seen:raise ValueError('invalid action reference')
@@ -81,6 +90,8 @@ def validate(package):
         for value in binding.get('paths',[]):relative(value if isinstance(value,str) else value['json'])
         if binding.get('fallback'):relative(binding['fallback'])
         for value in binding.get('cases',{}).values():relative(value)
+    tiers=spec.get('acceptanceTiers') or {}
+    if tiers and tiers.get('default') not in ('explore','submission','archive'):raise ValueError('invalid default tier')
     catalog=package/'contracts/gates/catalog.json'
     if catalog.exists():
         catalog.resolve().relative_to(package)

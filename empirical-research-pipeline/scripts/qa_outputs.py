@@ -234,19 +234,29 @@ def check_palette(colors: list[str], colorblind: bool = False,
 
 
 
-def resolve_key(header: list[str], wanted: str | None) -> tuple[str | None, list[str]]:
+def resolve_key(header: list[str], wanted: str | None, rows: list[dict] | None = None) -> tuple[str | None, list[str]]:
     """Return (column, candidates) for the unique-key column.
 
-    ``wanted`` wins when present.  Otherwise the first alias found in the header
-    is used, so an explicit --key that no longer matches the file cannot silently
-    pass as a warning.
+    An explicit column wins.  In auto mode, a later alias that is actually unique
+    beats an earlier alias that repeats, so a case id shared by several people
+    does not hide a row id.
     """
     if wanted and wanted not in ("auto", "") and wanted in header:
         return wanted, [wanted]
     candidates = [c for c in KEY_ALIASES if c in header]
+    if rows and candidates:
+        unique = [col for col in candidates if column_is_unique(rows, col)]
+        if unique:
+            return unique[0], candidates
     if wanted and wanted not in ("auto", "") and wanted not in header:
         return (candidates[0] if candidates else None), candidates
     return (candidates[0] if candidates else None), candidates
+
+
+def column_is_unique(rows: list[dict], column: str) -> bool:
+    values = [str(row.get(column, "")).strip() for row in rows]
+    filled = [value for value in values if value]
+    return len(filled) == len(rows) and len(set(filled)) == len(filled)
 
 
 def parse_n(value) -> tuple[int | None, bool]:
@@ -594,7 +604,7 @@ def check_data(path: str, key: str, flag: str | None) -> dict:
         result["errors"].append("CSV has no data rows")
         return result
     header = list(rows[0].keys()) if rows else []
-    column, candidates = resolve_key(header, key)
+    column, candidates = resolve_key(header, key, rows)
     result["key"] = column
     result["key_candidates"] = candidates
     if column:
@@ -607,6 +617,10 @@ def check_data(path: str, key: str, flag: str | None) -> dict:
         result["empty_keys"] = empty
         if dup:
             result["errors"].append(f"{len(dup)} duplicate {column} value(s)")
+        elif candidates and column != candidates[0]:
+            result["warnings"].append(
+                f"列 {candidates[0]} 不是唯一键，改用唯一列 {column}；抽取脚本给出的标识只是候选"
+            )
         if empty:
             result["errors"].append(f"{empty} empty {column} value(s)")
     else:

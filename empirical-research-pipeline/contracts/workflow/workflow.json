@@ -13,6 +13,7 @@
     "directories": [
       "data",
       "docs",
+      "draft",
       "output",
       "scripts",
       "runs"
@@ -255,7 +256,18 @@
       "inspectionStages": [
         "coding"
       ],
-      "manualInstructions": [],
+      "resumeFile": "docs/decisions/inclusion.md",
+      "loop": {
+        "draftDir": "draft",
+        "freezeFile": "draft/freeze.json",
+        "sampleReport": "draft/sample_errors.md"
+      },
+      "manualInstructions": [
+        "先写 docs/decisions/inclusion.md，正文含「纳入确认：」和排除口径。没有这份确认不能全量抽取。",
+        "跑已登记动作 suggest-profiles，看剖面覆盖了哪些字段、哪些没有。领域不预设；不够的字段写在项目自己的剖面或 draft/ 解析器里，不要改技能包。",
+        "在 draft/ 上对冻结样本试跑，把误差写进 draft/sample_errors.md。draft/ 的修改不使审计失效。",
+        "样本可接受后调用 data_analysis_adopt_command，把解析器冻成该阶段命令并全量跑一次。不要手跑脚本代替回执。"
+      ],
       "ui": {
         "panels": [
           "corpus"
@@ -279,7 +291,8 @@
         "output/dataset/analysis.csv"
       ],
       "dependsOn": [
-        "audit"
+        "audit",
+        "coding"
       ],
       "admission": {},
       "afterRun": {
@@ -292,6 +305,7 @@
       "manualInstructions": [
         "从 output/coding/dataset.csv（逐份抽取结果）构建 output/dataset/analysis.csv：一行一个分析单位。",
         "必须保留 in_analysis 标记（0/1）并说明排除理由；派生变量（分组、对数等）要写进 docs/codebook.md。",
+        "dataset.csv 和编码脚本抽出的罪名、刑期、情节等是候选值，不能直接当成已经核对的分析事实。进入 analysis.csv 的语义字段要能对上 evidence.jsonl 的原文位置，或在 decisions.jsonl 里有一条判断。",
         "不要改动 evidence.jsonl 里的原文证据；分析表只做可追溯的转换。",
         "构建脚本放 scripts/ 并在 project.json 里登记（可选），但产物必须是 output/dataset/analysis.csv——data/ 是语料根，宽表放进去会被下一次审计当成一份资料。"
       ],
@@ -306,6 +320,7 @@
     {
       "id": "verify",
       "index": 5,
+      "minTier": "archive",
       "name": "全格复核",
       "short": "复核数据",
       "purpose": "逐格回源 + 独立复算：prepare 生成待核模板，final 通过后数据才允许进入统计",
@@ -457,7 +472,12 @@
       "inspectionStages": [
         "stats"
       ],
-      "manualInstructions": [],
+      "resumeFile": "docs/decisions/primary-models.md",
+      "manualInstructions": [
+        "先写 docs/decisions/primary-models.md，正文含「主分析：」，写明结局、对照和放弃的规格。",
+        "调用 data_analysis_sweep 给模型族表态，再用 data_analysis_register 登记实际估计的模型。",
+        "登记之后用 data_analysis_run_stage(stageId=\"stats\") 留下回执。手跑 auto_stats 不会被闸门采信。"
+      ],
       "ui": {
         "panels": [
           "models"
@@ -629,11 +649,13 @@
       "inspectionStages": [
         "manuscript"
       ],
+      "resumeFile": "docs/decisions/figure-selection.md",
       "manualInstructions": [
+        "先写 docs/decisions/figure-selection.md，正文含「正文图：」，列出进入正文的图号。",
         "先调 data_analysis_manuscript action=scaffold 生成骨架（按图表清单的 section 分组，figure 块的 png/caption 照抄清单，正文留「待补」；png 缺失或 status 不是 ok 的图会被跳过）。",
         "再按 action=brief 的改稿说明把「待补」写成正文，只改 manuscript.json；不要凭空手写一份 spec 绕过骨架。",
         "正文里的每个数字都要能落到 output/models/*.csv 或 output/dataset/analysis.csv 的原值；图注里的 N 不要重复加。",
-        "改完必须重跑第 8 阶段（data_analysis_run_stage(stageId=\"manuscript\")）生成 output/manuscript.docx——闸门只认这个 docx；再跑第 9 阶段终检。",
+        "改完必须重跑文稿阶段（data_analysis_run_stage(stageId=\"manuscript\")）生成 output/manuscript.docx。终检只核可投稿档的数字和报告；研究总闸门、判断台账和逐格复核属于归档档，不要为了它们补全量来源处置。",
         "不要手改 docx 绕过统计结果；数字对不上就回到 stats/figures 修产物。"
       ],
       "ui": {
@@ -839,6 +861,7 @@
     {
       "id": "recheck",
       "index": 10,
+      "minTier": "archive",
       "name": "复核与修订",
       "short": "复核",
       "purpose": "机器复算 + 交叉核对 + 模型审计，问题逐条可裁定，修完重跑受影响阶段",
@@ -882,6 +905,46 @@
           "verification-final",
           "verification-fresh"
         ]
+      }
+    },
+    {
+      "id": "publish",
+      "index": 11,
+      "name": "交付到格式匠",
+      "short": "交付",
+      "purpose": "把带有文稿回执的 output/manuscript.docx 交给格式匠，取回 file_id、paper_id、version_id",
+      "script": null,
+      "artifacts": [
+        "output/handoff.json"
+      ],
+      "dependsOn": [
+        "manuscript"
+      ],
+      "admission": {},
+      "afterRun": {
+        "checkpoint": "manuscript-ready",
+        "requireComplete": false
+      },
+      "inspectionStages": [],
+      "hostCall": {
+        "tool": "formatjiang_receive_manuscript",
+        "input": "output/manuscript.docx",
+        "returns": [
+          "file_id",
+          "paper_id",
+          "version_id"
+        ]
+      },
+      "manualInstructions": [
+        "只调用 formatjiang_receive_manuscript，path 为项目内 output/manuscript.docx 的绝对路径。",
+        "把返回的 file_id、paper_id、version_id 交给 data_analysis_record_handoff。",
+        "预览套版之后停止本回合。用户在当前对话明确同意后才能 apply_layout_as_branch。"
+      ],
+      "ui": {
+        "panels": [
+          "manuscript"
+        ],
+        "draftTask": ""
       }
     }
   ],
@@ -1023,6 +1086,28 @@
               "file": "output/research_gate.json"
             }
           ]
+        }
+      ],
+      "admission": {}
+    },
+    {
+      "id": "suggest-profiles",
+      "tool": "suggest-profiles",
+      "stage": "coding",
+      "label": "列出剖面覆盖",
+      "steps": [
+        {
+          "script": "scripts/suggest_profiles.py",
+          "args": [
+            "--audit",
+            "output/audit/corpus_files.csv",
+            "--out",
+            "output/coding/profile_candidates.json"
+          ],
+          "produces": [
+            "output/coding/profile_candidates.json"
+          ],
+          "continueOnError": true
         }
       ],
       "admission": {}
@@ -1433,10 +1518,16 @@
     "技能包只读，不复制、不改写它。",
     "每个数字须有当前材料或实际产物依据；缺输入就明确说明，不伪造数据、N、p 值或文献。",
     "图表按技能要求生成；图注写 N 与口径。",
-    "命令以当前工作流和项目覆盖为准；结果以当前门禁报告为准。"
+    "命令以当前工作流和项目覆盖为准；结果以当前门禁报告为准。",
+    "draft/ 是试跑目录，改它不会让已完成的审计失效。冻结后的阶段命令才进入 scripts/。",
+    "验收档 explore、submission、archive 由项目锁定。低于当前档的判据不适用。archive 才要求逐格全覆盖。"
   ],
+  "acceptanceTiers": {
+    "default": "submission"
+  },
   "agentInstructions": [
-    "研究方法和真实证据要求以 SKILL.md 及其引用为准。",
+    "有工作台时以任务卡的下一步为唯一规程。研究方法以 SKILL.md 的证据法为准。",
+    "验收档为 archive 时才阅读 references/12 与 references/14 的全覆盖契约。",
     "阶段、依赖、执行步骤、可选动作和重跑范围以本次工作流声明为准，不凭旧阶段编号继续。",
     "用工作台执行登记命令，记录实际生产和体检；人工步骤按 manualInstructions 完成，不伪造人工签收。",
     "缺失、失效或不兼容的契约需要修复或升级；不能沿用另一版的旧通过结果。"

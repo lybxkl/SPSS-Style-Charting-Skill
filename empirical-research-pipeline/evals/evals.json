@@ -120,6 +120,16 @@
       "id": 24,
       "prompt": "挖掘工具给我列了一堆关键词候选和主题，我直接把前 20 个关键词当成变量写进 codebook 可以吗？",
       "expected_output": "不可以。候选表只是「这里有个值得你亲自看的词」的提议，每行带 rel_path+行号让你回原文读语境；TF-IDF 高分≠构念成立、共现≠因果、主题分组≠类别体系。正确流程：读候选→回原文读语境→决定哪些进 profile 字段/codebook/停用词表→写进你自己的剖面与 codebook，并把 K 的选择理由（若用了 --scan-k）写进方法说明。采纳是研究决定，机器不代写、也不进任何闸门。"
+    },
+    {
+      "id": 25,
+      "prompt": "我的数据是分层的（学生嵌在班级里），还有缺失和随访时间。多变量模型这一步还能在技能内做完吗，还是都得写外部脚本？",
+      "expected_output": "可以在 `--spec` 内声明：分层结构用 `{\"type\": \"mixed\", \"groups\": \"班级\"}`（REML、随机截距、ICC 写进 fit.csv，可选 random_slopes）；随访用 `{\"type\": \"cox\", \"time\": …, \"event\": …}`（HR=exp(β)，可选 strata）与 `{\"type\": \"logrank\"}`（组间比较，χ²/df/p 在 fit.csv）；缺失用 `impute: {\"m\": ≥2, \"seed\": 必填}`（MICE-PMM + Rubin 合并 + FMI + 完整案例参照行 + impute_report.csv）。边界要说清：混合/交互的边际效应图、Schoenfeld PH 检验、复杂抽样设计方差仍需外部工具或写明局限；字段写错类型（如 mixed 里写 cluster）会直接报错退出而不是被忽略。"
+    },
+    {
+      "id": 26,
+      "prompt": "带抽样权重的模型，跑出来加权 N 和普通 N 不一样，报告里怎么写标准误？",
+      "expected_output": "报告必须写：点估计是加权估计（WLS / GLM freq_weights），但**标准误是模型基，不是设计基**——没有分层/PSU 的复杂抽样方差；摘要 model_summary.md 会自带这句话，fit.csv 有 weighted_n。不能把模型基 SE 冒充设计基 SE；若研究设计是分层多阶段抽样，要么用外部工具（如 R survey 包）重估，要么在局限里明说。同时 logit 的 AIC/BIC/LLR 在 freq_weights 下按重复样本解释，仅作参考；权重须为正有限数，0/负权重行先排除。"
     }
   ]
 }

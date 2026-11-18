@@ -153,6 +153,20 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - 输出：`coef_<id>.csv`（`model,term,beta,se,beta_ci_low,beta_ci_high,p,or,or_low,or_high,ci_low,ci_high,metric,estimate,n,n_events,outcome,ref,note,se_type`）、`model_summary.md`（样本、参照组、分离处理、拟合、VIF/ROC）、`model_meta.json`；`--vif` 写 `vif.csv`，`--roc` 写 `roc.csv`（AUC + 1000 次 bootstrap 95%CI）。logit 的 `ci_low/ci_high` 是 OR 尺度，`beta/se` 是对数尺度；OLS 的 `metric=beta`。
 - `coef_<id>.csv` 可直接交给 `auto_chart_pack.py --coef` 画森林图，不需要再手抄 SPPS 输出。
 - `--max-models` 与 `--max-predictors` 默认 0=不限；正数是显式分批/试跑预算，不能作为研究范围的固定上限。
+- **VIF 标志线全仓统一为 ≥5**：`model_summary.md` 与 `methods_lib.py` 的线性回归都按 ≥5 提示共线性（此前摘要按 >10、方法库按 ≥5，两处口径不一致）。
+
+### 五项现代统计（spec 里的字段与边界）
+
+同一 `--spec` 入口支持五种模型类型：`logit` / `ols` / `mixed` / `cox` / `logrank`。字段用错类型（如 `mixed` 里写 `cluster`、`logrank` 里写 `interactions` 或 `outcome`）直接报错退出，不会静默忽略。`fit.csv` 的 `test_stat/test_df/test_p` 一列两义：声明了 `interactions` 时是交互项联合 Wald χ²；`logrank` 模型时是 log-rank χ²。交互守门：交互列超过 30 列或设计列行比 >1/10 警告、>1/5 报错退出。
+
+1. **交互项**（`interactions: [["a","b"], ...]`，两变量都须在 `predictors` 里）：数值×数值、数值×分类（乘每列哑变量）、分类×分类（哑变量两两乘积），交互列排在主效应之后、note 标「交互项」；同时做**交互项联合 Wald χ² 检验**（手工构造约束矩阵，OLS/Logit/GLM/MixedLM/PHReg 通用），写进 `fit.csv` 的 `test_stat/test_df/test_p` 与摘要。交互项的 VIF 天然偏高，判读时以联合检验为准。
+2. **线性混合模型**（`"type": "mixed"` + 必填 `groups`，可选 `random_slopes: ["x"]`）：REML、随机截距（+随机斜率）；固定效应写 `coef_<id>.csv`，方差成分与 ICC 写 `fit.csv`（`n_groups/icc/var_group/var_resid`）。ICC 仅在纯随机截距下定义。不接受 `cluster/cov/weights/impute`。`subset` 与其他类型同一语义（先子集后完整案例，`groups` 缺失算入 n_dropna）。
+3. **Cox 比例风险**（`"type": "cox"` + 必填 `time`/`event`，可选 `strata`）：Breslow ties、**无截距项**；效应列为 **HR=exp(β)**、CI 在 HR 尺度（`metric=HR`）；偏对数似然写 `loglik`。事件列须为 0/1（文本标签用 `outcome_map`）；无事件直接报错。ph 假设检验（Schoenfeld）未内置，写论文时须另行检验。
+4. **log-rank 检验**（`"type": "logrank"` + 必填 `time`/`event`/`group`，可选 `strata`）：单一检验，不产系数行（`coef_<id>.csv` 按 S-09 惯例只写表头）；χ²、df、p 写 `fit.csv` 的 `test_*` 列。**纯 logrank 的 spec 合法**（exit 0，note 提示看 fit.csv）。
+5. **抽样权重**（`weights: "wtcol"`，仅 logit/ols）：OLS 走 WLS、logit 走 GLM(freq_weights)。**诚实边界：点估计是加权估计；标准误是模型基，不是设计基**——没有分层/PSU 的复杂抽样方差（摘要里明说）。加权 N 写 `fit.csv` 的 `weighted_n`。权重必须为正有限数（0/负值先在数据侧排除）；GLM 下的 AIC/BIC/LLR 按重复样本解释，仅作参考。`weights` 与 `cluster` 并存时 statsmodels 会警告 cov_type 与 freq_weights 组合不完全支持（警告如实进摘要），建议分敏感性核对。
+6. **多重插补**（`impute: {"m": ≥2, "seed": 必填, "cycles": ≥1 默认 5, "impute_outcome": true|false 默认 false}`，仅 logit/ols）：statsmodels MICE（PMM 抽补，分类变量按编码解码、水平保真），m 次独立填补（rng=seed+i 确定性）→ **Rubin 合并**（合并 β、总方差、Rubin df、t 分布 p、FMI）；逐填补集做与完整案例完全相同的**空单元格检查**（任一集出现空单元格即报错——各集删行不同无法合并）；结构性列（cluster/weights）**从不插补**：cluster 在建模样本里有缺失直接报错（与普通路径同一语义）；weights 缺失行剔除并计入 n_dropna；全部模型变量（结局+预测变量）都缺失的行剔除并计入 n_dropna；**默认不插补结局**（结局缺失行从每个填补集排除=协变量 MI；`impute_outcome: true` 才声明插补结局——插补结局是研究决定，摘要会写明跑的是哪种模式；插补结局时事件数仍按观测口径报告并注明）。产出：合并行（`sample="MI(m=…)"`）+ 完整案例参照行（`sample="… (complete-case)"`）同表，`impute_report.csv` 给每项 within/between/total 方差、FMI 与 CC 参照值。**MI 模型不报告单一似然/AIC**（fit.csv 留空）；ROC 不计算。完整案例参照拟合失败时（如分离 drop 掉整个水平）不杀合并估计，只在摘要记一条失败说明。
+
+同 seed 重跑逐字节一致（MI 表与系数表都做了字节级回归测试）。
 
 下面的 SPSS 语法仍适用于必须在 SPSS 内出表的场合；两者应当给出同方向的系数与 CI，若不一致先核对参照组与样本筛选。
 
@@ -257,10 +271,10 @@ OUTPUT EXPORT
 ## 诊断
 
 - **完全分离**：某阶段 100% 出现/100% 不出现结果，OR 会爆炸。`--spec` 路径先用 `--separation drop|merge|error` 处理（明细见 `separation_report.csv`），估计后还有 `|β|>12`/`se>8` 熔断；单变量筛查则把这类模型写进 `univariate_skipped.csv`。仍需保留时改用 Firth 惩罚回归（SPSS 扩展/R `logistf`，**本脚本未实现**），并在局限中说明。
-- **多重共线性**：交互项与主效应相关很高；`--vif` 输出 `vif.csv`（对设计矩阵逐列回归，含截距版本），常用阈值 VIF>10 提示。
+- **多重共线性**：交互项与主效应相关很高；`--vif` 输出 `vif.csv`（对设计矩阵逐列回归，含截距版本），全仓统一按 **VIF≥5** 提示共线性（`model_summary.md` 与 `methods_lib.py` 同口径）。
 - **单元格过小**：类别×阶段某些格子 n<10，OR 的 CI 会很宽；不要过度解释。
 - **聚类**：同一机构/同一地区的记录可能相关；spec 里 `"cluster": "province"` 得到聚类稳健标准误，或 `cov: HC1/HC3` 做异方差稳健；单变量筛查可用 `--robust HC1`。聚类只修正标准误，不等于固定效应；要固定效应用 `C(地区)` 哑变量。
-- **缺失值**：报告每个变量缺失数；`dropna` 默认完整案例，`dropna: false` 会在有缺失时报错。**多重插补本脚本未实现**，需外部脚本或 SPSS。
+- **缺失值**：报告每个变量缺失数；`dropna` 默认完整案例，`dropna: false` 会在有缺失时报错。多重插补用 spec 的 `impute` 字段（MICE-PMM + Rubin 合并，见上文「五项现代统计」第 6 条：默认不插补结局、结构性列不插补、`impute_report.csv` 给 FMI 与完整案例参照）。
 
 ## 解释措辞
 

@@ -38,6 +38,7 @@ python -m unittest discover -s tests -p "test_chart_pack*.py" -v
 | `test_audit_layer.py` | `audit_corpus.py`、`dedupe_corpus.py`、`text_extract.py` |
 | `test_coding_layer.py` | `make_coding_sheet.py`、`analysis_utils.py`、`csv_to_spss_syntax.py` |
 | `test_stats_charts.py` | `auto_stats.py`、`pubfig.py` |
+| `test_stats_modern.py` | `auto_stats.py` 批次4：交互项（联合 Wald）、mixed（ICC）、cox（HR 尺度/分层）、logrank、抽样权重（WLS/GLM 行展开对齐）、多重插补（Rubin 合并、逐字节确定性）、VIF ≥5 统一 |
 | `test_chart_pack.py` | `auto_chart_pack.py` |
 | `test_kappa.py` | `compute_kappa.py`（κ 数学、KEY_COLUMNS/单侧字段、coding-sample.md） |
 | `test_clean_data.py` | `clean_data.py`（配方执行、拒绝路径、台账指纹链、flow 合并） |

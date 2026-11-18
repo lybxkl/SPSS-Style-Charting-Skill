@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-11-18 批次4：统计现代化（提交 2549807 之上）
+
+- `auto_stats.py --spec` 支持五种模型类型与三项字段扩展，全部带类型归属校验（字段写错类型直接 exit 2，不静默忽略）：
+  - **交互项** `interactions: [["a","b"]]`（两变量须在 predictors 里）：数值×数值/数值×分类/分类×分类乘积列 + **联合 Wald χ² 检验**（手工约束矩阵，对 OLS/Logit/GLM/MixedLM/PHReg 统一；统计量进 fit.csv 的 `test_stat/test_df/test_p`）；
+  - **线性混合模型** `"type": "mixed"` + `groups`（必填）+ 可选 `random_slopes`：REML、固定效应入 coef 表、组数/ICC/方差成分入 fit.csv；
+  - **Cox 比例风险** `"type": "cox"` + `time`/`event` + 可选 `strata`：Breslow ties、无截距、HR=exp(β)（metric=HR、CI 在 HR 尺度）；修正 statsmodels 0.15 PHReg 签名坑（旧 `cov=` 关键字被 **kwargs 静默吞掉、事件列会被当协变量拟合——所有 PHReg 调用改为具名参数并加了 `_ArrayResultsAdapter` 让 ndarray 结果按列名索引）；
+  - **log-rank 检验** `"type": "logrank"` + `time`/`event`/`group`（+`strata`）：单一检验不产系数行（coef 表按 S-09 写头零行），纯 logrank spec 合法 exit 0；
+  - **抽样权重** `weights`（仅 logit/ols）：WLS / GLM freq_weights；点估计=加权估计、**SE 是模型基不是设计基**（摘要与 03/08 文档明说）、weighted_n 入 fit.csv、AIC/BIC/LLR 标注「按重复样本解释仅作参考」、权重须正有限；
+  - **多重插补** `impute: {m≥2, seed 必填, cycles≥1}`（仅 logit/ols）：statsmodels MICE（**PMM 抽补**——MICEData 的 impute 恒走 impute_pmm，`perturbation_method` 只控参数扰动；探针实证同 seed 逐字节一致）+ 分类变量编码解码保水平 + 逐填补集空单元格检查（任一集出现即 exit 2，因各集删行不同无法合并）+ **Rubin 合并**（合并 β/总方差/Rubin df/t 分布 p/FMI）+ 结构性列（cluster/weights）从不插补先剔除 + 合并行与完整案例参照行同表 + `impute_report.csv`（within/between/FMI/cc_beta/cc_p）；MI 不报告单一似然/AIC/ROC；CC 参照拟合失败不杀合并估计（摘要记失败原因）。
+- **VIF 标志线统一 ≥5**：`model_summary.md` 此前 >10、`methods_lib.py` ≥5，两处矛盾，现统一（VIF_FLAG 常量）。
+- fit.csv 扩列（`n_groups/icc/var_group/var_resid/weighted_n/mi_m/test_stat/test_df/test_p`）；`_run_one_model` 重构为调度器 + `_fit_from_work` 公共拟合核（普通路径与 MI 逐填补共享同一条设计/分离/拟合管线，合并估计与 CC 参照可比）。
+- 测试新增 `tests/test_stats_modern.py` 48 例：五类已知答案（交互真值 1.2 恢复、混合 ICC≈0.76 校验、Cox HR≈exp(-0.4) 恢复+分层与不分层估计可区分、logrank 检出 0.5 log-HR、MI 恢复种植系数 1.0 且 FMI∈(0,1)）、权重行展开对齐（WLS≈行重复 OLS、GLM freq_weights≈行重复 Logit 点估计）、MI 同 seed 逐字节一致/异 seed between_var 变化、空单元格任一填补集拒绝、字段归属矩阵（含 logrank×interactions/outcome、cox×outcome、空 weights 名负例）、交互列爆炸守门（列行比>1/5 拒绝）、MI 全缺失行剔除不崩（默认路径+impute_outcome=true 真崩溃路径双覆盖）、MI 结局缺失默认排除+`impute_outcome` 可选+事件数观测口径、MI+交互合并与联合检验、MI cluster 缺失报错/weights 缺失入账/空 impute 对象拒绝、mixed 随机斜率 ICC 无定义（NaN+摘要说明）、mixed subset 账面（n_before 经 model_meta 核对）、VIF ≥5 标志线、纯 logrank spec 合法；38 项既有 stats 测试零回归。evals id25/26。
+- 第一轮独立审计（batch4-audit）有条件通过，4 重要+5 次要+7 建议全修：①MI 全缺失行崩溃（MICEData 内部 dropna(how="all")+reset_index 会使按位赋值错位——预估全缺失行并计入 n_dropna）②带随机斜率时 ICC 改为 NaN+摘要说明（原按纯截距公式照算无意义值）③MI 插补结局改为显式决策（默认 `impute_outcome=false` 不插补结局=协变量 MI；true 才插补；摘要写明模式、事件数恒为观测口径）④owners 矩阵补 `interactions`/`outcome` 归属（logrank/cox 不再静默吞字段）⑤MI 行 n_events 从 CC 口径改为观测口径⑥07 号文档 Cox 行同步内置⑦空字符串 weights 报错⑧交互列>30 警告、列行比>1/10 警告、>1/5 拒绝⑨MI 循环内 VIF/ROC 旁路跳过⑩`_pred` 死代码删除+used_rows 统一走 `_used_rows()`⑪`_rubin_pool` k=1 防御。审计的统计正确性复算全部一致（联合 Wald 五类 8 位小数、Rubin 合并 10 位、分层 Cox 与手写 Breslow 偏似然 8 位、PMM 声明经 statsmodels 源码核实、普通路径四场景 CLI 双版本字节级一致）。
+- 第二轮复审（batch4-audit-r2）**通过**（回归面与 HEAD 双版本五场景字节级一致、manifest 102/102、docs/evals 对齐）；其 5 次要+3 建议也全修：①`_design_columns` 排除交互列（`name[T.` 前缀会捞到交互列使 >30 警告虚报 150/25）②MI 结构性列账目（cluster 缺失=报错与普通路径同语义、weights 缺失=剔除计入 n_dropna+摘要点名；此前静默丢且不入账）③MI 行 used_rows 改为 MI 估计样本（原取 CC 参照行与 n 对不上）④03 文档两处残留矛盾（「多重插补未实现」「VIF>10」）⑤补 `impute_outcome=true`+全缺失行的真崩溃路径测试（反事实证明无修复即崩）⑥`impute: {}` 空对象报错⑦插补结局时事件率分母用观测数（不再 133/300 混口径）。测试 44→48 例。
+- 文档：03「五项现代统计」新节（字段/边界/诚实声明）、08 字段表扩五列+旧「未实现」声明更新（交互/插补/Cox/logrank/权重从外部脚本转为内置；PH 检验仍外部）、SKILL.md 4B-2 节+脚本表+「只做 logit/ols」改口、workflow stats 阶段 manualInstructions 加类型声明指引。
+
 ## 2026-11-18 批次3：材料数据挖掘候选层（提交 e93c7f5 之上）
 
 - 新增 `scripts/mine_candidates.py`：挖掘候选层——TF-IDF 关键词、句内共现词对（PMI add-one 平滑）、NMF 主题（K 归人声明，`--scan-k` 只给轮廓曲线）、可选 jieba 分词（无则确定性降级：英文空格+中文单字与字 bigram）；产物 keyword/pair/topic/k_profile 候选表（每行 rel_path+行号证据锚）+ mine_receipt.json（清单格式/哈希算法/跳档明细/语料字节数/参数与 seed/分词器档位）。候选不是事实：引擎不写任何 decisions/claims/闸门，采纳归研究者。

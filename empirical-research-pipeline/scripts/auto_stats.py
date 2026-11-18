@@ -19,6 +19,19 @@ This is a first-pass screening pack, not the final paper model. It produces:
   - model_summary.md       (reference groups, separation actions, fit statistics)
   - separation_report.csv  (empty cells found before fitting; --separation drop|merge|error)
 
+Model types in the spec (batch 4 - the modern statistics set):
+  logit / ols        as before, plus ``interactions`` (product terms with a joint
+                     Wald test), ``weights`` (sampling weights: WLS / GLM
+                     freq_weights - point estimates right, SEs model-based, not
+                     design-based) and ``impute`` (multiple imputation via
+                     statsmodels MICEData with PMM, pooled by Rubin's rules,
+                     m>=2, seed mandatory, complete-case fit kept as reference)
+  mixed              linear mixed model (random intercept by ``groups``, optional
+                     ``random_slopes``; REML; ICC reported)
+  cox                Cox proportional hazards (Breslow ties; ``time``/``event``,
+                     optional ``strata``; HR = exp(beta))
+  logrank            log-rank test across a ``group`` factor (optional ``strata``)
+
 Final, pre-specified models still belong in SPSS or a dedicated model script; this
 entry point exists so the multivariate step is reproducible from the same CSV.
 
@@ -93,11 +106,20 @@ TABLE_COLUMNS = {
                  "or", "or_low", "or_high", "ci_low", "ci_high", "metric",
                  "estimate", "n", "n_events", "sample", "outcome", "ref", "se_type"],
     "fit": ["model", "type", "n", "k", "n_events", "loglik", "llr", "llr_df",
-            "llr_p", "pseudo_r2", "aic", "bic", "se_type", "subset", "n_dropna"],
+            "llr_p", "pseudo_r2", "aic", "bic", "se_type", "subset", "n_dropna",
+            "n_groups", "icc", "var_group", "var_resid", "weighted_n", "mi_m",
+            "test_stat", "test_df", "test_p"],
     "vif": ["model", "term", "vif", "n_predictors", "note"],
     "roc": ["model", "auc", "ci_low", "ci_high", "n", "n_events", "method", "reps",
             "note"],
+    "impute": ["model", "term", "beta_pooled", "se_pooled", "t_rubin", "df_rubin",
+               "p_rubin", "ci_low", "ci_high", "within_var", "between_var",
+               "total_var", "fmi", "cc_beta", "cc_p", "n_imputations"],
 }
+
+# One VIF flag threshold everywhere: methods_lib flags >= 5, so the model
+# summary must flag >= 5 too (it used to say > 10 - the two scripts disagreed).
+VIF_FLAG = 5.0
 
 # Forbidden in filter_query: ``@`` rebinds names to the caller's locals, ``__``
 # reaches dunder attributes, and import/exec/eval/lambda are code execution.
@@ -869,8 +891,27 @@ def auc_with_ci(y, score, reps: int = 1000, seed: int = 20240101):
     return point, float(low), float(high)
 
 
-def _design_matrix(work: pd.DataFrame, predictors: list[dict], mid: str):
-    """Build the design matrix with explicitly declared reference groups."""
+def _design_columns(X: pd.DataFrame, name: str) -> list[str]:
+    """Columns of ``X`` that belong to predictor ``name`` (itself or its dummies).
+
+    Interaction columns embed ``name[T.level]:other[T.level]`` and also match
+    the prefix, so they are excluded here: only MAIN-EFFECT columns count.
+    """
+    if name in X.columns:
+        return [name]
+    return [c for c in X.columns
+            if c.startswith(f"{name}[T.") and ":" not in c]
+
+
+def _design_matrix(work: pd.DataFrame, predictors: list[dict], mid: str,
+                   interactions: list[tuple[str, str]] | None = None):
+    """Build the design matrix with explicitly declared reference groups.
+
+    ``interactions`` are product terms between two declared predictors:
+    numeric x numeric, numeric x categorical (per dummy) and categorical x
+    categorical (per dummy pair). Interaction columns are appended after the
+    main terms so the coefficient table reads main effects first.
+    """
     X = pd.DataFrame(index=work.index)
     refs: dict[str, str] = {}
     for pred in predictors:
@@ -903,15 +944,191 @@ def _design_matrix(work: pd.DataFrame, predictors: list[dict], mid: str):
             term = f"{name}[T.{level}]"
             X[term] = (raw.astype(str) == level).astype(float)
             refs[term] = ref
+    for a, b in interactions or []:
+        cols_a = _design_columns(X, a)
+        cols_b = _design_columns(X, b)
+        for ca in cols_a:
+            for cb in cols_b:
+                term = f"{ca}:{cb}"
+                X[term] = X[ca] * X[cb]
+                # the reference shown for an interaction is the dummy side's
+                # reference (both sides for categorical x categorical)
+                ra, rb = refs.get(ca, ""), refs.get(cb, "")
+                refs[term] = " × ".join(x for x in (ra, rb) if x)
     return X, refs
+
+
+def _parse_interactions(raw, predictors: list[dict], mid: str) -> list[tuple[str, str]]:
+    """Spec ``interactions``: list of ``[varA, varB]`` pairs, both declared."""
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise SpecError(f"模型 {mid}：interactions 必须是 [[\"变量A\",\"变量B\"], ...]")
+    names = {p["name"] for p in predictors}
+    pairs: list[tuple[str, str]] = []
+    seen: set[frozenset] = set()
+    for entry in raw:
+        if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+            raise SpecError(f"模型 {mid}：interactions 的每项必须是 [变量A, 变量B]，"
+                            f"得到 {entry!r}")
+        a, b = str(entry[0]).strip(), str(entry[1]).strip()
+        for var in (a, b):
+            if var not in names:
+                raise SpecError(f"模型 {mid}：interactions 变量 {var} 不在 predictors 里")
+        if a == b:
+            raise SpecError(f"模型 {mid}：interactions 不能是变量自身 {a}×{a}")
+        key = frozenset((a, b))
+        if key in seen:
+            raise SpecError(f"模型 {mid}：interactions 重复对 {a}×{b}")
+        seen.add(key)
+        pairs.append((a, b))
+    return pairs
+
+
+def _interaction_terms(X: pd.DataFrame, interactions) -> set[str]:
+    """Column names generated by ``interactions`` inside design matrix ``X``."""
+    out: set[str] = set()
+    for a, b in interactions or []:
+        for ca in _design_columns(X, a):
+            for cb in _design_columns(X, b):
+                out.add(f"{ca}:{cb}")
+    return out
+
+
+def _joint_wald(fit, terms: set[str]) -> dict | None:
+    """Manual joint Wald chi2 test that all ``terms`` are zero.
+
+    Computed from ``fit.params`` / ``fit.cov_params`` directly so it works for
+    OLS, Logit, GLM, MixedLM and PHReg results alike (no per-class wald_test
+    API differences). Returns ``{"stat", "df", "p"}`` or None when no term is
+    estimable.
+    """
+    names = list(fit.params.index)
+    idx = [i for i, t in enumerate(names) if t in terms]
+    if not idx:
+        return None
+    beta = np.asarray(fit.params, dtype=float)[idx]
+    cov = np.asarray(fit.cov_params(), dtype=float)
+    if cov.ndim != 2 or cov.shape[0] != len(names):
+        return None
+    block = cov[np.ix_(idx, idx)]
+    try:
+        stat = float(beta @ np.linalg.pinv(block) @ beta)
+    except np.linalg.LinAlgError:  # pragma: no cover - pinv already guards
+        return None
+    if not np.isfinite(stat):
+        return None
+    return {"stat": stat, "df": float(len(idx)),
+            "p": float(stats.chi2.sf(stat, len(idx)))}
+
+
+def _validate_impute(model: dict, mid: str) -> dict | None:
+    """Spec ``impute``: {m>=2, seed (mandatory), cycles>=1 (default 5)}.
+
+    ``impute_outcome`` (default False) decides whether missing OUTCOME rows
+    are imputed too; by default they are excluded from every imputation
+    (covariate-only MI), because imputing the outcome is a research decision
+    that must be declared, not a silent default.
+    """
+    raw = model.get("impute")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise SpecError(f"模型 {mid}：impute 必须是对象 {{\"m\":…, \"seed\":…, "
+                        "\"cycles\":…}}")
+    if not raw:
+        raise SpecError(f"模型 {mid}：impute 是空对象；至少要声明 m 和 seed"
+                        "（写 impute: null 或删掉该字段表示不用插补）")
+    try:
+        m = int(raw.get("m", 5))
+        seed = int(raw["seed"])
+        cycles = int(raw.get("cycles", 5))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SpecError(f"模型 {mid}：impute 的 m/seed/cycles 必须是整数"
+                        f"（seed 必填）: {exc}") from exc
+    if m < 2:
+        raise SpecError(f"模型 {mid}：impute.m 至少为 2（Rubin 合并需要组间方差）")
+    if cycles < 1:
+        raise SpecError(f"模型 {mid}：impute.cycles 至少为 1")
+    flag = raw.get("impute_outcome", False)
+    if flag not in (True, False):
+        raise SpecError(f"模型 {mid}：impute.impute_outcome 必须是 true/false")
+    return {"m": m, "seed": seed, "cycles": cycles, "impute_outcome": bool(flag)}
+
+
+def _validate_weights_name(model: dict, mid: str) -> str | None:
+    raw = model.get("weights")
+    if raw is None:
+        return None
+    name = str(raw).strip()
+    if not name:
+        raise SpecError(f"模型 {mid}：weights 必须是列名（收到空字符串）")
+    return name
+
+
+def _rubin_pool(betas: np.ndarray, covs: list[np.ndarray]) -> dict:
+    """Rubin's rules for m point estimates and their covariance matrices.
+
+    Returns per-term pooled beta, se, t, df (Rubin 1987), two-sided p, CI and
+    the fraction of missing information, plus the pooled covariance matrix
+    (total variance) for joint Wald tests.
+    """
+    m = betas.shape[0]
+    pooled_beta = np.atleast_1d(betas.mean(axis=0))
+    within = np.atleast_2d(np.mean(np.asarray(covs), axis=0))
+    between = (np.atleast_2d(np.cov(betas, rowvar=False, ddof=1))
+               if m > 1 else np.zeros_like(within))
+    if between.shape != within.shape:  # scalar return from cov for k=1
+        between = between.reshape(within.shape)
+    scale = 1.0 + 1.0 / m
+    total = within + scale * between
+    se = np.sqrt(np.diag(total))
+    gamma = scale * np.diag(between) / np.where(np.diag(within) > 0,
+                                                np.diag(within), np.nan)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        df = (m - 1) * np.square(1.0 + 1.0 / np.atleast_1d(gamma))
+    df = np.where(np.isfinite(df), df, np.inf)
+    t_stat = pooled_beta / np.where(se > 0, se, np.nan)
+    p = np.array([2.0 * stats.t.sf(abs(t), d) if np.isfinite(t) else np.nan
+                  for t, d in zip(t_stat, df)])
+    crit = np.array([stats.t.ppf(0.975, d) if np.isfinite(d) else 1.959963985
+                     for d in df])
+    fmi = gamma / (1.0 + gamma)
+    return {"beta": pooled_beta, "se": se, "t": t_stat, "df": df, "p": p,
+            "crit": crit, "within": np.diag(within), "between": np.diag(between),
+            "total": total, "fmi": fmi}
+
+
+def _guard_interaction_design(X: pd.DataFrame, n_rows: int,
+                              inter_terms: set[str], mid: str) -> None:
+    """Interactions can explode a design (10x10 levels = 81 product columns);
+    guard the degrees of freedom instead of failing obscurely inside the fit.
+    """
+    if not inter_terms:
+        return
+    k_design = X.shape[1] + 1          # + const (PHReg has none, close enough)
+    rows = max(int(n_rows), 1)
+    ratio = k_design / rows
+    if len(inter_terms) > 30:
+        print(f"warning: 模型 {mid} 的交互项产生 {len(inter_terms)} 列；"
+              "列数较多，注意自由度与共线性", file=sys.stderr)
+    if ratio > 0.2:
+        raise SpecError(f"模型 {mid}：设计列 {k_design} 对样本 {rows} 行"
+                        f"（列行比 {ratio:.2f} > 1/5），无法可靠估计；"
+                        "请减少交互项或合并水平")
+    if ratio > 0.1:
+        print(f"warning: 模型 {mid} 列行比 {ratio:.2f}（> 1/10），"
+              "估计不稳风险较高", file=sys.stderr)
 
 
 def _model_rows(mid: str, mtype: str, fit, X: pd.DataFrame, refs: dict[str, str],
                 outcome: str, n_model: int, n_events, se_type: str,
                 merges: dict[str, list[str]], excluded: list[str],
-                sample: str = "full") -> list[dict]:
+                sample: str = "full",
+                interactions: set[str] | None = None) -> list[dict]:
     rows = []
     conf = fit.conf_int()
+    interactions = interactions or set()
     for term in X.columns:
         beta = float(fit.params[term])
         se = float(fit.bse[term])
@@ -927,9 +1144,11 @@ def _model_rows(mid: str, mtype: str, fit, X: pd.DataFrame, refs: dict[str, str]
             excluded.append(term)
             continue
         note = ""
+        if term in interactions:
+            note = "交互项"
         var = term.split("[T.")[0]
         if merges.get(var):
-            note = "合并水平: " + "、".join(merges[var])
+            note = (note + "; " if note else "") + "合并水平: " + "、".join(merges[var])
         row = {"model": mid, "term": term, "type": mtype, "beta": beta, "se": se,
                "beta_ci_low": lo, "beta_ci_high": hi, "p": pval,
                "or": np.nan, "or_low": np.nan, "or_high": np.nan,
@@ -941,6 +1160,12 @@ def _model_rows(mid: str, mtype: str, fit, X: pd.DataFrame, refs: dict[str, str]
             row.update({"or": math.exp(beta), "or_low": math.exp(lo),
                         "or_high": math.exp(hi), "ci_low": math.exp(lo),
                         "ci_high": math.exp(hi), "metric": "OR",
+                        "estimate": math.exp(beta)})
+        elif mtype == "cox":
+            # hazard ratios are exp(beta); the CI is reported on the same scale
+            row.update({"or": math.exp(beta), "or_low": math.exp(lo),
+                        "or_high": math.exp(hi), "ci_low": math.exp(lo),
+                        "ci_high": math.exp(hi), "metric": "HR",
                         "estimate": math.exp(beta)})
         rows.append(row)
     return rows
@@ -1055,6 +1280,12 @@ def _fit_row(info: dict) -> dict:
     # for missing values before fitting. Keep the legacy column name for
     # consumers, but never interpret it as the retained N.
     """One machine-readable fitting record for ``fit.csv``."""
+    logrank = info.get("logrank") or {}
+    wald = info.get("interaction_wald") or {}
+    mi = info.get("mi") or {}
+    test_stat = logrank.get("stat", wald.get("stat", np.nan))
+    test_df = logrank.get("df", wald.get("df", np.nan))
+    test_p = logrank.get("p", wald.get("p", np.nan))
     return {"model": info["mid"], "type": info["mtype"], "n": info["n"],
             "k": info.get("k", np.nan), "n_events": info.get("n_events", np.nan),
             "loglik": info.get("loglik", np.nan), "llr": info.get("llr", np.nan),
@@ -1062,7 +1293,14 @@ def _fit_row(info: dict) -> dict:
             "pseudo_r2": info.get("pseudo_r2", np.nan),
             "aic": info.get("aic", np.nan), "bic": info.get("bic", np.nan),
             "se_type": info.get("se_type", ""), "subset": info.get("subset") or "full",
-            "n_dropna": info.get("n_dropped", np.nan)}
+            "n_dropna": info.get("n_dropped", np.nan),
+            "n_groups": info.get("n_groups", np.nan),
+            "icc": info.get("icc", np.nan),
+            "var_group": info.get("var_group", np.nan),
+            "var_resid": info.get("var_resid", np.nan),
+            "weighted_n": info.get("weighted_n", np.nan),
+            "mi_m": mi.get("m", np.nan),
+            "test_stat": test_stat, "test_df": test_df, "test_p": test_p}
 
 
 LLR_P_FLOOR = 1e-300
@@ -1185,6 +1423,12 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
     if args.roc:
         write_table(os.path.join(out_dir, "roc.csv"),
                     pd.DataFrame(roc_all), TABLE_COLUMNS["roc"])
+    impute_rows: list[dict] = []
+    for info in infos:
+        impute_rows.extend(info.get("mi_report") or [])
+    if impute_rows:
+        write_table(os.path.join(out_dir, "impute_report.csv"),
+                    pd.DataFrame(impute_rows), TABLE_COLUMNS["impute"])
     if all_coef:
         combined = pd.concat(all_coef, ignore_index=True)
         combined = combined.reindex(columns=TABLE_COLUMNS["coef"])
@@ -1210,6 +1454,8 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
                     f"- `fit.csv`：拟合指标（LLR χ²、McFadden R²、AIC/BIC、n_dropna"
                     + ("、flow_n/flow_match" if flow is not None else "") + "）",
                     "- `separation_report.csv`：空单元格检查结果（drop/merge/exclude）",
+                    *(["- `impute_report.csv`：MI 合并明细（Rubin/FMI/完整案例参照）"]
+                      if impute_rows else []),
                     "- `vif.csv`" if args.vif else "- `vif.csv`：未运行（加 --vif）",
                     "- `roc.csv`" if args.roc else "- `roc.csv`：未运行（加 --roc）",
                     ""])
@@ -1249,9 +1495,16 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
     with open(os.path.join(out_dir, "model_meta.json"), "w", encoding="utf-8") as fh:
         json.dump(meta, fh, ensure_ascii=False, indent=2)
     if combined.empty:
-        print("ERROR: spec 未产出任何系数行（模型全部失败或全部被分离规则排除）",
-              file=sys.stderr)
-        return 2
+        if not infos:
+            print("ERROR: spec 未产出任何模型记录（模型全部失败）", file=sys.stderr)
+            return 2
+        if not any(info.get("mtype") == "logrank" for info in infos):
+            print("ERROR: spec 未产出任何系数行（模型全部失败或全部被分离规则排除）",
+                  file=sys.stderr)
+            return 2
+        # a log-rank-only spec legitimately has no coefficient rows
+        print("note: 本 spec 只有 logrank 检验，无系数行；结果见 fit.csv 与 "
+              "model_summary.md", file=sys.stderr)
     print(f"models: {len(all_coef)}  coef rows: {len(combined)}  "
           f"separation rows: {len(separation_rows)}")
     if failures:
@@ -1260,17 +1513,52 @@ def run_models(df: pd.DataFrame, spec: dict, args, out_dir: str,
     return 0
 
 
+def _used_rows(frame_index) -> list[int] | None:
+    """1-based row numbers of the estimation frame, when they are integers."""
+    try:
+        idx = list(frame_index)
+    except TypeError:  # pragma: no cover - defensive
+        return None
+    if all(isinstance(i, (int, np.integer)) and i >= 0 for i in idx):
+        return [int(i) + 1 for i in idx]
+    return None
+
+
 def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     """Fit one spec model; returns (rows, info, separation_rows, vif_rows, roc_row)."""
     allowed = {"id", "type", "outcome", "predictors", "ref", "cluster", "cov",
                "dropna", "outcome_map", "label", "note", "subset", "flow_stage",
-               "labels"}
+               "labels", "interactions", "groups", "random_slopes", "impute",
+               "weights", "time", "event", "strata", "group"}
     unknown = [k for k in model if k not in allowed and not str(k).startswith("_")]
     if unknown:
         raise SpecError(f"模型 {mid}：未知字段 {unknown}")
     mtype = str(model.get("type") or "").strip().lower()
-    if mtype not in {"logit", "ols"}:
-        raise SpecError(f"模型 {mid}：type 必须是 logit 或 ols")
+    if mtype not in {"logit", "ols", "mixed", "cox", "logrank"}:
+        raise SpecError(f"模型 {mid}：type 必须是 logit / ols / mixed / cox / logrank")
+    # Field ownership per model type: a field that belongs to another type is a
+    # spec typo, not something to silently ignore.
+    owners = {
+        "cluster": ("logit", "ols"), "cov": ("logit", "ols"),
+        "weights": ("logit", "ols"), "impute": ("logit", "ols"),
+        "outcome_map": ("logit", "cox"),
+        "groups": ("mixed",), "random_slopes": ("mixed",),
+        "time": ("cox", "logrank"), "event": ("cox", "logrank"),
+        "strata": ("cox", "logrank"), "group": ("logrank",),
+        "interactions": ("logit", "ols", "mixed", "cox"),
+        "outcome": ("logit", "ols", "mixed"),
+    }
+    for field, types in owners.items():
+        declared = model.get(field) not in (None, "", [], {})
+        if declared and mtype not in types:
+            raise SpecError(f"模型 {mid}：字段 {field!r} 只用于 "
+                            f"type={'/'.join(types)}，不能用于 type={mtype}")
+    if mtype == "logrank":
+        return _run_logrank_model(df, model, mid, args)
+    if mtype == "mixed":
+        return _run_mixed_model(df, model, mid, args)
+    if mtype == "cox":
+        return _run_cox_model(df, model, mid, args)
     outcome = str(model.get("outcome") or "").strip()
     if not outcome:
         raise SpecError(f"模型 {mid}：缺少 outcome")
@@ -1291,6 +1579,11 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     cluster = str(model.get("cluster") or "").strip() or None
     if cluster and cluster not in df.columns:
         raise SpecError(f"模型 {mid}：cluster 列不存在: {cluster}")
+    interactions = _parse_interactions(model.get("interactions"), predictors, mid)
+    weights_name = _validate_weights_name(model, mid)
+    if weights_name and weights_name not in df.columns:
+        raise SpecError(f"模型 {mid}：weights 列不存在: {weights_name}")
+    impute = _validate_impute(model, mid)
     dropna = model.get("dropna", True)
     dropna = True if dropna is None else bool(dropna)
 
@@ -1324,18 +1617,50 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             work[pred["name"]] = pd.to_numeric(df[pred["name"]], errors="coerce")
         else:
             work[pred["name"]] = df[pred["name"]].astype("object")
+    if weights_name:
+        # the weight column travels inside ``work`` so missing weights are
+        # counted by the same complete-case ledger as missing predictors
+        work[weights_name] = pd.to_numeric(df[weights_name], errors="coerce")
     n_before = len(work)
+    if impute:
+        return _run_imputed_model(df, work, y.name, model, predictors,
+                                  interactions, mid, mtype, args, cluster, cov,
+                                  weights_name, outcome_map, n_entry, n_subset,
+                                  sample, subset, dropna)
     complete = work.notna().all(axis=1)
     n_dropped = int((~complete).sum())
     if not dropna and n_dropped:
         counts = {c: int(work[c].isna().sum()) for c in work.columns if work[c].isna().any()}
         raise SpecError(f"模型 {mid}：dropna=false 但存在缺失值 {counts}")
     work = work[complete]
+    if weights_name:
+        w = work[weights_name].to_numpy(dtype=float)
+        bad = int((~np.isfinite(w) | (w <= 0)).sum())
+        if bad:
+            raise SpecError(f"模型 {mid}：weights 列 {weights_name} 有 {bad} 行 "
+                            "≤0 或非有限；0/负权重行请先用 subset 排除，"
+                            "或修数据后再估计")
     if len(work) <= len(predictors) + 2:
         raise SpecError(f"模型 {mid}：完整案例只有 {len(work)} 行，无法估计")
+    return _fit_from_work(df, work, y.name, model, predictors, interactions,
+                          mid, mtype, args, cluster, cov, weights_name,
+                          outcome_map, n_entry, n_subset, sample, subset,
+                          n_before, n_dropped)
 
+
+def _fit_from_work(df, work, y_name, model, predictors, interactions, mid,
+                   mtype, args, cluster, cov, weights_name, outcome_map,
+                   n_entry, n_subset, sample, subset, n_before, n_dropped):
+    """Separation -> design -> fit -> coefficient rows for logit/ols models.
+
+    ``work`` holds the outcome plus the raw predictors (and, when declared,
+    the weight column); it is either complete-case or a fully imputed frame.
+    This is the single fitting core shared by the plain path and the MI path,
+    so both produce identical design matrices and records.
+    """
+    outcome = str(model.get("outcome") or "").strip()
+    y = work[y_name]
     cat_names = [p["name"] for p in predictors if p["kind"] == "cat"]
-    labels = {p["name"]: p["expr"] for p in predictors}
     separation_rows: list[dict] = []
     merges: dict[str, list[str]] = {}
     excluded: list[str] = []
@@ -1371,7 +1696,9 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             if len(work) <= len(predictors) + 2:
                 raise SpecError(f"模型 {mid}：按分离规则剔除后样本不足（{len(work)} 行）")
 
-    X, refs = _design_matrix(work, predictors, mid)
+    X, refs = _design_matrix(work, predictors, mid, interactions)
+    inter_terms = _interaction_terms(X, interactions)
+    _guard_interaction_design(X, len(work), inter_terms, mid)
     constant = [c for c in X.columns if X[c].nunique() <= 1]
     if constant:
         X = X.drop(columns=constant)
@@ -1386,13 +1713,25 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     if mtype == "logit" and yv.nunique() < 2:
         raise SpecError(f"模型 {mid}：结果只有 1 个类别")
     design = sm.add_constant(Xv, has_constant="add")
+    wv = None
+    weighted_n = np.nan
+    if weights_name:
+        wv = work.loc[frame.index, weights_name].to_numpy(dtype=float)
+        weighted_n = float(wv.sum())
     # Record, do not silence: a non-converged fit is still reported, but the
     # reader has to be told.  The texts go to stderr and into model_summary.md.
     fit_warnings: list[str] = []
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        if mtype == "logit":
+        if mtype == "logit" and weights_name:
+            # sampling weights: GLM freq_weights reproduces the weighted point
+            # estimates; the SEs stay model-based, never design-based
+            model_obj = sm.GLM(yv, design, family=sm.families.Binomial(),
+                               freq_weights=wv)
+        elif mtype == "logit":
             model_obj = sm.Logit(yv, design)
+        elif weights_name:
+            model_obj = sm.WLS(yv, design, weights=wv)
         else:
             model_obj = sm.OLS(yv, design)
         if cluster:
@@ -1426,10 +1765,14 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
 
     n_model = int(len(frame))
     n_events = int(yv.sum()) if mtype == "logit" else np.nan
+    if weights_name:
+        se_type = f"weighted({se_type})" if se_type else "weighted"
     rows = _model_rows(mid, mtype, fit, Xv, refs, outcome, n_model, n_events,
-                       se_type, merges, excluded, sample)
+                       se_type, merges, excluded, sample,
+                       interactions=inter_terms)
+    wald = _joint_wald(fit, inter_terms) if inter_terms else None
     info = {"mid": mid, "mtype": mtype, "outcome": outcome, "n": n_model,
-            "used_rows": [int(index) + 1 for index in frame.index] if all(isinstance(index,(int,np.integer)) and index>=0 for index in frame.index) else None,
+            "used_rows": _used_rows(frame.index),
             "n_before": n_before, "n_dropped": n_dropped,
             "n_removed_separation": int(n_before - n_dropped - n_model),
             "n_events": n_events, "se_type": se_type, "cluster": cluster,
@@ -1437,6 +1780,7 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             "predictors": predictors, "label": model.get("label"),
             "note": model.get("note"), "n_cats": len(cat_names),
             "n_excluded": len(excluded), "excluded": excluded,
+            "weights": weights_name, "weighted_n": weighted_n,
             "llf": float(getattr(fit, "llf", np.nan)),
             "llnull": float(getattr(fit, "llnull", np.nan)),
             "aic": float(getattr(fit, "aic", np.nan)),
@@ -1444,7 +1788,9 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
             "rsquared_adj": float(getattr(fit, "rsquared_adj", np.nan)),
             "f_pvalue": float(getattr(fit, "f_pvalue", np.nan)),
             "bic": float(getattr(fit, "bic", np.nan)),
-            "fit_warnings": fit_warnings}
+            "fit_warnings": fit_warnings, "interaction_wald": wald}
+    # the fit object rides along for the MI pooling path; never serialized
+    info["_fit_object"] = fit
     # A3-3: likelihood-ratio statistics for the machine-readable fit table.
     k_params = int(len(fit.params))
     loglik = float(getattr(fit, "llf", np.nan))
@@ -1463,9 +1809,6 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
     info.update({"k": k_params, "loglik": loglik, "llr": llr, "llr_df": llr_df,
                  "llr_p": llr_p, "pseudo_r2": pseudo_r2, "subset": subset,
                  "sample": sample, "n_entry": n_entry, "n_subset": n_subset})
-    if mtype == "logit":
-        p = fit.predict(design)
-        info["_pred"] = p
     vif_data = vif_rows(Xv) if args.vif else []
     for row in vif_data:
         row["model"] = mid
@@ -1474,18 +1817,728 @@ def _run_one_model(df: pd.DataFrame, model: dict, mid: str, args):
                      "n_predictors": 0, "note": "无可用预测变量"}]
     roc_row = None
     if args.roc and mtype == "logit":
-        prob = fit.predict(design).to_numpy(dtype=float)
+        prob = np.asarray(fit.predict(design), dtype=float)
         point, low, high = auc_with_ci(yv.to_numpy(dtype=int), prob)
         roc_row = {"model": mid, "auc": float(point), "ci_low": low,
                    "ci_high": high, "n": n_model, "n_events": n_events,
                    "method": "bootstrap percentile", "reps": 1000,
-                   "note": "seed=20240101"}
+                   "note": ("seed=20240101" if not weights_name else
+                            "seed=20240101; AUC 未按权重加权")}
         info["auc"] = (float(point), low, high)
     elif args.roc:
         roc_row = {"model": mid, "auc": np.nan, "ci_low": np.nan, "ci_high": np.nan,
                    "n": n_model, "n_events": np.nan, "method": "n/a", "reps": 0,
                    "note": "ROC 仅对 logit 模型计算"}
     return rows, info, separation_rows, vif_data, roc_row
+
+
+# ---------------------------------------------------------------------------
+# Batch 4 model types: mixed / cox / logrank / multiple imputation
+# ---------------------------------------------------------------------------
+def _model_subset_and_dropna(df: pd.DataFrame, model: dict, mid: str,
+                             extra_complete: list[str]):
+    """Shared entry filter -> subset -> complete-case ledger.
+
+    ``extra_complete`` are structural columns (groups / time / event / strata /
+    weights) that must be observed; they join the outcome and predictors in
+    the complete-case mask so ``n_dropped`` counts every excluded row once.
+    Returns (df, work, n_entry, n_subset, sample, subset, n_dropped).
+    """
+    subset = str(model.get("subset") or "").strip() or None
+    sample = "full"
+    n_entry = len(df)
+    n_subset = n_entry
+    if subset:
+        try:
+            validate_filter_query(subset)
+        except ValueError as exc:
+            raise SpecError(f"模型 {mid}：subset 含被禁止的记号：{exc}") from exc
+        try:
+            sub = df.query(subset)
+        except Exception as exc:
+            raise SpecError(f"模型 {mid}：subset 无法执行（{subset}）："
+                            f"{type(exc).__name__}: {exc}") from exc
+        if sub.empty:
+            raise SpecError(f"模型 {mid}：subset 之后没有样本：{subset}")
+        df = sub
+        sample = subset
+        n_subset = len(df)
+    dropna = model.get("dropna", True)
+    dropna = True if dropna is None else bool(dropna)
+    mask = df[extra_complete].notna().all(axis=1)
+    n_dropped = int((~mask).sum())
+    if not dropna and n_dropped:
+        counts = {c: int(df[c].isna().sum()) for c in extra_complete
+                  if df[c].isna().any()}
+        raise SpecError(f"模型 {mid}：dropna=false 但结构性列存在缺失 {counts}")
+    return df[mask], df, n_entry, n_subset, sample, subset, n_dropped
+
+
+def _run_mixed_model(df: pd.DataFrame, model: dict, mid: str, args):
+    """Linear mixed model: random intercept by ``groups`` (+ random slopes)."""
+    from statsmodels.regression.mixed_linear_model import MixedLM
+    outcome = str(model.get("outcome") or "").strip()
+    if not outcome:
+        raise SpecError(f"模型 {mid}：缺少 outcome")
+    if outcome not in df.columns:
+        raise SpecError(f"模型 {mid}：outcome 列不存在: {outcome}")
+    groups_col = str(model.get("groups") or "").strip()
+    if not groups_col:
+        raise SpecError(f"模型 {mid}：mixed 需要 groups（分组列名）")
+    if groups_col not in df.columns:
+        raise SpecError(f"模型 {mid}：groups 列不存在: {groups_col}")
+    if groups_col == outcome:
+        raise SpecError(f"模型 {mid}：groups 不能等于 outcome")
+    raw_predictors = model.get("predictors") or []
+    if not isinstance(raw_predictors, list) or not raw_predictors:
+        raise SpecError(f"模型 {mid}：predictors 必须是非空数组")
+    ref_map = {str(k): str(v) for k, v in (model.get("ref") or {}).items()}
+    predictors = [parse_predictor(x, ref_map) for x in raw_predictors]
+    names = [p["name"] for p in predictors]
+    if len(set(names)) != len(names):
+        raise SpecError(f"模型 {mid}：predictors 有重复变量 {names}")
+    for pred in predictors:
+        if pred["name"] not in df.columns:
+            raise SpecError(f"模型 {mid}：预测变量列不存在: {pred['name']}")
+        if pred["name"] == groups_col:
+            raise SpecError(f"模型 {mid}：预测变量 {pred['name']} 不能同时是 groups")
+    interactions = _parse_interactions(model.get("interactions"), predictors, mid)
+    slopes = [str(s).strip() for s in (model.get("random_slopes") or [])]
+    for s in slopes:
+        matched = [p for p in predictors if p["name"] == s]
+        if not matched:
+            raise SpecError(f"模型 {mid}：random_slopes 变量 {s} 不在 predictors 里")
+        if matched[0]["kind"] != "num":
+            raise SpecError(f"模型 {mid}：random_slopes 只支持数值变量: {s}")
+    if len(set(slopes)) != len(slopes):
+        raise SpecError(f"模型 {mid}：random_slopes 有重复变量 {slopes}")
+
+    # entry filter -> subset -> groups must be observed (shared ledger)
+    subset = str(model.get("subset") or "").strip() or None
+    sample = "full"
+    n_entry = len(df)
+    n_subset = n_entry
+    if subset:
+        try:
+            validate_filter_query(subset)
+        except ValueError as exc:
+            raise SpecError(f"模型 {mid}：subset 含被禁止的记号：{exc}") from exc
+        try:
+            sub = df.query(subset)
+        except Exception as exc:
+            raise SpecError(f"模型 {mid}：subset 无法执行（{subset}）："
+                            f"{type(exc).__name__}: {exc}") from exc
+        if sub.empty:
+            raise SpecError(f"模型 {mid}：subset 之后没有样本：{subset}")
+        df = sub
+        sample = subset
+        n_subset = len(df)
+
+    numeric = pd.to_numeric(df[outcome], errors="coerce")
+    if numeric.notna().sum() == 0:
+        raise SpecError(f"模型 {mid}：mixed 的结果变量无法转为数值")
+    y = numeric.astype(float)
+    y.name = "__y__"
+    work = pd.DataFrame({y.name: y}, index=df.index)
+    for pred in predictors:
+        if pred["kind"] == "num":
+            work[pred["name"]] = pd.to_numeric(df[pred["name"]], errors="coerce")
+        else:
+            work[pred["name"]] = df[pred["name"]].astype("object")
+    n_before = len(work)
+    complete = work.notna().all(axis=1) & df[groups_col].notna()
+    n_dropped = int((~complete).sum())
+    dropna = model.get("dropna", True)
+    dropna = True if dropna is None else bool(dropna)
+    if not dropna and n_dropped:
+        counts = {c: int(work[c].isna().sum()) for c in work.columns if work[c].isna().any()}
+        if df[groups_col].isna().any():
+            counts[groups_col] = int(df[groups_col].isna().sum())
+        raise SpecError(f"模型 {mid}：dropna=false 但存在缺失值 {counts}")
+    work = work[complete]
+    groups = df.loc[work.index, groups_col]
+    if len(work) <= len(predictors) + 2:
+        raise SpecError(f"模型 {mid}：完整案例只有 {len(work)} 行，无法估计")
+    n_groups = int(groups.nunique())
+    if n_groups < 2:
+        raise SpecError(f"模型 {mid}：groups 列 {groups_col} 只有 {n_groups} 组，"
+                        "无法分层")
+
+    X, refs = _design_matrix(work, predictors, mid, interactions)
+    inter_terms = _interaction_terms(X, interactions)
+    _guard_interaction_design(X, len(work), inter_terms, mid)
+    excluded = [c for c in X.columns if X[c].nunique() <= 1]
+    X = X.drop(columns=excluded) if excluded else X
+    if X.empty or X.shape[1] == 0:
+        raise SpecError(f"模型 {mid}：设计矩阵为空")
+    frame = X.dropna()
+    yv = work.loc[frame.index, y.name].astype(float)
+    Xv = frame
+    design = sm.add_constant(Xv, has_constant="add")
+    exog_re = None
+    if slopes:
+        # random slopes ride along with the random intercept (explicit const)
+        slope_cols = [c for c in Xv.columns
+                      if any(c == s or c.startswith(f"{s}[T.") for s in slopes)]
+        if not slope_cols:
+            raise SpecError(f"模型 {mid}：random_slopes {slopes} 在设计矩阵中没有列")
+        exog_re = sm.add_constant(Xv[slope_cols], has_constant="add")
+    fit_warnings: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            mixed = MixedLM(yv, design, groups=groups.loc[frame.index],
+                            exog_re=exog_re)
+            fit = mixed.fit(reml=True)
+        except np.linalg.LinAlgError as exc:
+            raise SpecError(f"模型 {mid}：混合模型无法估计（{exc}）") from exc
+    for warn_item in caught:
+        text = str(warn_item.message)
+        if text not in fit_warnings:
+            fit_warnings.append(text)
+    if fit_warnings:
+        print(f"warning: 模型 {mid} 混合模型报告 {len(fit_warnings)} 条告警: "
+              f"{fit_warnings[0][:160]}", file=sys.stderr)
+
+    n_model = int(len(frame))
+    se_type = "reml"
+    if slopes:
+        se_type += f"（随机截距+随机斜率: {'、'.join(slopes)}）"
+    rows = _model_rows(mid, "mixed", fit, Xv, refs, outcome, n_model, np.nan,
+                       se_type, {}, excluded, sample, interactions=inter_terms)
+    wald = _joint_wald(fit, inter_terms) if inter_terms else None
+    cov_re = np.asarray(fit.cov_re, dtype=float)
+    var_group = float(cov_re[0, 0]) if cov_re.size else float("nan")
+    var_resid = float(getattr(fit, "scale", np.nan))
+    # ICC (variance partition) is only defined for a pure random-intercept
+    # model: with random slopes the total variance depends on the covariate
+    # values, so no single number exists - report NaN instead of a fake value
+    if slopes:
+        icc = np.nan
+    else:
+        icc = (var_group / (var_group + var_resid)
+               if np.isfinite(var_group) and np.isfinite(var_resid)
+               and (var_group + var_resid) > 0 else np.nan)
+    info = {"mid": mid, "mtype": "mixed", "outcome": outcome, "n": n_model,
+            "used_rows": _used_rows(frame.index),
+            "n_before": n_before, "n_dropped": n_dropped,
+            "n_removed_separation": 0, "n_events": np.nan,
+            "se_type": se_type, "cluster": None, "cov": None,
+            "outcome_map": {}, "refs": refs, "predictors": predictors,
+            "label": model.get("label"), "note": model.get("note"),
+            "n_cats": sum(1 for p in predictors if p["kind"] == "cat"),
+            "n_excluded": len(excluded), "excluded": excluded,
+            "weights": None, "weighted_n": np.nan,
+            "groups": groups_col, "n_groups": n_groups,
+            "random_slopes": list(slopes),
+            "var_group": var_group, "var_resid": var_resid, "icc": icc,
+            "llf": float(getattr(fit, "llf", np.nan)),
+            "llnull": np.nan, "aic": float(getattr(fit, "aic", np.nan)),
+            "rsquared": np.nan, "rsquared_adj": np.nan,
+            "f_pvalue": np.nan, "bic": float(getattr(fit, "bic", np.nan)),
+            "fit_warnings": fit_warnings, "interaction_wald": wald,
+            "k": int(len(fit.params)), "loglik": float(getattr(fit, "llf", np.nan)),
+            "llr": np.nan, "llr_df": np.nan, "llr_p": np.nan,
+            "pseudo_r2": np.nan, "subset": subset, "sample": sample,
+            "n_entry": n_entry, "n_subset": n_subset}
+    vif_data = vif_rows(Xv) if args.vif else []
+    for row in vif_data:
+        row["model"] = mid
+    roc_row = ({"model": mid, "auc": np.nan, "ci_low": np.nan,
+                "ci_high": np.nan, "n": n_model, "n_events": np.nan,
+                "method": "n/a", "reps": 0,
+                "note": "ROC 仅对 logit 模型计算"} if args.roc else None)
+    return rows, info, [], vif_data, roc_row
+
+
+class _ArrayResultsAdapter:
+    """Pandas-style view over array-based results (PHReg).
+
+    ``_model_rows`` and ``_joint_wald`` address terms by name; PHReg returns
+    bare ndarrays, so this adapter gives the coefficients named axes without
+    touching any numbers.
+    """
+
+    def __init__(self, fit, columns: list[str]):
+        self.params = pd.Series(np.asarray(fit.params, dtype=float), index=columns)
+        self.bse = pd.Series(np.asarray(fit.bse, dtype=float), index=columns)
+        self.pvalues = pd.Series(np.asarray(fit.pvalues, dtype=float),
+                                 index=columns)
+        ci = np.asarray(fit.conf_int(), dtype=float)
+        self._ci = pd.DataFrame(ci, index=columns, columns=[0, 1])
+        self._cov = np.asarray(fit.cov_params(), dtype=float)
+        self.llf = float(getattr(fit, "llf", np.nan))
+
+    def conf_int(self) -> pd.DataFrame:
+        return self._ci
+
+    def cov_params(self) -> np.ndarray:
+        return self._cov
+
+
+def _run_cox_model(df: pd.DataFrame, model: dict, mid: str, args):
+    """Cox proportional hazards (Breslow ties); HR = exp(beta)."""
+    from statsmodels.duration.hazard_regression import PHReg
+    time_col = str(model.get("time") or "").strip()
+    event_col = str(model.get("event") or "").strip()
+    if not time_col or not event_col:
+        raise SpecError(f"模型 {mid}：cox 需要 time 和 event 列名")
+    for col in (time_col, event_col):
+        if col not in df.columns:
+            raise SpecError(f"模型 {mid}：列不存在: {col}")
+    strata_col = str(model.get("strata") or "").strip() or None
+    if strata_col and strata_col not in df.columns:
+        raise SpecError(f"模型 {mid}：strata 列不存在: {strata_col}")
+    raw_predictors = model.get("predictors") or []
+    if not isinstance(raw_predictors, list) or not raw_predictors:
+        raise SpecError(f"模型 {mid}：predictors 必须是非空数组")
+    ref_map = {str(k): str(v) for k, v in (model.get("ref") or {}).items()}
+    predictors = [parse_predictor(x, ref_map) for x in raw_predictors]
+    names = [p["name"] for p in predictors]
+    if len(set(names)) != len(names):
+        raise SpecError(f"模型 {mid}：predictors 有重复变量 {names}")
+    for pred in predictors:
+        if pred["name"] not in df.columns:
+            raise SpecError(f"模型 {mid}：预测变量列不存在: {pred['name']}")
+    interactions = _parse_interactions(model.get("interactions"), predictors, mid)
+
+    time_num = pd.to_numeric(df[time_col], errors="coerce")
+    if (time_num < 0).any():
+        raise SpecError(f"模型 {mid}：time 列 {time_col} 存在负值")
+    event_num, event_map = encode_binary(df[event_col], model.get("outcome_map"))
+    if event_num is None:
+        raise SpecError(f"模型 {mid}：event 列 {event_col} 不是可识别的二元 0/1；"
+                        "文本标签请在 spec 里给 outcome_map")
+    structural = [time_col, event_col] + ([strata_col] if strata_col else [])
+    df_kept, df_full, n_entry, n_subset, sample, subset, n_dropped = \
+        _model_subset_and_dropna(df, model, mid, structural)
+
+    y = event_num.astype(float)
+    y.name = "__event__"
+    t = time_num.astype(float)
+    t.name = "__time__"
+    work = pd.DataFrame({y.name: y, t.name: t}, index=df_kept.index)
+    for pred in predictors:
+        if pred["kind"] == "num":
+            work[pred["name"]] = pd.to_numeric(df_kept[pred["name"]], errors="coerce")
+        else:
+            work[pred["name"]] = df_kept[pred["name"]].astype("object")
+    n_before = len(work)
+    complete = work.notna().all(axis=1)
+    n_more = int((~complete).sum())
+    work = work[complete]
+    n_dropped += n_more
+    if len(work) <= len(predictors) + 2:
+        raise SpecError(f"模型 {mid}：完整案例只有 {len(work)} 行，无法估计")
+    if int(work[y.name].sum()) == 0:
+        raise SpecError(f"模型 {mid}：建模样本中没有事件（event 全为 0）")
+
+    X, refs = _design_matrix(work, predictors, mid, interactions)
+    inter_terms = _interaction_terms(X, interactions)
+    _guard_interaction_design(X, len(work), inter_terms, mid)
+    excluded = [c for c in X.columns if X[c].nunique() <= 1]
+    X = X.drop(columns=excluded) if excluded else X
+    if X.empty or X.shape[1] == 0:
+        raise SpecError(f"模型 {mid}：设计矩阵为空")
+    # PHReg estimates no intercept: the design matrix is used as-is
+    frame = X.dropna()
+    yv = work.loc[frame.index, y.name].astype(float)
+    tv = work.loc[frame.index, t.name].astype(float)
+    strata = (df_kept.loc[frame.index, strata_col].to_numpy()
+              if strata_col else None)
+    fit_warnings: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            # statsmodels >= 0.15 signature: PHReg(endog=time, exog=X,
+            # status=event, ...); the old `cov=` keyword is silently swallowed
+            # by **kwargs, so pass everything by name
+            ph = PHReg(endog=tv.to_numpy(), exog=frame.to_numpy(),
+                       status=yv.to_numpy(), strata=strata, ties="breslow")
+            fit = ph.fit()
+        except Exception as exc:
+            raise SpecError(f"模型 {mid}：Cox 模型无法估计（"
+                            f"{type(exc).__name__}: {exc}）") from exc
+    for warn_item in caught:
+        text = str(warn_item.message)
+        if text not in fit_warnings:
+            fit_warnings.append(text)
+
+    n_model = int(len(frame))
+    n_events = int(yv.sum())
+    se_type = "breslow"
+    if strata_col:
+        se_type += f"（分层: {strata_col}, {pd.Series(strata).nunique()} 层）"
+    named = _ArrayResultsAdapter(fit, list(frame.columns))
+    rows = _model_rows(mid, "cox", named, frame, refs,
+                       f"{time_col}/{event_col}", n_model, n_events,
+                       se_type, {}, excluded, sample,
+                       interactions=inter_terms)
+    wald = _joint_wald(named, inter_terms) if inter_terms else None
+    info = {"mid": mid, "mtype": "cox",
+            "outcome": f"{time_col}/{event_col}", "n": n_model,
+            "used_rows": _used_rows(frame.index),
+            "n_before": n_before + n_dropped, "n_dropped": n_dropped,
+            "n_removed_separation": 0, "n_events": n_events,
+            "se_type": se_type, "cluster": None, "cov": None,
+            "outcome_map": event_map, "refs": refs, "predictors": predictors,
+            "label": model.get("label"), "note": model.get("note"),
+            "n_cats": sum(1 for p in predictors if p["kind"] == "cat"),
+            "n_excluded": len(excluded), "excluded": excluded,
+            "weights": None, "weighted_n": np.nan,
+            "llf": float(getattr(fit, "llf", np.nan)),
+            "llnull": np.nan, "aic": np.nan, "rsquared": np.nan,
+            "rsquared_adj": np.nan, "f_pvalue": np.nan, "bic": np.nan,
+            "fit_warnings": fit_warnings, "interaction_wald": wald,
+            "k": int(len(fit.params)), "loglik": float(getattr(fit, "llf", np.nan)),
+            "llr": np.nan, "llr_df": np.nan, "llr_p": np.nan,
+            "pseudo_r2": np.nan, "subset": subset, "sample": sample,
+            "n_entry": n_entry, "n_subset": n_subset}
+    vif_data = vif_rows(frame) if args.vif else []
+    for row in vif_data:
+        row["model"] = mid
+    roc_row = ({"model": mid, "auc": np.nan, "ci_low": np.nan,
+                "ci_high": np.nan, "n": n_model, "n_events": n_events,
+                "method": "n/a", "reps": 0,
+                "note": "ROC 仅对 logit 模型计算"} if args.roc else None)
+    return rows, info, [], vif_data, roc_row
+
+
+def _run_logrank_model(df: pd.DataFrame, model: dict, mid: str, args):
+    """Log-rank test across a group factor (optional strata). No coefficients."""
+    from statsmodels.duration.survfunc import survdiff
+    time_col = str(model.get("time") or "").strip()
+    event_col = str(model.get("event") or "").strip()
+    group_col = str(model.get("group") or "").strip()
+    if not time_col or not event_col or not group_col:
+        raise SpecError(f"模型 {mid}：logrank 需要 time、event 和 group 列名")
+    for col in (time_col, event_col, group_col):
+        if col not in df.columns:
+            raise SpecError(f"模型 {mid}：列不存在: {col}")
+    if model.get("predictors"):
+        raise SpecError(f"模型 {mid}：logrank 不接受 predictors（检验变量是 group）")
+    strata_col = str(model.get("strata") or "").strip() or None
+    if strata_col and strata_col not in df.columns:
+        raise SpecError(f"模型 {mid}：strata 列不存在: {strata_col}")
+    if model.get("ref"):
+        raise SpecError(f"模型 {mid}：logrank 不接受 ref")
+
+    time_num = pd.to_numeric(df[time_col], errors="coerce")
+    if (time_num < 0).any():
+        raise SpecError(f"模型 {mid}：time 列 {time_col} 存在负值")
+    event_num, _ = encode_binary(df[event_col], None)
+    if event_num is None:
+        raise SpecError(f"模型 {mid}：event 列 {event_col} 不是可识别的二元 0/1")
+    structural = [time_col, event_col, group_col] + \
+        ([strata_col] if strata_col else [])
+    df_kept, _df_full, n_entry, n_subset, sample, subset, n_dropped = \
+        _model_subset_and_dropna(df, model, mid, structural)
+
+    groups = df_kept[group_col].astype(str)
+    levels = sorted(groups.unique())
+    if len(levels) < 2:
+        raise SpecError(f"模型 {mid}：group 列 {group_col} 只有 {len(levels)} 水平，"
+                        "无法比较")
+    chi2, p = survdiff(df_kept[time_col].to_numpy(dtype=float),
+                       df_kept[event_col].to_numpy(dtype=float),
+                       groups.to_numpy(),
+                       strata=(df_kept[strata_col].to_numpy() if strata_col
+                               else None))
+    n_model = int(len(df_kept))
+    n_events = int(event_num.loc[df_kept.index].sum())
+    se_type = "log-rank" + (f"（分层: {strata_col}）" if strata_col else "")
+    info = {"mid": mid, "mtype": "logrank",
+            "outcome": f"{time_col}/{event_col} by {group_col}",
+            "n": n_model, "used_rows": _used_rows(df_kept.index),
+            "n_before": n_model + n_dropped,
+            "n_dropped": n_dropped, "n_removed_separation": 0,
+            "n_events": n_events, "se_type": se_type, "cluster": None,
+            "cov": None, "outcome_map": {}, "refs": {}, "predictors": [],
+            "label": model.get("label"), "note": model.get("note"),
+            "n_cats": 0, "n_excluded": 0, "excluded": [],
+            "weights": None, "weighted_n": np.nan,
+            "llf": np.nan, "llnull": np.nan, "aic": np.nan,
+            "rsquared": np.nan, "rsquared_adj": np.nan, "f_pvalue": np.nan,
+            "bic": np.nan, "fit_warnings": [],
+            "interaction_wald": None,
+            "logrank": {"stat": float(chi2), "df": float(len(levels) - 1),
+                        "p": float(p)},
+            "groups": group_col, "group_levels": levels,
+            "k": np.nan, "loglik": np.nan, "llr": np.nan, "llr_df": np.nan,
+            "llr_p": np.nan, "pseudo_r2": np.nan, "subset": subset,
+            "sample": sample, "n_entry": n_entry, "n_subset": n_subset}
+    return [], info, [], [], None
+
+
+def _run_imputed_model(df, work, y_name, model, predictors, interactions, mid,
+                       mtype, args, cluster, cov, weights_name, outcome_map,
+                       n_entry, n_subset, sample, subset, dropna):
+    """Multiple imputation (MICE, PMM) pooled by Rubin's rules.
+
+    Structural columns (cluster/weights) are never imputed: rows missing them
+    are excluded first. Every imputation shares the design-matrix pipeline with
+    the complete-case path, so pooled and CC estimates are comparable.
+    """
+    from statsmodels.imputation.mice import MICEData
+    cfg = _validate_impute(model, mid)
+    m, seed, cycles = cfg["m"], cfg["seed"], cfg["cycles"]
+    # structural columns: cluster behaves exactly like the plain path (a
+    # missing cluster inside the estimation sample is an error, not a silent
+    # drop); weights ride the complete-case ledger and are counted
+    n_weights_excluded = 0
+    if cluster:
+        if df[cluster].isna().any():
+            raise SpecError(f"模型 {mid}：cluster 列 {cluster} 在建模样本里有缺失")
+    if weights_name and df[weights_name].isna().any():
+        mask = df[weights_name].notna()
+        if not dropna:
+            raise SpecError(f"模型 {mid}：dropna=false 但 weights 列 "
+                            f"{weights_name} 存在缺失")
+        n_weights_excluded = int((~mask).sum())
+        df = df[mask]
+        work = work[mask]
+    if weights_name:
+        w_all = work[weights_name].to_numpy(dtype=float)
+        bad = int((~np.isfinite(w_all) | (w_all <= 0)).sum())
+        if bad:
+            raise SpecError(f"模型 {mid}：weights 列 {weights_name} 有 {bad} 行 "
+                            "≤0 或非有限；0/负权重行请先用 subset 排除")
+
+    # Outcome policy: by default (impute_outcome=False) rows with a missing
+    # outcome are excluded from every imputation - covariate-only MI. Setting
+    # impute_outcome=true declares the (research) decision to impute the
+    # outcome too; the summary says which mode ran.
+    n_outcome_excluded = 0
+    if not cfg["impute_outcome"]:
+        y_missing = work[y_name].isna()
+        n_outcome_excluded = int(y_missing.sum())
+        if n_outcome_excluded:
+            if not dropna:
+                raise SpecError(
+                    f"模型 {mid}：dropna=false 但 {n_outcome_excluded} 行结局缺失"
+                    "（默认不插补结局，impute.impute_outcome=true 可声明插补）")
+            work = work[~y_missing]
+            df = df.loc[work.index]
+
+    # Rows where EVERY model variable is missing would be silently dropped by
+    # MICEData itself (dropna(how="all") + reset_index), desynchronizing the
+    # positional assignment below; drop them here so the ledger counts them.
+    model_cols = [y_name] + [p["name"] for p in predictors]
+    all_missing = work[model_cols].isna().all(axis=1)
+    n_all_missing = int(all_missing.sum())
+    if n_all_missing:
+        if not dropna:
+            raise SpecError(
+                f"模型 {mid}：dropna=false 但 {n_all_missing} 行的全部模型变量缺失")
+        work = work[~all_missing]
+        df = df.loc[work.index]
+
+    # complete-case reference first: it also drives the separation ledger.
+    # It is auxiliary - if the CC fit itself fails (e.g. a separation drop
+    # removes a whole level), the imputations still run: a real spec error
+    # would resurface in every imputation, and a CC-only failure is reported
+    # as a note instead of killing the pooled estimate.
+    cc_work = work.dropna()
+    if len(cc_work) <= len(predictors) + 2:
+        raise SpecError(f"模型 {mid}：完整案例只有 {len(cc_work)} 行，无法作 MI 的参照估计")
+    cc_rows: list[dict] = []
+    cc_info: dict = {}
+    cc_sep: list[dict] = []
+    cc_vif: list[dict] = []
+    cc_roc = None
+    cc_failed: str | None = None
+    try:
+        cc_rows, cc_info, cc_sep, cc_vif, cc_roc = _fit_from_work(
+            df, cc_work, y_name, model, predictors, interactions, mid, mtype,
+            args, cluster, cov, weights_name, outcome_map, n_entry, n_subset,
+            f"{sample} (complete-case)", subset, len(work),
+            len(work) - len(cc_work))
+    except SpecError as exc:
+        cc_failed = str(exc)
+
+    # code frame for MICE: numeric as-is, categoricals as integer codes
+    cat_maps: dict[str, list[str]] = {}
+    code = pd.DataFrame(index=work.index)
+    code[y_name] = pd.to_numeric(work[y_name], errors="coerce").astype(float)
+    for pred in predictors:
+        name = pred["name"]
+        if pred["kind"] == "num":
+            code[name] = pd.to_numeric(work[name], errors="coerce").astype(float)
+        else:
+            cats = sorted(str(v) for v in work[name].dropna().unique())
+            cat_maps[name] = cats
+            code[name] = (work[name].astype(str).map({c: i for i, c in enumerate(cats)})
+                          .astype(float))
+
+    names0: list[str] | None = None
+    betas: list[np.ndarray] = []
+    covs: list[np.ndarray] = []
+    # per-imputation fits only need the coefficient machinery: skip the
+    # VIF/ROC side channels inside the loop (the CC reference keeps them)
+    imp_args = argparse.Namespace(**vars(args))
+    imp_args.vif = False
+    imp_args.roc = False
+    for i in range(m):
+        rng = np.random.default_rng(seed + i)
+        # MICEData always imputes by predictive mean matching (impute_pmm),
+        # so draws come from observed values and categorical codes survive;
+        # 'gaussian' perturbs the imputation model parameters, not the draws
+        imp = MICEData(code.copy(), perturbation_method="gaussian",
+                       k_pmm=20, rng=rng)
+        imp.update_all(cycles)
+        filled = imp.data
+        imp_work = work.copy()
+        imp_work[y_name] = filled[y_name].to_numpy(dtype=float)
+        for pred in predictors:
+            name = pred["name"]
+            if pred["kind"] == "num":
+                imp_work[name] = filled[name].to_numpy(dtype=float)
+            else:
+                cats = cat_maps[name]
+                codes = np.rint(filled[name].to_numpy(dtype=float)).astype(int)
+                if ((codes < 0) | (codes >= len(cats))).any():  # defensive
+                    raise SpecError(f"模型 {mid}：第 {i + 1} 次填补产生了未知水平，"
+                                    "无法解码")
+                imp_work[name] = [cats[c] for c in codes]
+        if mtype == "logit":
+            cat_names = [p["name"] for p in predictors if p["kind"] == "cat"]
+            if cat_names:
+                cells = detect_empty_cells(
+                    imp_work, cat_names, y_name,
+                    {p["name"]: p["name"] for p in predictors})
+                if cells:
+                    detail = "；".join(
+                        f"{c['variable']}={c['level']}(n={c['n']}, events={c['events']})"
+                        for c in cells)
+                    raise SpecError(
+                        f"模型 {mid}：第 {i + 1} 次填补集出现空单元格 {detail}；"
+                        "MI 下无法按集删行合并（各集样本不同）；"
+                        "请先清理该水平或改 predictors")
+        rows_i, _info_i, _sep_i, _vif_i, _roc_i = _fit_from_work(
+            df, imp_work, y_name, model, predictors, interactions, mid, mtype,
+            imp_args, cluster, cov, weights_name, outcome_map, n_entry,
+            n_subset, sample, subset, len(work), 0)
+        _fit_obj = _info_i.get("_fit_object")
+        fit_i = _fit_obj
+        if fit_i is None:
+            raise SpecError(f"模型 {mid}：第 {i + 1} 次填补拟合失败")  # defensive
+        params = np.asarray(fit_i.params, dtype=float)
+        covm = np.asarray(fit_i.cov_params(), dtype=float)
+        names_i = list(fit_i.params.index)
+        if names0 is None:
+            names0 = names_i
+        elif names_i != names0:
+            raise SpecError(f"模型 {mid}：第 {i + 1} 次填补集的设计列不同"
+                            f"（{names_i} vs {names0}），无法合并")
+        betas.append(params)
+        covs.append(covm)
+    pooled = _rubin_pool(np.vstack(betas), covs)
+
+    # coefficient rows on the pooled estimates (main terms only, no const)
+    n_model = int(len(work))
+    y_all = pd.to_numeric(work[y_name], errors="coerce")
+    # events are counted on the OBSERVED outcome only; when the outcome is
+    # imputed too, the note in the summary flags that the rate is not purely
+    # observed - never mix imputed events into the reported count silently
+    n_events = int(y_all.sum()) if mtype == "logit" else np.nan
+    n_events_denominator = None
+    if mtype == "logit" and cfg["impute_outcome"]:
+        # the frame includes imputed-y rows; the event RATE must stay on the
+        # observed scale (observed events / observed outcomes)
+        n_events_denominator = int(y_all.notna().sum())
+    se_type = f"MI Rubin (m={m})"
+    if cluster:
+        se_type += f"; cluster={cluster}"
+    if cov:
+        se_type += f"; cov={cov}"
+    rows: list[dict] = []
+    report_rows: list[dict] = []
+    cc_by_term = {r["term"]: r for r in cc_rows}
+    design_terms = [t for t in names0 if t not in ("const", "Intercept")]
+    inter_terms = _interaction_terms(pd.DataFrame(columns=design_terms),
+                                      interactions) if interactions else set()
+    for term in design_terms:
+        j = names0.index(term)
+        beta = float(pooled["beta"][j])
+        se = float(pooled["se"][j])
+        lo = beta - float(pooled["crit"][j]) * se
+        hi = beta + float(pooled["crit"][j]) * se
+        pval = float(pooled["p"][j])
+        note = "MI 合并（Rubin）" + ("；交互项" if term in inter_terms else "")
+        row = {"model": mid, "term": term, "type": mtype, "beta": beta,
+               "se": se, "beta_ci_low": lo, "beta_ci_high": hi, "p": pval,
+               "or": np.nan, "or_low": np.nan, "or_high": np.nan,
+               "ci_low": lo, "ci_high": hi, "metric": "beta", "estimate": beta,
+               "n": n_model, "n_events": n_events,
+               "outcome": str(model.get("outcome") or ""), "ref": "",
+               "note": note, "se_type": se_type, "sample": f"MI(m={m})"}
+        if mtype == "logit":
+            row.update({"or": math.exp(beta), "or_low": math.exp(lo),
+                        "or_high": math.exp(hi), "ci_low": math.exp(lo),
+                        "ci_high": math.exp(hi), "metric": "OR",
+                        "estimate": math.exp(beta)})
+        rows.append(row)
+        cc_row = cc_by_term.get(term, {})
+        report_rows.append({
+            "model": mid, "term": term, "beta_pooled": beta, "se_pooled": se,
+            "t_rubin": float(pooled["t"][j]), "df_rubin": float(pooled["df"][j]),
+            "p_rubin": pval, "ci_low": lo, "ci_high": hi,
+            "within_var": float(pooled["within"][j]),
+            "between_var": float(pooled["between"][j]),
+            "fmi": float(pooled["fmi"][j]) if np.isfinite(pooled["fmi"][j]) else np.nan,
+            "cc_beta": cc_row.get("beta", np.nan),
+            "cc_p": cc_row.get("p", np.nan), "n_imputations": m})
+    # joint Wald for interaction terms on the pooled covariance
+    wald = None
+    if inter_terms:
+        idx = [j for j, t in enumerate(names0) if t in inter_terms]
+        if idx:
+            b = pooled["beta"][idx]
+            block = pooled["total"][np.ix_(idx, idx)]
+            try:
+                stat = float(b @ np.linalg.pinv(block) @ b)
+                wald = {"stat": stat, "df": float(len(idx)),
+                        "p": float(stats.chi2.sf(stat, len(idx)))}
+            except np.linalg.LinAlgError:  # pragma: no cover
+                wald = None
+    info = {"mid": mid, "mtype": mtype,
+            "outcome": str(model.get("outcome") or ""), "n": n_model,
+            "used_rows": _used_rows(work.index),
+            "n_before": n_model + n_outcome_excluded + n_all_missing
+            + n_weights_excluded,
+            "n_dropped": n_outcome_excluded + n_all_missing
+            + n_weights_excluded,
+            "n_removed_separation": 0, "n_events": n_events,
+            "se_type": se_type, "cluster": cluster, "cov": cov,
+            "outcome_map": outcome_map, "refs": cc_info.get("refs", {}),
+            "predictors": predictors, "label": model.get("label"),
+            "note": model.get("note"),
+            "n_cats": sum(1 for p in predictors if p["kind"] == "cat"),
+            "n_excluded": 0, "excluded": [],
+            "weights": weights_name,
+            "weighted_n": (float(work[weights_name].sum()) if weights_name
+                           else np.nan),
+            "llf": np.nan, "llnull": np.nan, "aic": np.nan,
+            "rsquared": np.nan, "rsquared_adj": np.nan, "f_pvalue": np.nan,
+            "bic": np.nan, "fit_warnings": cc_info.get("fit_warnings", []),
+            "interaction_wald": wald, "mi": cfg,
+            "mi_outcome_excluded": n_outcome_excluded,
+            "mi_all_missing_excluded": n_all_missing,
+            "mi_weights_excluded": n_weights_excluded,
+            "n_events_denominator": n_events_denominator,
+            "mi_report": report_rows, "n_cc": int(len(cc_work)),
+            "cc_failed": cc_failed,
+            "cc_llf": cc_info.get("llf", np.nan),
+            "k": len(design_terms), "loglik": np.nan, "llr": np.nan,
+            "llr_df": np.nan, "llr_p": np.nan, "pseudo_r2": np.nan,
+            "subset": subset, "sample": sample,
+            "n_entry": n_entry, "n_subset": n_subset}
+    vif_data = cc_vif
+    roc_row = ({"model": mid, "auc": np.nan, "ci_low": np.nan,
+                "ci_high": np.nan, "n": n_model, "n_events": n_events,
+                "method": "n/a", "reps": 0,
+                "note": "MI 模型不计算 ROC（无单一预测向量）"} if args.roc else None)
+    return rows + cc_rows, info, cc_sep, vif_data, roc_row
 
 
 def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
@@ -1496,8 +2549,11 @@ def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
     events = info.get("n_events")
     event_txt = ""
     if events is not None and np.isfinite(events):
-        rate = events / info["n"] * 100 if info["n"] else np.nan
-        event_txt = f"（事件 {int(events)}/{info['n']} = {rate:.1f}%）"
+        # MI with an imputed outcome reports OBSERVED events; divide by the
+        # observed-outcome count, never by the imputed frame size
+        denom = info.get("n_events_denominator") or info["n"]
+        rate = events / denom * 100 if denom else np.nan
+        event_txt = f"（事件 {int(events)}/{int(denom)} = {rate:.1f}%）"
     lines.append(f"- 结果：`{info['outcome']}`{event_txt}")
     lines.append(f"- 估计样本：N={info['n']:,}（dropna 排除 {info['n_dropped']} 行；"
                  f"分离规则再排除 {info['n_removed_separation']} 行）")
@@ -1517,7 +2573,11 @@ def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
         else:
             lines.append(f"- flow 校验：sample_flow 里没有 stage=\"{stage}\"，跳过")
     lines.append(f"- 标准误：{info['se_type']}")
-    if info["mtype"] == "logit":
+    if info.get("weights"):
+        lines.append(f"- 权重：`{info['weights']}`（加权 N={fmt(info.get('weighted_n'), 1)}）；"
+                     "点估计为加权估计；SE 是模型基，不是设计基"
+                     "（无分层/PSU 的复杂抽样方差）")
+    if info.get("mtype") == "logit":
         mcf = np.nan
         if np.isfinite(info["llf"]) and np.isfinite(info["llnull"]) and info["llnull"] != 0:
             mcf = 1 - info["llf"] / info["llnull"]
@@ -1526,11 +2586,62 @@ def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
             llr_txt = (f"；LLR χ²={fmt(info['llr'], 1)}"
                        f"（df={int(info['llr_df'])}, p={_fmt_llr_p(info['llr_p'])}）")
         lines.append(f"- 拟合：对数似然 {fmt(info['llf'], 2)}；"
-                     f"McFadden R²={fmt(mcf, 3)}；AIC={fmt(info['aic'], 1)}{llr_txt}")
+                     f"McFadden R²={fmt(mcf, 3)}；AIC={fmt(info['aic'], 1)}{llr_txt}"
+                     + ("（freq_weights 下按重复样本解释，仅作参考）"
+                        if info.get("weights") else ""))
+    elif info.get("mtype") == "mixed":
+        lines.append(f"- 拟合：REML 对数似然 {fmt(info['llf'], 2)}；AIC={fmt(info['aic'], 1)}；"
+                     f"组数 {info.get('n_groups')}")
+        lines.append(f"- 方差成分：组间 {fmt(info.get('var_group'), 4)}；"
+                     f"组内 {fmt(info.get('var_resid'), 4)}；"
+                     f"ICC={fmt(info.get('icc'), 3)}")
+        if not np.isfinite(info.get("icc", np.nan)):
+            if info.get("random_slopes"):
+                lines.append("- ICC 仅在纯随机截距下定义；本模型带随机斜率，"
+                             "总方差随协变量取值变化，无单一定义，未计算")
+            else:
+                lines.append("- ICC 不可计算（方差成分退化或未收敛），见拟合告警")
+    elif info.get("mtype") == "cox":
+        lines.append(f"- 拟合：偏对数似然 {fmt(info['llf'], 2)}；Breslow ties；"
+                     "效应列为 HR=exp(β)，CI 在 HR 尺度")
+    elif info.get("mtype") == "logrank":
+        lr = info.get("logrank") or {}
+        lines.append(f"- 检验：log-rank χ²={fmt(lr.get('stat'), 3)}"
+                     f"（df={int(lr.get('df'))}, p={fmt_p(lr.get('p'))}）；"
+                     f"分组 `{info.get('groups')}`：{', '.join(info.get('group_levels', [])[:8])}")
     else:
         lines.append(f"- 拟合：R²={fmt(info['rsquared'], 3)}；"
                      f"调整 R²={fmt(info['rsquared_adj'], 3)}；"
                      f"F 检验 p={fmt_p(info['f_pvalue'])}")
+    if info.get("mi"):
+        cfg = info["mi"]
+        fmi_vals = [r["fmi"] for r in info.get("mi_report", [])
+                    if np.isfinite(r.get("fmi", np.nan))]
+        fmi_txt = f"；FMI 最大 {fmt(max(fmi_vals), 3)}" if fmi_vals else ""
+        cc_note = ""
+        if info.get("cc_failed"):
+            cc_note = (f"；完整案例参照拟合失败：{info['cc_failed']}"
+                       "（合并估计不受影响，参照行缺失）")
+        excluded = []
+        if info.get("mi_outcome_excluded"):
+            excluded.append(f"结局缺失 {info['mi_outcome_excluded']} 行不插补（协变量 MI）")
+        if info.get("mi_all_missing_excluded"):
+            excluded.append(f"全部模型变量缺失 {info['mi_all_missing_excluded']} 行剔除")
+        if info.get("mi_weights_excluded"):
+            excluded.append(f"weights 缺失 {info['mi_weights_excluded']} 行剔除（已计入 n_dropna）")
+        excl_txt = ("；" + "；".join(excluded)) if excluded else ""
+        outcome_txt = ("插补结局" if cfg.get("impute_outcome")
+                       else "不插补结局（默认）")
+        lines.append(f"- 多重插补：MICE（PMM），m={cfg['m']}、cycles={cfg['cycles']}、"
+                     f"seed={cfg['seed']}，{outcome_txt}，Rubin 合并；"
+                     f"完整案例参照 N={info.get('n_cc')}{fmi_txt}{cc_note}{excl_txt}；"
+                     "系数表含 complete-case 参照行"
+                     + ("；事件数为观测口径（插补集含 y 填补）"
+                        if cfg.get("impute_outcome") else ""))
+    wald = info.get("interaction_wald")
+    if wald:
+        lines.append(f"- 交互项联合检验：χ²={fmt(wald['stat'], 2)}"
+                     f"（df={int(wald['df'])}, p={fmt_p(wald['p'])}）")
     if info["outcome_map"]:
         lines.append(f"- 二元编码：`{info['outcome_map']}`")
     refs = {}
@@ -1553,15 +2664,19 @@ def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
     if info["excluded"]:
         lines.append("- 未写入 coef 的项（常数或估计不稳定）：" +
                      "、".join(f"`{t}`" for t in info["excluded"]))
-    lines += ["", "| term | β | SE | 效应 | 95%CI | p | ref | 备注 |",
-              "|---|---:|---:|---:|---|---:|---|---|"]
-    for _, row in frame.iterrows():
-        effect = row["or"] if row["metric"] == "OR" else row["beta"]
-        ci = (f"{fmt(row['ci_low'], 3)}–{fmt(row['ci_high'], 3)}")
-        lines.append(f"| {row['term']} | {fmt(row['beta'], 3)} | {fmt(row['se'], 3)} | "
-                     f"{fmt(effect, 3)} | {ci} | {fmt_p(row['p'])} | "
-                     f"{row['ref'] or '—'} | {row['note'] or '—'} |")
-    lines.append("")
+    if frame is not None and not frame.empty:
+        lines += ["", "| term | β | SE | 效应 | 95%CI | p | ref | 备注 |",
+                  "|---|---:|---:|---:|---|---:|---|---|"]
+        for _, row in frame.iterrows():
+            effect = row["or"] if row["metric"] in ("OR", "HR") else row["beta"]
+            ci = (f"{fmt(row['ci_low'], 3)}–{fmt(row['ci_high'], 3)}")
+            lines.append(f"| {row['term']} | {fmt(row['beta'], 3)} | {fmt(row['se'], 3)} | "
+                         f"{fmt(effect, 3)} | {ci} | {fmt_p(row['p'])} | "
+                         f"{row['ref'] or '—'} | {row['note'] or '—'} |")
+        lines.append("")
+    elif info.get("mtype") == "logrank":
+        lines.append("- 该模型是单一检验，不产出系数行（见 fit.csv 的 test_* 列）")
+        lines.append("")
     if vif_data:
         lines.append("**VIF（多重共线性）**")
         lines.append("")
@@ -1569,7 +2684,8 @@ def _render_model_summary(frame: pd.DataFrame, info: dict, sep_rows: list[dict],
             if row["term"] == "(none)":
                 lines.append("- 无可用预测变量")
                 continue
-            flag = "（>10，需处理）" if np.isfinite(row["vif"]) and row["vif"] > 10 else ""
+            flag = (f"（≥{VIF_FLAG:g}，存在共线性）"
+                    if np.isfinite(row["vif"]) and row["vif"] >= VIF_FLAG else "")
             lines.append(f"- `{row['term']}`: {fmt(row['vif'], 2)}{flag}")
         lines.append("")
     if roc_row:

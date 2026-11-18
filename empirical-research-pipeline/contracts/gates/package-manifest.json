@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "0f08e61db99b389d74a0ca1c6fcf6425b0dd7cead0aa939d09f21b9f29a7a859"
+      "sha256": "4f5d19b45e0b699313e7330bced6405df511120962ee5a8a872cfd562b7681fd"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -70,7 +70,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "75ecf1a261a18545c83c33fc92cbda8bfdf18157edbd4312ee06e6d2e9aa63fe"
+      "sha256": "d14079998ff33283a293977d45c28ab64f58023545c4dc8f3d84f33236a219b5"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -78,7 +78,7 @@
     },
     {
       "path": "evals/evals.json",
-      "sha256": "8e6f77407896ab7a4c579ed571fb0ef02c7f18ce11afbff69e8864a9f7424d73"
+      "sha256": "ce963edd0add1404d9bd5e811c179cd5c0666a092f216cc8256d1710e5f3bb3d"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -102,7 +102,7 @@
     },
     {
       "path": "references/03-analysis-spss.md",
-      "sha256": "647dc66ebc47cc2fb013442152500b388b799e82206d94c2ac722fe5051a208c"
+      "sha256": "df09ce3c0c100ae7f3ca7910b492a319941c37c8d18c2b3c80991fe6a3307935"
     },
     {
       "path": "references/04-figures-publication.md",
@@ -118,11 +118,11 @@
     },
     {
       "path": "references/07-chart-atlas.md",
-      "sha256": "d2c540b1274ac64e98f8ceea59a9435839beb913c963a1cd1f39ab82ade3540f"
+      "sha256": "ed844e26ad438b04b80aea32dede49e4973d2b5b824eba5c241c39d2938051a7"
     },
     {
       "path": "references/08-analysis-expansion.md",
-      "sha256": "774cbefadda2db87bc789f4f7669448528260d7695f5655cd7d5d94929834ff0"
+      "sha256": "4dc7a2488d76880955bdf8849490fcbfcf6fa71bfb9bd7932d89466a0695cc35"
     },
     {
       "path": "references/09-field-extraction.md",
@@ -178,7 +178,7 @@
     },
     {
       "path": "scripts/auto_stats.py",
-      "sha256": "5258d4c90892f06f21642c12198467ccdcac9149585d96f719bf0e021a7930e0"
+      "sha256": "b32be6413a6cd8616c3aadc638e8b12d0612ac71acb652fbf3a1a94bfb71afa7"
     },
     {
       "path": "scripts/check_decisions.py",

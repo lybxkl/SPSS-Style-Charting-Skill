@@ -100,7 +100,7 @@
 | 混淆矩阵 | 阈值下的分类错误 | 分析→分类→混淆矩阵 | `confusion_heatmap` | 说明阈值 |
 | Lift 图 | 头部提升倍数 | 分析→分类→增益 | `lift_chart` | 十分位需说明 |
 | Kaplan-Meier | 生存/时间到事件 | 分析→生存→Kaplan-Meier | `kaplan_meier`（纯 numpy） | 需要随访时间+事件列 |
-| Cox 回归 | 生存协变量 | 分析→生存→Cox | SPSS/lifelines | 检查 PH 假设；不自动画 |
+| Cox 回归 | 生存协变量 | 分析→生存→Cox | spec `"type": "cox"`（内置） | 森林图可直接吃 coef 的 HR；PH 假设检验（Schoenfeld）需另行 |
 | P-P/Q-Q 图 | 正态性 | 分析→描述→P-P/Q-Q | `qq_plot`（Q-Q） | 大样本不必过度依赖 |
 | 散点矩阵 | 多变量两两关系 | 图表构建器→散点矩阵 | `scatter_matrix` | 偏态变量变换 |
 | 因子分析碎石图 | 保留因子数 | 分析→降维→因子 | `scree_plot` | 结合平行分析 |

@@ -38,14 +38,22 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 | 字段 | 含义 |
 |---|---|
 | `id` | 模型名，决定输出文件名 `coef_<id>.csv` |
-| `type` | `logit` 或 `ols` |
-| `outcome` | 因变量列名；logit 需可识别为 0/1（文本标签用 `outcome_map`） |
+| `type` | `logit` / `ols` / `mixed` / `cox` / `logrank`（写错类型或字段用错类型直接报错退出） |
+| `outcome` | 因变量列名；logit 需可识别为 0/1（文本标签用 `outcome_map`）；mixed 需数值 |
 | `predictors` | 变量列表：裸名按**连续**处理；`C(名)` 按分类；`C(名, Treatment('水平'))` 指定参照组 |
 | `ref` | 分类变量的参照组（裸名写法用）；**分类变量必须显式声明参照组，否则报错退出** |
-| `cluster` | 聚类稳健标准误的组列（如省/法院）；优先于 `cov` |
-| `cov` | `HC0`/`HC1`/`HC3`；留空为非稳健标准误 |
+| `cluster` | 聚类稳健标准误的组列（如省/法院）；优先于 `cov`；仅 logit/ols |
+| `cov` | `HC0`/`HC1`/`HC3`；留空为非稳健标准误；仅 logit/ols |
 | `dropna` | `true`（默认）完整案例；`false` 时存在缺失即报错 |
-| `outcome_map` | 可选，`{"是": 1, "否": 0}` 形式的文本标签映射 |
+| `outcome_map` | 可选，`{"是": 1, "否": 0}` 形式的文本标签映射（logit 结果 / cox 事件） |
+| `interactions` | `[["a","b"], …]` 交互项（两变量须在 predictors 里）+ 联合 Wald 检验 |
+| `weights` | 抽样权重列，仅 logit/ols（WLS / GLM freq_weights；SE 是模型基不是设计基） |
+| `impute` | `{"m": ≥2, "seed": 必填, "cycles": ≥1, "impute_outcome": true/false}` 多重插补（MICE-PMM + Rubin 合并），仅 logit/ols；默认不插补结局（协变量 MI），插补结局须显式声明 |
+| `groups` | mixed 必填：随机截距分组列；可选 `random_slopes: ["x"]`（数值） |
+| `time`/`event` | cox/logrank 必填；cox 可加 `strata`；HR=exp(β)（cox） |
+| `group` | logrank 必填：检验分组列；可加 `strata` |
+
+VIF 标志线全仓统一 **≥5**（`model_summary.md` 与 `methods_lib.py` 同口径；此前两处分别为 >10 与 ≥5）。
 
 `coef_<id>.csv` 的列：`model,term,type,beta,se,beta_ci_low,beta_ci_high,p,or,or_low,or_high,ci_low,ci_high,metric,estimate,n,n_events,outcome,ref,note,se_type`。logit 的 `ci_low/ci_high`、`or` 为 **OR 尺度**，`beta/se` 为对数尺度；ols 的 `ci_low/ci_high` 为 β 尺度且 `metric=beta`。这一列名与 `auto_chart_pack.py --coef` 对齐，可直接画森林图；`ref` 列写出每个哑变量项的参照组，`note` 记录合并水平等处理。
 
@@ -103,12 +111,14 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - [x] 主模型：因变量、参照组、核心自变量、控制变量 —— `--spec` 的 `predictors` + `ref`。
 - [x] 逐步加控制：模型 1 基础、模型 2 + 程序性变量、模型 3 + 固定效应 —— 写多个 `id` 的模型，`model_summary.md` 并列 AIC/BIC。
 - [x] 类别/地区/年份固定效应或哑变量 —— 用 `C(变量, Treatment('参照'))` 显式哑变量；水平很多时注意自由度，或改用 `cluster` 稳健标准误。
-- [ ] 交互：调节变量×阶段、地区×阶段、年份×阶段 —— **未实现，需外部脚本**（先在数据里生成交互列，再作为预测变量写进 spec）。
-- [ ] 分组模型：分类别/分地区/分审级 —— **未实现，需外部脚本**（每次用 `filter_query` 或 `filter` 配置单独跑一遍 spec）。
+- [x] 交互：调节变量×阶段、地区×阶段、年份×阶段 —— spec 的 `interactions: [["a","b"]]`：乘积项 + 联合 Wald χ²（`fit.csv` 的 `test_*` 列）；交互图仍需外部脚本。
+- [ ] 分组模型：分类别/分地区/分审级 —— **未实现，需外部脚本**（每次用 `filter_query` 或 `filter` 配置单独跑一遍 spec；也可用模型 `subset`）。
 - [x] 替代因变量：连续/有序/二元版本 —— 同一 spec 里放多个 `outcome`。
 - [x] 替代样本：去重前后、排除极端年份、仅一审 —— 换 `config` 的 `filter_query`/`filter` 重跑。
 - [x] 替代编码：层级合并/拆分、不同参照组 —— 改 `Treatment(...)` 或 `ref`。
 - [x] 模型比较：AIC/BIC、拟合优度、解释力 —— `model_summary.md` 与 `model_meta.json`。
+- [x] 分层数据（学生在班级/案件在法院）：`"type": "mixed"` + `groups`（REML、随机截距、ICC；可选 `random_slopes`）。
+- [x] 抽样权重：`weights`（WLS / GLM freq_weights）；**点估计加权、SE 是模型基不是设计基**，复杂抽样（分层/PSU）方差须外部工具或写明局限。
 
 ## 5. 模型诊断
 
@@ -119,7 +129,7 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - [x] 区分度：`--roc` 输出 `roc.csv`（AUC + 95% percentile bootstrap CI，1000 次，固定种子）。
 - [ ] 拟合：Hosmer–Lemeshow 或校准斜率 —— **未实现，需外部脚本**。
 - [x] 聚类/稳健标准误：spec 的 `cluster`（`cov_type="cluster"`）或 `cov`（HC0/HC1/HC3）；单变量筛查用 CLI `--robust HC1`。
-- [ ] 缺失机制：完整案例 vs 多重插补敏感性 —— **未实现，需外部脚本**（`dropna=false` 只会在有缺失时报错，不做插补）。
+- [x] 缺失机制：完整案例 vs 多重插补敏感性 —— spec 的 `impute`（MICE-PMM，m≥2、seed 必填）+ Rubin 合并；`coef` 表含 complete-case 参照行，`impute_report.csv` 给 within/between/FMI。不做插补的旧语义（`dropna=false` 报错）不变。
 
 ## 6. 异质性
 
@@ -130,7 +140,7 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - [ ] 分审级：一审/二审。
 - [ ] 分年份：早期/中期/晚期。
 - [ ] 分调节变量水平：高/低或分组。
-- [ ] 交互模型 + 分组预测值 —— **未实现**（spec 不支持交互项；需先生成交互列）。
+- [x] 交互模型 —— spec `interactions` 直接支持（联合 Wald 判显著性，不要只看单个交互项的 p）；分组预测值/边际效应仍需外部脚本。
 - [ ] 亚组样本量是否足够；小样本组只描述不推断。
 
 ## 7. 机制与解释
@@ -154,7 +164,7 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 - [x] 十分位 Lift/增益表 —— `pubfig.lift_chart(ax, y_true, y_score, bins=10)` 返回 `bin,n,events,event_rate,lift` 表（D1=预测概率最高组的修复版语义），表可直接落 CSV。
 - [x] 变量重要性/系数森林 —— `coef_<id>.csv` + `auto_chart_pack.py --coef` 直接出森林图。
 - [ ] 决策曲线（如临床/政策场景）—— **未实现，需外部脚本**。
-- [ ] 有随访时间/事件列时：Kaplan–Meier + Cox（检查 PH 假设）；没有就写明跳过 —— **未实现，需外部脚本**（`pubfig.kaplan_meier` 只能画 KM 图，Cox/PH 需 lifelines 或 R）。
+- [x] 有随访时间/事件列时：Kaplan–Meier + Cox —— spec `"type": "cox"`（Breslow，HR=exp(β)，可选 `strata`）与 `"type": "logrank"`（组间比较）；KM 曲线用 `pubfig.kaplan_meier`。**PH 假设检验（Schoenfeld 残差）未实现**，需另行检验；没有随访列就写明跳过。
 
 ## 9. 降维与聚类（探索）
 
@@ -181,8 +191,8 @@ python scripts/auto_stats.py --data data/analysis.csv --out output/analysis_pack
 |---|---|---|---|---:|---|---|
 | 主模型 1a | 阶段→结果 | 阶段 2–5 | 1,000 | 表 5/图 5 | 完成 | 控制类别/地区/年份 |
 | 稳健性 1 | 去重后重跑 | 唯一样本 | 980 | 附表 2 | 完成 | 结论方向一致 |
-| 交互模型 | 调节变量 | 阶段 2–4 | 880 | 表 7/图 6 | 完成 | 探索性 |
-| 生存分析 | 履行/再犯时间 | 有随访列 | 按列缺失 | KM 图/附表 | 有则做 | Cox 在 SPSS/lifelines，检查 PH；无随访列写明跳过 |
+| 交互模型 | 调节变量 | 阶段 2–4 | 880 | 表 7/图 6 | 完成 | spec `interactions` + 联合 Wald；探索性 |
+| 生存分析 | 履行/再犯时间 | 有随访列 | 按列缺失 | KM 图/附表 | 有则做 | spec `cox`/`logrank`；PH 检验另行；无随访列写明跳过 |
 
 这张表就是“为什么没做/做了什么”的答案，能显著减少用户反复追问。
 

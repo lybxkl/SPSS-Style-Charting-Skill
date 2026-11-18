@@ -535,6 +535,7 @@
       "resumeFile": "docs/decisions/primary-models.md",
       "manualInstructions": [
         "先写 docs/decisions/primary-models.md，正文含「主分析：」，写明结局、对照和放弃的规格。数据使用 research_registry.json 里第一份数据集。",
+        "模型类型与字段（logit/ols/mixed/cox/logrank、interactions/weights/impute）按 references/03-analysis-spss.md「五项现代统计」声明；字段用错类型直接报错退出，不会静默忽略。加权模型须在正文写明「SE 是模型基，不是设计基」。",
         "调用 data_analysis_sweep 给模型族表态，再用 data_analysis_register 登记实际估计的模型。",
         "登记之后用 data_analysis_run_stage(stageId=\"stats\") 留下回执。手跑 auto_stats 不会被闸门采信。"
       ],

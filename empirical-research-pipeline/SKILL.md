@@ -429,9 +429,22 @@ B. 或在 SPSS/R/Stata 中按同一份预设规格估计，把系数导出成同
 
 报告表至少要有：系数/OR、95%CI、p、N、拟合指标、参照组说明。每个模型单独一行 N。
 
+### 4B-2 五项现代统计（同一 `--spec` 入口）
+
+多变量模型现在支持五种类型：`logit` / `ols` / `mixed` / `cox` / `logrank`，外加三项字段扩展（字段写错类型直接报错，不会静默忽略）：
+
+- **交互项** `interactions: [["a","b"]]`：乘积项 + 联合 Wald χ²（fit.csv 的 `test_*` 列）；
+- **抽样权重** `weights`：WLS / GLM freq_weights，点估计加权、SE 是模型基**不是设计基**（摘要明说）；
+- **多重插补** `impute: {m≥2, seed 必填}`：MICE(PMM) m 次 + Rubin 合并 + FMI + 完整案例参照行 + `impute_report.csv`；
+- **mixed**：随机截距（+`random_slopes`）、REML、ICC 进 fit.csv；
+- **cox**：Breslow、HR=exp(β)、可选 `strata`、无截距行；
+- **logrank**：`time/event/group`(+`strata`)，χ²/df/p 进 fit.csv，纯 logrank 的 spec 合法。
+
+字段边界、验证规则与产物细节见 `references/03-analysis-spss.md`「五项现代统计」节。
+
 ### 4C 十六种经典方法一次跑完（`methods_pack.py`）
 
-`auto_stats.py` 只做二元 Logit 与 OLS；教材里那套"描述 → 差异 → 关联 → 模型 → 降维 → 测量 → 分类"的方法清单
+`auto_stats.py` 的 `--spec` 层覆盖 logit/ols/mixed/cox/logrank 与交互、权重、插补；教材里那套"描述 → 差异 → 关联 → 模型 → 降维 → 测量 → 分类"的方法清单
 （描述统计、PCA、相关、ANOVA、卡方、SEM、判别、时序、因子、聚类、回归、T 检验、中介、卡诺、信度、效度）
 由 `methods_pack.py` 统一执行，**每个方法先自检前置条件，不满足就 `skipped` 并指出替代方法**，绝不硬算：
 
@@ -652,7 +665,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
 | `scripts/csv_to_spss_syntax.py` | 由 CSV 表头生成 SPSS `GET DATA` 语法；清理非法/重复变量名并写变量标签 |
-| `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查 |
+| `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查；`--spec` 多变量层支持 logit/ols/mixed/cox/logrank + 交互项、抽样权重、多重插补（Rubin 合并） |
 | `scripts/methods_lib.py` | 十六种方法的统计内核（描述/正态性/卡方/t/ANOVA/事后/相关/OLS/Logit/PCA/EFA/信度/效度/聚类/判别/时序/中介/Kano/非参数）；SEM 显式拒绝 |
 | `scripts/methods_pack.py` | 按 `methods.json` 跑 1–16 号方法（另加非参数与二元 Logit）：前置条件不满足即 `skipped` 并给替代，产出 `methods_report.md`/`methods_manifest.csv`/每法一图 |
 | `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest；默认不设总图数上限 |

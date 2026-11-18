@@ -56,12 +56,32 @@ python scripts/audit_corpus.py \
 
 | 文件 | 关键列 |
 |---|---|
-| `corpus_files.csv` | `rel_path, relpath, top, name, ext, kind, bytes, pages, chars, chars_effective, images, encrypted, status, year_hint, md5, dup_group, dup_content_group, dup_role, dup_role_content, dedupe_group, dedupe_role, error, error_kind` |
+| `corpus_files.csv` | `rel_path, relpath, top, name, ext, kind, bytes, mtime, pages, chars, chars_effective, images, encrypted, status, year_hint, md5, dup_group, dup_content_group, dup_role, dup_role_content, dedupe_group, dedupe_role, error, error_kind` |
 | `corpus_duplicates.csv` | `group, md5, role, keeper_reason, top, file, rel_path, relpath, bytes, pages, chars, chars_effective` |
 | `corpus_summary.json` | 总数、有效数、重复组、状态分布、扩展名分布、年份提示、`sampling_frame` |
 | `corpus_report.md` | 可直接放进项目日志的中文摘要，顶部有「抽样框」一节 |
 
 `corpus_audit.csv` 是 `corpus_files.csv` 的**旧名**：脚本仍会把同一张表写成这两个文件名，因为既有命令、`make_coding_sheet.py --audit` 与旧版文档都指向旧名；新写的命令请用 `corpus_files.csv`。两者内容逐字节一致，不存在版本差异。
+
+### 断点续跑（`--resume`）
+
+十万量级的语料扫描几小时才跑得完，中断后从头再来是纯粹的浪费。`--resume` 读上一次的 `corpus_files.csv`，对每个文件只做一次 `stat`：**大小与修改时间（`mtime` 列，纳秒精度）都没变的文件直接复用上一轮的整行**（状态、页数、字符数、MD5 都不再重算）；新增或变更过的文件照常处理；上轮在、这轮不在的文件从表里移除并在 `corpus_summary.json` 的 `resume` 块计数（`reused / reprocessed / vanished`；`--max-files` 截断的运行**不**把截断点之后的缓存行计成 vanished——walk 没走到它们，证明不了它们消失）。
+
+```bash
+# 第一次（或参数变了）
+python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit"
+# 中断后续跑：参数原样再来一遍，加 --resume
+python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --resume
+```
+
+诚实边界：
+
+- 判据是 size+mtime，不是内容哈希——同字节数的内容修改靠 mtime 捕获（Windows NTFS 分辨率 100 ns；同进程内极近间隔的连续写可能共享同一个 mtime，跨进程重跑的间隔下可靠）。mtime 被刻意伪造不变且大小恰好相同的对抗性场景不在防线内；要铁证就全量重跑比对 `corpus_fingerprint`。
+- `--resume` 需要上轮的 `corpus_files.csv` **和** `corpus_summary.json` 成对在场（summary 里才有抽样快照）；只有 csv 没有 summary（被手动清理、部分复制或首轮写盘中途失败）时拒绝续跑而不是混框复用。
+- **抽样框必须一致**：`--ext / --skip-dir / --min-chars` 与哈希开关（`--no-hash`）任一不同，续跑直接 exit 2 拒绝——混框的表比从头跑更糟。`--resume` 找不到上次的 csv 时按全量跑并提示。
+- 复用行保证**逐字节一致**：同一语料续跑产出的 `corpus_files.csv` 与全量重跑完全相同（有回归测试钉住），所以「续跑过的表」和「一次跑完的表」不可区分。
+- 去重分组、内容级去重（`--content-dedupe`）与汇总统计每轮**全量重算**——它们算的是表内关系，不是逐文件事实，复用不改变结果。
+
 
 两处契约细节：
 

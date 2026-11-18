@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "f006362af870a4a926ce3ddf8c64958d4da7126bbcadc8a52bdd1efff9aaca00"
+      "sha256": "c314ff051a013d440ad5530a7bc4bfc5fba8a7c09a6580bfe50e9d2c22242487"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -70,7 +70,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "d14079998ff33283a293977d45c28ab64f58023545c4dc8f3d84f33236a219b5"
+      "sha256": "d3040fbfc8165b6292cdd034a595b092a0b7a2bacc8c44ac2bae6a9caa518be8"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -78,7 +78,7 @@
     },
     {
       "path": "evals/evals.json",
-      "sha256": "eaadef4bf3fb5a96bc7e3833b42b5201e3ef16c8d5fb3448c12acb6bbe1974ba"
+      "sha256": "47857a2ddaf48f3a29843bae139185bff5c705692abb393930e0619665a52f75"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -94,7 +94,7 @@
     },
     {
       "path": "references/01-corpus-audit.md",
-      "sha256": "657bd41f7465ede5415213769387a022fed78a3e268a1d4a8a6c39e8b8538049"
+      "sha256": "dea6ff70e7525b3cc61efa69392acdad2201b4110560de92ae9f700aa480a77f"
     },
     {
       "path": "references/02-coding-protocol.md",
@@ -126,11 +126,11 @@
     },
     {
       "path": "references/09-field-extraction.md",
-      "sha256": "38539c5b818b855bb680abb34958f35bed06b6636b80a9614d1e5f214fff66be"
+      "sha256": "68ff5ed7f980271d239dd753d76e8492ccb19443b89b77a9eceda78d30cc0334"
     },
     {
       "path": "references/10-contracts.md",
-      "sha256": "448136ae3563db1fef89f085fdea40eae30fbfc341bcb11794abce14ce25c88d"
+      "sha256": "9227e83c0534e2c4d40f37df49b9744ce01fae6b449fafaca50cb057e041b684"
     },
     {
       "path": "references/11-methods-catalog.md",
@@ -166,7 +166,7 @@
     },
     {
       "path": "scripts/audit_corpus.py",
-      "sha256": "8a76aa18a6209ec37ef25aa7da378a35dcfca5b6cfde707a109437934208318a"
+      "sha256": "8c0dba22135dec1a4d8241b7075f38ab4e02a6784cc97d1012342acb19185921"
     },
     {
       "path": "scripts/audit_view.py",
@@ -290,7 +290,7 @@
     },
     {
       "path": "scripts/make_coding_sheet.py",
-      "sha256": "d38800fe778b3bb7112695020b4dc1625c012b2b8a60c6bb417c06a51249e98c"
+      "sha256": "9f0bc80081cbbb653acd83f835abc72ca56e044553cce07a8e35865b82584fe6"
     },
     {
       "path": "scripts/manuscript.py",

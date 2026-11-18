@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -41,7 +42,7 @@ from check_decisions import (
 )
 
 # Stamped into run.json so an output directory names the code that built it.
-SCRIPT_VERSION = "2.1.0"
+SCRIPT_VERSION = "2.2.1"
 
 # A year must stand alone: 1990 inside an ID number or 2020 inside an amount
 # must not be read as a year.
@@ -356,6 +357,12 @@ def main() -> int:
                              "(value / na per field, exclude per document)")
     parser.add_argument("--allow-unresolved", action="store_true",
                         help="let needs_human=true decisions through (draft runs only)")
+    parser.add_argument("--resume", action="store_true",
+                        help="continue an interrupted --extract run: reuse the "
+                             "per-document extraction journal (extract_journal.jsonl) "
+                             "when a file's size and mtime are unchanged. The frame "
+                             "(root/ext/min-chars/keywords/profile/audit) must match; "
+                             "see references/09-field-extraction.md")
     args = parser.parse_args()
     if args.require_review and not args.extract:
         print("ERROR: --require-review only applies with --extract", file=sys.stderr)
@@ -447,6 +454,91 @@ def main() -> int:
     csv_path = os.path.join(out_dir, "coding_sheet.csv")
     skipped_path = os.path.join(out_dir, "skipped_documents.csv")
     flow_path = os.path.join(out_dir, "sample_flow.csv")
+    journal_path = os.path.join(out_dir, "extract_journal.jsonl")
+
+    # ------------------------------------------------------------------ #
+    # --resume: a per-document journal written after each document is fully
+    # processed (read + signalled + profiled). On resume, a document whose
+    # size and mtime are unchanged replays its journal entry instead of being
+    # re-read; the frame must match exactly, otherwise entries describe a
+    # different question than the run being attempted.
+    def _file_sha(path: str | None) -> str:
+        if not path:
+            return ""
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for block in iter(lambda: fh.read(1 << 20), b""):
+                h.update(block)
+        return h.hexdigest()
+
+    frame = {
+        "root": root,
+        "ext": sorted(exts) if exts is not None else [],
+        "min_chars": args.min_chars,
+        "no_text": bool(args.no_text),
+        "max_text_chars": int(args.max_text_chars or 0),
+        "keywords_sha": _file_sha(args.keywords),
+        "profile_sha": profile_sha256(args.extract) if args.extract else "",
+        "audit_sha": _file_sha(args.audit),
+        "dedupe_sha": _file_sha(args.dedupe_plan),
+    }
+    journal_cache: dict[str, dict] = {}
+    resume_state = {"enabled": bool(args.resume), "reused": 0,
+                    "reprocessed": 0, "dropped": 0}
+    # The journal is ALWAYS written: a fresh run is a complete pass over the
+    # corpus, and the journal is what a later interrupted run resumes from.
+    if args.resume and os.path.isfile(journal_path):
+        torn = 0
+        with open(journal_path, encoding="utf-8") as fh:
+            for line_no, line in enumerate(fh, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    torn += 1
+                    continue
+                if entry.get("frame") != frame:
+                    print("ERROR: --resume refused: the journal's frame "
+                          "(root / --ext / --min-chars / --keywords / profile / "
+                          "--audit / --dedupe-plan / text-storage flags) differs "
+                          "from this run; a reused entry would describe a "
+                          "different extraction. Rerun without --resume",
+                          file=sys.stderr)
+                    return 2
+                doc = entry.get("doc") or {}
+                rel = doc.get("rel")
+                if rel:
+                    journal_cache[rel] = doc
+        if torn:
+            print(f"note: journal tail had {torn} torn line(s) (interrupted "
+                  "write); they are ignored", file=sys.stderr)
+    elif args.resume:
+        print("note: --resume found no extract_journal.jsonl; running a "
+              "full extraction", file=sys.stderr)
+    journal_fh = open(journal_path, "a", encoding="utf-8")
+
+    def journal(doc: dict) -> None:
+        if journal_fh is None:
+            return
+        journal_fh.write(json.dumps({"frame": frame, "doc": doc},
+                                    ensure_ascii=False) + "\n")
+        journal_fh.flush()
+
+    def cache_hit(rel: str, path: str) -> dict | None:
+        doc = journal_cache.pop(rel, None)
+        if doc is None:
+            return None
+        try:
+            st = os.stat(path)
+            if (doc.get("size") == st.st_size
+                    and doc.get("mtime") == st.st_mtime_ns):
+                return doc
+        except OSError:
+            pass
+        return None
+
     rows: list[dict] = []
     skipped: list[dict] = []
     ds_rows: list[dict] = []
@@ -465,6 +557,7 @@ def main() -> int:
     extracted = 0
     excluded = 0
     seen = 0
+    seen_rels: set[str] = set()
     run_order = 0
     signal_included = 0
     signal_skipped = 0
@@ -493,6 +586,7 @@ def main() -> int:
                 ext = ext_of(path)
                 kind = kind_of(path)
                 seen += 1
+                seen_rels.add(rel)
                 if keep_paths is not None and _norm_rel(rel) not in keep_paths:
                     if _norm_rel(rel) not in listed_paths:
                         # The audit file describes a different root: every single
@@ -529,7 +623,8 @@ def main() -> int:
                          detail=f"ext={ext}", skip_stage="format")
                     continue
                 try:
-                    size = os.path.getsize(path)
+                    st_doc = os.stat(path)
+                    size = st_doc.st_size
                 except OSError as exc:
                     skip(rel, name, ext, 0, "unreadable file", detail=str(exc),
                          skip_stage="read")
@@ -555,12 +650,61 @@ def main() -> int:
                     skip(rel, name, kind, 0, "unsupported format; convert or extract first",
                          detail=f"kind={kind}", skip_stage="format", file_kind=kind)
                     continue
+
+                # --resume replay: reading the file is the expensive step, so
+                # the journal is consulted exactly here. Everything above is
+                # a cheap stat/format check and is re-run every time.
+                if args.resume:
+                    cached_doc = cache_hit(rel, path)
+                    if cached_doc is not None:
+                        if cached_doc.get("kind") == "skip":
+                            skipped.append(cached_doc["skip"])
+                            resume_state["reused"] += 1
+                            continue
+                        rec_c = cached_doc["rec"]
+                        # positional ids are renumbered to this run's walk
+                        # order; the rest replays byte-for-byte
+                        rec_c["run_order"] = run_order
+                        out_jsonl.write(json.dumps(rec_c, ensure_ascii=False) + "\n")
+                        rows.append(cached_doc["row"])
+                        stats_c = cached_doc.get("stats") or {}
+                        signal_included += int(stats_c.get("included", 0))
+                        signal_skipped += int(stats_c.get("skipped", 0))
+                        extracted += 1
+                        ds_c = cached_doc.get("ds")
+                        if ds_c is not None:
+                            if not ds_field_names and ds_c.get("field_names"):
+                                ds_field_names = list(ds_c["field_names"])
+                            ds_rows.append(ds_c["ds_row"])
+                            candidate_rows.append(
+                                {"rel_path": rel, "fields": ds_c["ev_fields"]})
+                            ds_evidence.append({
+                                "_row_id": f"{extracted:05d}", "rel_path": rel,
+                                "fields": ds_c["ev_fields"],
+                                "evidence": ds_c["evidence"]})
+                            review_rows.extend(ds_c.get("review") or [])
+                            for fname, n in (ds_c.get("na_counts") or {}).items():
+                                ds_na_counts[fname] = ds_na_counts.get(fname, 0) + n
+                            for fname, buckets in (ds_c.get("na_by_source") or {}).items():
+                                per_field = ds_na_by_source.setdefault(fname, {})
+                                for bucket, n in buckets.items():
+                                    per_field[bucket] = per_field.get(bucket, 0) + n
+                            for fname, n in (ds_c.get("hit_counts") or {}).items():
+                                ds_hit_counts[fname] = ds_hit_counts.get(fname, 0) + n
+                            ds_errors += int(ds_c.get("errors") or 0)
+                        resume_state["reused"] += 1
+                        continue
+                    if rel in journal_cache or journal_cache:
+                        resume_state["reprocessed"] += 1
+
                 try:
                     text = extract_text(path)
                 except Exception as exc:
                     print(f"WARN: cannot read {rel}: {exc}", file=sys.stderr)
                     skip(rel, name, "unreadable", 0, f"unreadable: {exc}",
                          detail=str(exc), skip_stage="read")
+                    journal({"rel": rel, "size": size, "mtime": st_doc.st_mtime_ns,
+                             "kind": "skip", "skip": skipped[-1]})
                     continue
                 # Normalise line endings once, before any offset is computed:
                 # a CRLF file would otherwise shift every evidence span by the
@@ -577,6 +721,8 @@ def main() -> int:
                         detail += "; scanned/image-only PDF?"
                     skip(rel, name, kind, chars, reason, detail=detail,
                          skip_stage="min_chars", file_kind=kind)
+                    journal({"rel": rel, "size": size, "mtime": st_doc.st_mtime_ns,
+                             "kind": "skip", "skip": skipped[-1]})
                     continue
 
                 # `doc_type` is a document kind, not a file format: writing
@@ -623,7 +769,7 @@ def main() -> int:
                     "evidence": evidence,
                 }
                 out_jsonl.write(json.dumps(rec, ensure_ascii=False) + "\n")
-                rows.append({
+                sheet_row = {
                     "file": name, "relpath": rel, "rel_path": rel,
                     "source_type": ext or kind,
                     "doc_type": doc_type, "title": title, "year": year,
@@ -632,15 +778,19 @@ def main() -> int:
                     "signal_categories": ",".join(sorted(signals.keys())),
                     "signal_hits": sum(len(v) for v in signals.values()),
                     "year_src": year_src, "doc_type_src": doc_type_src,
-                })
+                }
+                rows.append(sheet_row)
                 extracted += 1
+                ds_doc = None
                 if extract_profile is not None:
                     row_id = f"{extracted:05d}"
+                    doc_errors = 0
                     try:
                         res = apply_profile(extract_profile, text,
                                             base_dir=profile_dir)
                     except Exception as exc:           # one bad document only
                         ds_errors += 1
+                        doc_errors = 1
                         print(f"ERROR: extract {rel}: {type(exc).__name__}: {exc}",
                               file=sys.stderr)
                         res = {"fields": {}, "evidence": []}
@@ -649,6 +799,9 @@ def main() -> int:
                     ds_row = {"rel_path": rel, "file": name, "doc_type": doc_type}
                     ev_fields = {}
                     doc_candidates = {"rel_path": rel, "fields": {}}
+                    na_doc: dict = {}
+                    na_src_doc: dict = {}
+                    hits_doc: dict = {}
                     for fname in ds_field_names:
                         got = res["fields"].get(fname) or {}
                         value = got.get("value")
@@ -694,7 +847,7 @@ def main() -> int:
                                                      if c.get("note")})),
                         })
                         if value is None:
-                            ds_na_counts[fname] = ds_na_counts.get(fname, 0) + 1
+                            na_doc[fname] = na_doc.get(fname, 0) + 1
                             if got.get("negated"):
                                 bucket = "negated"
                             elif str(got.get("source") or "none") == "none":
@@ -705,17 +858,78 @@ def main() -> int:
                                 bucket = "na_phrase"
                             else:
                                 bucket = "unparsed"
-                            per_field = ds_na_by_source.setdefault(fname, {})
-                            per_field[bucket] = per_field.get(bucket, 0) + 1
+                            per_doc_field = na_src_doc.setdefault(fname, {})
+                            per_doc_field[bucket] = per_doc_field.get(bucket, 0) + 1
                         else:
-                            ds_hit_counts[fname] = ds_hit_counts.get(fname, 0) + 1
+                            hits_doc[fname] = hits_doc.get(fname, 0) + 1
+                    for fname, n in na_doc.items():
+                        ds_na_counts[fname] = ds_na_counts.get(fname, 0) + n
+                    for fname, buckets in na_src_doc.items():
+                        per_field = ds_na_by_source.setdefault(fname, {})
+                        for bucket, n in buckets.items():
+                            per_field[bucket] = per_field.get(bucket, 0) + n
+                    for fname, n in hits_doc.items():
+                        ds_hit_counts[fname] = ds_hit_counts.get(fname, 0) + n
                     ds_rows.append(ds_row)
                     candidate_rows.append(doc_candidates)
                     ds_evidence.append({"_row_id": row_id, "rel_path": rel,
                                         "fields": ev_fields,
                                         "evidence": res["evidence"]})
+                    ds_doc = {
+                        "field_names": list(ds_field_names), "ds_row": ds_row,
+                        "ev_fields": ev_fields, "evidence": res["evidence"],
+                        "review": review_rows[-len(ds_field_names):] if ds_field_names else [],
+                        "na_counts": na_doc, "na_by_source": na_src_doc,
+                        "hit_counts": hits_doc, "errors": doc_errors,
+                    }
+                journal({
+                    "rel": rel, "size": size, "mtime": st_doc.st_mtime_ns,
+                    "kind": "extract", "rec": rec, "row": sheet_row,
+                    "stats": {"included": int(stats.get("included", 0)),
+                              "skipped": int(stats.get("skipped", 0))},
+                    "ds": ds_doc,
+                })
                 if extracted % 200 == 0:
                     print(f"  extracted {extracted} ...", flush=True)
+
+    journal_fh.close()
+    # Compact rewrite: last entry per document wins (a reprocessed document
+    # appends a newer line). Documents beyond a --max-files cutoff are KEPT
+    # (the walk never reached them, so it proves nothing about the disk);
+    # only entries from a completed walk that were never seen count as
+    # vanished. The journal stays a faithful index of the current extraction
+    # state without growing across runs or lying about why.
+    last_by_rel: dict[str, dict] = {}
+    with open(journal_path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            rel = (entry.get("doc") or {}).get("rel")
+            if rel:
+                last_by_rel[rel] = entry
+    if stop:
+        # Truncated run: unvisited documents are not gone, and dropping them
+        # would both lose valid reuse entries and print a false "no longer
+        # present" note.
+        stale: list[str] = []
+        print("note: run stopped at --max-files; journal entries for "
+              "documents beyond the cutoff are kept for the next --resume",
+              file=sys.stderr)
+    else:
+        stale = sorted(rel for rel in last_by_rel if rel not in seen_rels)
+        if stale:
+            print(f"note: --resume dropped {len(stale)} journal entry(ies) for "
+                  "files no longer present under --root", file=sys.stderr)
+    resume_state["dropped"] = len(stale)
+    with open(journal_path, "w", encoding="utf-8", newline="\n") as fh:
+        for rel in sorted(last_by_rel):
+            if stop or rel in seen_rels:
+                fh.write(json.dumps(last_by_rel[rel], ensure_ascii=False) + "\n")
 
     with open(csv_path, "w", newline="", encoding="utf-8-sig") as fh:
         fields = ["file", "relpath", "source_type", "doc_type", "title", "year",
@@ -758,6 +972,10 @@ def main() -> int:
         writer.writerows(flow_rows)
 
     print(f"extracted: {len(rows)} documents -> {jsonl_path}")
+    if resume_state["enabled"]:
+        print(f"resume: reused {resume_state['reused']}, reprocessed "
+              f"{resume_state['reprocessed']}, dropped {resume_state['dropped']} "
+              f"(journal: {os.path.basename(journal_path)})")
     print(f"skipped: {len(skipped)} documents -> {skipped_path}")
     print(f"excluded: {excluded} documents (subset of skipped; by --audit/--dedupe-plan)")
     print(f"signals: included {signal_included}, skipped {signal_skipped} (per-term limit)")
@@ -943,6 +1161,7 @@ def main() -> int:
             "generated_by": "make_coding_sheet.py --extract",
             "script_version": SCRIPT_VERSION,
             "final_hits": final_hits,
+            "resume": resume_state,
             "review": {
                 "fields": len(review_rows),
                 "needs_review": len(pending),

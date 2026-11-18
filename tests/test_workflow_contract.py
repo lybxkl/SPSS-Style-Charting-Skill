@@ -63,4 +63,88 @@ class WorkflowContractTests(unittest.TestCase):
     def test_paths_have_the_same_canonical_form_in_both_runtimes(self):
         self.value['stages'][0]['artifacts']=['output/trailing/'];self.invalid(self.value)
 
+    def test_script_specific_rerun_rules_precede_the_generic_prefix(self):
+        """Engine semantics are first-match-wins, so the exact rules must sit
+        above the scripts/ prefix or they would never fire."""
+        rules=self.value['rerunRules']
+        prefix=next(i for i,rule in enumerate(rules) if rule['pattern']=='scripts/')
+        exact=[rule for rule in rules[:prefix] if rule['match']=='exact'
+               and rule['pattern'].startswith('scripts/')]
+        self.assertGreaterEqual(len(exact),30)
+        # and they must actually win: the engine's lookup order is the array
+        for rule in exact:
+            self.assertTrue(rule['stages'])
+
+    def test_rerun_rules_refine_script_change_blast_radius(self):
+        """Changing pubfig must not re-audit the corpus; changing an advisory
+        tool must not re-run the dataset."""
+        def stages_for(pattern):
+            rule=next(r for r in self.value['rerunRules'] if r['pattern']==pattern)
+            return set(rule['stages'])
+        self.assertEqual(stages_for('scripts/pubfig.py'),
+                         {'stats','figures','manuscript','qa'})
+        self.assertEqual(stages_for('scripts/mine_candidates.py'),{'coding'})
+        self.assertEqual(stages_for('scripts/qa_outputs.py'),{'qa'})
+        self.assertEqual(stages_for('scripts/auto_chart_pack.py'),
+                         {'figures','manuscript','qa'})
+        self.assertEqual(stages_for('scripts/assemble_manuscript.py'),
+                         {'manuscript','qa'})
+        # the generic fallback still covers everything a step touches
+        self.assertEqual(stages_for('scripts/'),set(self.value['rerunRules'][0]['stages']))
+        self.assertEqual(stages_for('data/'),
+                         {'audit','coding','dataset','verify','stats','figures',
+                          'manuscript','qa'})
+        # advisory tools keep their stage-local mapping even though their
+        # outputs live under output/ directories with no machine consumer
+        self.assertNotIn('dataset',stages_for('scripts/mine_candidates.py'))
+        # late stages are never named by any rule (engine drives them itself)
+        named=set()
+        for rule in self.value['rerunRules']:
+            named.update(rule['stages'])
+        self.assertNotIn('recheck',named)
+        self.assertNotIn('publish',named)
+
+    def test_rerun_rules_match_the_owning_steps(self):
+        """Every exact script rule is either a script some step/action runs
+        (stages must cover its owners), a library imported by mapped scripts,
+        or one of the pinned advisory tools; nothing invented."""
+        import re
+        owners={}
+        for owner in self.value['stages']+self.value['actions']:
+            for step in [owner]+owner.get('steps',[]):
+                script=step.get('script')
+                if script:
+                    owners.setdefault(script,set()).add(
+                        owner.get('stage') or owner['id'])
+        advisory={'scripts/mine_candidates.py','scripts/suggest_profiles.py',
+                  'scripts/check_decisions.py','scripts/sample_review.py',
+                  'scripts/compute_kappa.py'}
+        # imported libraries: no owning step, but mapped scripts import them
+        imports={}
+        for path in (PACKAGE/'scripts').glob('*.py'):
+            text=path.read_text(encoding='utf-8',errors='replace')
+            imports[path.name]=set(re.findall(r'^\s*(?:from|import)\s+([a-zA-Z_][\w]*)',
+                                              text,re.M))
+        libraries=set()
+        for mapped in owners:
+            key=Path(mapped).name
+            seen,stack=set(),list(imports.get(key,()))
+            while stack:
+                dep=stack.pop()
+                if dep in seen:
+                    continue
+                seen.add(dep)
+                stack.extend(imports.get(f'{dep}.py',()))
+                libraries.add(f'scripts/{dep}.py')
+        for rule in self.value['rerunRules']:
+            if rule['match']=='exact' and rule['pattern'].startswith('scripts/'):
+                path=rule['pattern']
+                self.assertTrue((PACKAGE/path).is_file(),f"{path} does not exist")
+                if path in owners:
+                    self.assertTrue(owners[path]<=set(rule['stages']),
+                                    f"{path} drops an owning stage")
+                elif path not in advisory and path not in libraries:
+                    self.fail(f"{path} has no owning step and is not a "
+                              f"documented advisory tool or imported library")
+
 if __name__=='__main__':unittest.main()

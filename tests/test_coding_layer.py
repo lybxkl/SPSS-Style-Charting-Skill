@@ -789,5 +789,206 @@ class TestExtractPipeline(TempCase):
         self.assertEqual(row["doc_type_src"], "default")
 
 
+class TestExtractResume(TempCase):
+    """--resume for --extract: the journal makes an interrupted run cheap (batch 6)."""
+
+    def setUp(self):
+        super().setUp()
+        self.corpus = self.p("corpus")
+        os.makedirs(self.corpus, exist_ok=True)
+        self.out = self.p("out")
+        self.profile = self.p("draft", "fields.json")
+        os.makedirs(os.path.dirname(self.profile), exist_ok=True)
+        shutil.copyfile(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "empirical-research-pipeline", "profiles", "legal-judgment.json"),
+            self.profile)
+
+    def doc(self, name, header_extra=""):
+        header = ("审\n理\n法\n院：某某区人民法院\n案\n号：(2021)测****刑初7 号\n"
+                  "裁\n判\n日\n期：2021.03.05\n案\n由：刑事/妨害社会管理秩序罪/滥伐林木罪\n"
+                  + header_extra)
+        path = os.path.join(self.corpus, name)
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(header + "判决如下：一、被告人犯滥伐林木罪，"
+                    "判处有期徒刑一年六个月，并处罚金5000元。\n" + BODY)
+        return path
+
+    def run_extract(self, *extra):
+        return run("make_coding_sheet.py", "--root", self.corpus, "--out", self.out,
+                   "--allow-empty", "--min-chars", "1", "--extract", self.profile,
+                   *extra, cwd=self.tmp)
+
+    def outputs(self):
+        # every product the run writes, closed properly: a replay bug in
+        # review rows or candidates must not slip through a narrow lens
+        names = ("dataset.csv", "evidence.jsonl", "coding_sheet.jsonl",
+                 "extraction_review.csv", "extraction_candidates.jsonl",
+                 "missing_by_source.csv", "decisions_todo.csv",
+                 "skipped_documents.csv", "coding_sheet.csv",
+                 "sample_flow.csv")
+        blobs = []
+        for name in names:
+            path = os.path.join(self.out, name)
+            if not os.path.exists(path):
+                continue
+            with open(path, "rb") as fh:
+                blobs.append((name, fh.read()))
+        return blobs
+
+    def test_resume_is_byte_identical_and_reuses_every_document(self):
+        self.doc("a.txt")
+        self.doc("b.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        before = self.outputs()
+        second = self.run_extract("--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(self.outputs(), before)
+        self.assertIn("resume: reused 2", second.stdout)
+        self.assertEqual(self.run_resume_state()["reused"], 2)
+
+    def test_same_size_content_change_is_reprocessed(self):
+        self.doc("a.txt")
+        self.doc("b.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        # same byte count, different content: only mtime can catch this
+        self.doc("a.txt", header_extra="备注：合成样本。\n")
+        second = self.run_extract("--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("resume: reused 1, reprocessed 1", second.stdout)
+        rows = read_csv(os.path.join(self.out, "dataset.csv"))
+        self.assertEqual(len(rows), 2)
+
+    def test_frame_mismatch_profile_is_refused(self):
+        self.doc("a.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        with open(self.profile, encoding="utf-8") as fh:
+            profile = json.load(fh)
+        profile["fields"] = profile["fields"][:1]
+        with open(self.profile, "w", encoding="utf-8") as fh:
+            json.dump(profile, fh, ensure_ascii=False)
+        second = self.run_extract("--resume")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("frame", second.stderr)
+
+    def test_torn_journal_tail_is_ignored(self):
+        self.doc("a.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        before = self.outputs()
+        journal = os.path.join(self.out, "extract_journal.jsonl")
+        with open(journal, "a", encoding="utf-8") as fh:
+            fh.write('{"frame": tor')   # what a crash mid-write leaves behind
+        second = self.run_extract("--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("torn line", second.stderr)
+        self.assertEqual(self.outputs(), before)
+
+    def test_journal_compacts_between_runs(self):
+        self.doc("a.txt")
+        self.doc("b.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(self.journal_count(), 2)
+        second = self.run_extract("--resume")
+        self.assertEqual(self.journal_count(), 2)   # no unbounded growth
+
+    def journal_rels(self):
+        journal = os.path.join(self.out, "extract_journal.jsonl")
+        rels = []
+        with open(journal, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    rels.append(json.loads(line)["doc"]["rel"])
+        return rels
+
+    def journal_count(self):
+        return len(self.journal_rels())
+
+    def run_resume_state(self):
+        with open(os.path.join(self.out, "run.json"), encoding="utf-8") as fh:
+            run_json = json.load(fh)
+        producer = run_json.get("producers", {}).get("make_coding_sheet.py") or run_json
+        return producer["resume"]
+
+    def test_truncated_resume_keeps_beyond_cutoff_entries(self):
+        # --max-files shrinks the walk, not the corpus: entries beyond the
+        # cutoff must stay in the journal (they are reusable next run) and
+        # the note must not claim they "no longer exist"
+        self.doc("a.txt")
+        self.doc("b.txt")
+        self.doc("c.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual(self.journal_count(), 3)
+        second = self.run_extract("--resume", "--max-files", "1")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertNotIn("no longer present", second.stderr)
+        self.assertIn("--max-files", second.stderr)
+        self.assertEqual(sorted(self.journal_rels()), ["a.txt", "b.txt", "c.txt"])
+        self.assertEqual(self.run_resume_state()["dropped"], 0)
+        # and the next full resume still reuses everything
+        third = self.run_extract("--resume")
+        self.assertIn("resume: reused 3", third.stdout)
+        # replay across a truncation boundary equals a fresh full run,
+        # across every product (not just the three headline files)
+        fresh = self.run_extract("--out", self.p("fresh"))
+        self.assertEqual(fresh.returncode, 0, fresh.stderr)
+        names = [name for name, _ in self.outputs()]
+        for name in names:
+            with open(os.path.join(self.out, name), "rb") as fh:
+                replayed = fh.read()
+            with open(os.path.join(self.p("fresh"), name), "rb") as fh:
+                produced = fh.read()
+            self.assertEqual(replayed, produced, name)
+
+    def test_size_change_is_reprocessed(self):
+        self.doc("a.txt")
+        self.doc("b.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        with open(os.path.join(self.corpus, "a.txt"), "a", encoding="utf-8") as fh:
+            fh.write("补一段更长的正文，改变文件大小。" * 3)
+        second = self.run_extract("--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("resume: reused 1, reprocessed 1", second.stdout)
+
+    def test_vanished_documents_are_dropped_from_the_journal(self):
+        self.doc("a.txt")
+        self.doc("b.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        os.remove(os.path.join(self.corpus, "b.txt"))
+        second = self.run_extract("--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("no longer present", second.stderr)
+        self.assertEqual(self.journal_rels(), ["a.txt"])
+        rows = read_csv(os.path.join(self.out, "dataset.csv"))
+        self.assertEqual(len(rows), 1)
+
+    def test_frame_mismatches_ext_and_min_chars_are_refused(self):
+        self.doc("a.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = self.run_extract("--resume", "--ext", "md")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("frame", second.stderr)
+        third = self.run_extract("--resume", "--min-chars", "9999")
+        self.assertEqual(third.returncode, 2)
+        self.assertIn("frame", third.stderr)
+
+    def test_frame_mismatch_no_text_switch_is_refused(self):
+        self.doc("a.txt")
+        first = self.run_extract()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = self.run_extract("--resume", "--no-text")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("frame", second.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

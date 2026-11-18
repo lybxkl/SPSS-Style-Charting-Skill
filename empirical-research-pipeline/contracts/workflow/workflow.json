@@ -1353,6 +1353,353 @@
       ]
     },
     {
+      "match": "exact",
+      "pattern": "scripts/analysis_utils.py",
+      "stages": [
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/assemble_manuscript.py",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/audit_corpus.py",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/audit_view.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/auto_chart_pack.py",
+      "stages": [
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/auto_stats.py",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/check_decisions.py",
+      "stages": [
+        "coding"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/clean_data.py",
+      "stages": [
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/compute_kappa.py",
+      "stages": [
+        "coding"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/contract_v2.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/dedupe_corpus.py",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/execution.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/export_pdf_hires.py",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/extract_lib.py",
+      "stages": [
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/gate_contract.py",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/gate_roots.py",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/make_coding_sheet.py",
+      "stages": [
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/methods_lib.py",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/methods_pack.py",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/mine_candidates.py",
+      "stages": [
+        "coding"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/models.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/paper_figures.py",
+      "stages": [
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/pubfig.py",
+      "stages": [
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/qa_outputs.py",
+      "stages": [
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/report_tables.py",
+      "stages": [
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/research_gate.py",
+      "stages": [
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/review_pack.py",
+      "stages": [
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/sample_review.py",
+      "stages": [
+        "coding"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/source_guard.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/suggest_profiles.py",
+      "stages": [
+        "coding"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/text_extract.py",
+      "stages": [
+        "audit",
+        "coding",
+        "dataset",
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/txn.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/verify_dataset.py",
+      "stages": [
+        "verify",
+        "stats",
+        "figures",
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "scripts/verify_numbers.py",
+      "stages": [
+        "qa"
+      ]
+    },
+    {
       "match": "prefix",
       "pattern": "scripts/",
       "stages": [

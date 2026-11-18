@@ -230,6 +230,22 @@ Flag 语义：
 
 决策覆盖某个字段时，`evidence.jsonl` 里该字段的旧证据行会被移除，只留 `<field>=decision:<id>`，`span` 置空；被否决的读数仍保留在 `extraction_candidates.jsonl`，读者能看见“曾经抽到什么、为什么没采用”，但不会把它误当成最终证据。
 
+### 3.5 断点续跑（`--resume`）
+
+`--extract` 每处理完一份文档（读完、跑完信号、跑完剖面）就把它**整份产物**（rec、coding 行、字段行、证据、复核行、NA 分桶计数）追加写进 `<out>/extract_journal.jsonl` 并 flush——这份日志在每次运行都会写，不只 `--resume` 时。中断后原参数重跑加 `--resume`：
+
+```bash
+python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" \
+  --extract draft/fields.json --resume
+```
+
+- 命中判据与审计层一致：文件**大小与 mtime 均未变**才复用；变更的文档重抽。复用的行保证输出**逐字节一致**（有回归测试）。
+- 日志每行带 `frame`（root、`--ext`、`--min-chars`、keywords/profile/`--audit`/`--dedupe-plan` 的 sha256、文本存储开关）；frame 不一致直接 exit 2——复用一份「另一个问题」的抽取结果比重跑更糟。
+- 崩溃留下的半行日志（torn tail）会被忽略并提示；收尾时日志按「每文档最后一行胜出」压缩重写。**完成整趟遍历**才把没见到的文档判为消失剔除；`--max-files` 截断的运行**不**删除截断点之后的条目（walk 没走到它们，证明不了它们不在盘上），留给下一轮 `--resume` 复用。
+- 位置性编号（`run_order`、`_row_id`）在续跑时按本轮遍历顺序**重新编号**，不复用旧编号——它们本来就是顺序号，不是身份。
+- `run.json` 记录 `resume`（`enabled / reused / reprocessed / dropped`）。
+- **体积代价要心里有数**：journal 记的是整份产物（含 rec、编码行、字段行、证据、复核行），实测约为 `coding_sheet.jsonl + dataset.csv + evidence.jsonl` 三者之和的 1.8 倍；十万文档量级即 GB 级持久开销。不需要断点续跑、或磁盘吃紧的项目，可以在收尾后手动删除 `extract_journal.jsonl`（下次运行会全量重建，行为退化为普通全量跑）。
+
 ---
 
 ## 4. 与既有产物的关系

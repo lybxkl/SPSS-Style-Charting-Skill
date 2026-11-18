@@ -4,9 +4,17 @@
 
 The ``.skill`` artifact is a plain zip whose entries are rooted at the skill
 directory, so it can be dropped into any client that imports skill packages
-(and can be unzipped straight into a ``skills/`` folder).  Nothing but
-``SKILL.md``, ``assets/``, ``references/`` and ``scripts/`` is packaged:
+(and can be unzipped straight into a ``skills/`` folder).  Packaged members
+are ``SKILL.md`` plus the ``assets/``, ``references/``, ``scripts/``,
+``profiles/`` and ``contracts/`` subtrees (see ``INCLUDE`` below):
 ``evals/`` holds development prompts and never ships.
+
+The gate ledger ``contracts/gates/package-manifest.json`` covers the REPOSITORY
+package, including ``evals/evals.json``. Inside the archive the ledger is
+rewritten to list only the members that actually ship, so a consumer that
+verifies an unpacked ``.skill`` against its embedded manifest does not fail on
+a file the ship policy deliberately excludes. The repo-side ledger is the one
+CI rebuilds and is unchanged by this rewriting.
 
 Usage (from the repository root):
 
@@ -17,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import sys
 import zipfile
 from pathlib import Path
@@ -28,6 +37,7 @@ DIST = REPO / "dist" / f"{SKILL_NAME}.skill"
 INCLUDE = ("SKILL.md", "assets", "profiles", "references", "scripts", "contracts")
 SKIP_NAMES = {"__pycache__", ".DS_Store", "Thumbs.db"}
 SKIP_SUFFIX = {".pyc", ".pyo"}
+MANIFEST_MEMBER = "contracts/gates/package-manifest.json"
 
 
 def iter_files() -> list[Path]:
@@ -50,13 +60,41 @@ def iter_files() -> list[Path]:
     return out
 
 
+def archive_member(f: Path) -> str:
+    return f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}"
+
+
+def member_bytes(f: Path, shipped: set[str]) -> bytes:
+    """Bytes as they land in the archive. The gate manifest is rewritten to
+    drop members the ship policy does not include, so the embedded ledger
+    matches the archive it lives in."""
+    rel = f.relative_to(SKILL_DIR).as_posix()
+    if rel != MANIFEST_MEMBER:
+        return f.read_bytes()
+    shipped_rel = {p[len(SKILL_NAME) + 1:] for p in shipped}
+    ledger = json.loads(f.read_text(encoding="utf-8"))
+    kept = [entry for entry in ledger["members"] if entry["path"] in shipped_rel]
+    dropped_paths = {entry["path"] for entry in ledger["members"]
+                     if entry["path"] not in shipped_rel}
+    if dropped_paths - {"evals/evals.json"}:
+        # never silently rewrite for unexpected exclusions
+        raise SystemExit(f"unexpected manifest rewrite, dropped: {sorted(dropped_paths)}")
+    payload = dict(ledger)
+    payload["members"] = kept
+    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False)
+    if not text.endswith("\n"):
+        text += "\n"
+    return text.encode("utf-8")
+
+
 def build(path: Path, files: list[Path]) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256()
+    shipped = {archive_member(f) for f in files}
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(files, key=lambda item: item.relative_to(SKILL_DIR).as_posix()):
-            arc = f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}"
-            data = f.read_bytes()
+            arc = archive_member(f)
+            data = member_bytes(f, shipped)
             digest.update(arc.encode("utf-8"))
             digest.update(data)
             # fixed timestamp so rebuilds are byte-stable
@@ -91,15 +129,16 @@ def main(argv: list[str] | None = None) -> int:
         if not DIST.is_file():
             print(f"FAIL: {DIST} is missing")
             return 1
+        shipped = {archive_member(f) for f in files}
         with zipfile.ZipFile(DIST) as zf:
             inside = {n for n in zf.namelist()}
-        expected = {f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}" for f in files}
+        expected = shipped
         missing = expected - inside
         extra = inside - expected
         with zipfile.ZipFile(DIST) as zf:
             stale = [f for f in files
-                     if f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}" in inside
-                     and zf.read(f"{SKILL_NAME}/{f.relative_to(SKILL_DIR).as_posix()}") != f.read_bytes()]
+                     if archive_member(f) in inside
+                     and zf.read(archive_member(f)) != member_bytes(f, shipped)]
         if missing or extra or stale:
             for label, items in (("missing", missing), ("unexpected", extra), ("stale", stale)):
                 for it in sorted(items):

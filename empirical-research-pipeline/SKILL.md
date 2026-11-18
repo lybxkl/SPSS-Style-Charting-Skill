@@ -168,6 +168,8 @@ v2 的维护入口包括：
 python scripts/audit_corpus.py --root "资料目录" --out-dir "output/audit" --min-chars 100
 ```
 
+十万量级语料的中断续跑用 `--resume`（原参数原样再来一遍，加 `--resume`；size+mtime 未变的文件复用上一轮整行，抽样框不一致直接 exit 2；详见 references/01 的「断点续跑」节）：
+
 默认扫描所有支持的类型，不需要逐个写 `--ext`；可用 `--list-ext` 查看完整列表。它会输出：
 
 | 文件 | 用途 |
@@ -653,9 +655,9 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 
 | 脚本 | 作用 |
 |---|---|
-| `scripts/audit_corpus.py` | 扫描任意资料目录：文件状态、文本/页数、有效字符、MD5、重复、内容级重复（`--content-dedupe`）、抽样框、格式分布、年份提示 |
+| `scripts/audit_corpus.py` | 扫描任意资料目录：文件状态、文本/页数、有效字符、MD5、mtime、重复、内容级重复（`--content-dedupe`）、抽样框、格式分布、年份提示；`--resume` 断点续跑（size+mtime 未变复用整行、抽样框不一致拒绝） |
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
-| `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句（对任何文体读法一致，不内置领域字段）；`--extract profile.json` 走字段抽取层（只接受项目剖面，拒绝包内示例），产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
+| `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句（对任何文体读法一致，不内置领域字段）；`--extract profile.json` 走字段抽取层（只接受项目剖面，拒绝包内示例），产出 `dataset.csv`/`evidence.jsonl`/`run.json`；`--resume` 断点续跑（extract_journal.jsonl 逐文档记账、frame 不一致拒绝、输出逐字节一致） |
 | `scripts/compute_kappa.py` | 两轮独立编码对齐：按文档+字段算每变量一致率与 Cohen's κ，逐条分歧带双方证据行，生成 `kappa_report.csv`/`disagreements.csv`/`coding-sample.md` |
 | `scripts/sample_review.py` | 结构化抽样复核：种子必填、分层+强制 flagged 维度、同 seed 逐字节复现；`tally` 统计保持/改判/无法核对并列改判项，未裁决完 exit 2，`--fail-above` 守用户上限 |
 | `scripts/clean_data.py` | 按项目配方（draft/cleaning.json）执行清洗：去重/值映射/类型转换/越界标记/缺行剔除，逐步写台账（cleaning_log.jsonl 指纹链）与 flow.csv；未声明的清洗一律拒绝，max_drop_fraction 超限中止，`--emit-template` 起步 |

@@ -153,6 +153,197 @@ class CorpusAudit(TempCase):
                 self.assertIn(value, text)
 
 
+class AuditResume(TempCase):
+    """--resume: crash recovery for the corpus scan (batch 6)."""
+
+    def corpus(self):
+        raw = Path(self.p("raw"))
+        raw.mkdir()
+        (raw / "a.txt").write_text("SYNTHETIC 材料甲，正文足够长。" * 30, encoding="utf-8")
+        (raw / "b.txt").write_text("SYNTHETIC 材料乙，正文足够长。" * 25, encoding="utf-8")
+        (raw / "sub").mkdir()
+        (raw / "sub" / "c.txt").write_text("SYNTHETIC 材料丙，正文足够长。" * 20, encoding="utf-8")
+        return raw
+
+    def test_mtime_is_recorded_and_resume_is_byte_identical(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        csv_bytes = Path(self.p("out", "corpus_files.csv")).read_bytes()
+        self.assertIn("mtime", csv_bytes.decode("utf-8-sig").splitlines()[0])
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(Path(self.p("out", "corpus_files.csv")).read_bytes(),
+                         csv_bytes)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"],
+                         {"enabled": True, "reused": 3, "reprocessed": 0,
+                          "vanished": 0})
+
+    def test_same_size_content_change_is_caught_by_mtime(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        (raw / "a.txt").write_text("SYNTHETIC 材料甲，正文足够长！" * 30, encoding="utf-8")
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"]["reused"], 2)
+        self.assertEqual(summary["resume"]["reprocessed"], 1)
+        # the re-processed row carries the new md5, not the stale one
+        rows = read_csv(self.p("out", "corpus_files.csv"))
+        md5_a = next(r["md5"] for r in rows if r["name"] == "a.txt")
+        import hashlib
+        fresh = hashlib.md5((raw / "a.txt").read_bytes()).hexdigest()
+        self.assertEqual(md5_a, fresh)
+
+    def test_vanished_files_are_dropped_not_kept(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        (raw / "b.txt").unlink()
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        rows = read_csv(self.p("out", "corpus_files.csv"))
+        self.assertFalse(any(r["name"] == "b.txt" for r in rows))
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"]["vanished"], 1)
+        self.assertEqual(summary["total_files"], 2)
+
+    def test_frame_mismatch_is_refused(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume", "--min-chars", "50")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("sampling frame", second.stderr)
+
+    def test_hash_mode_mismatch_is_refused(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume", "--no-hash")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("MD5", second.stderr)
+
+    def test_resume_without_previous_csv_runs_a_full_scan(self):
+        raw = self.corpus()
+        result = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no previous corpus_files.csv", result.stderr)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"]["reused"], 0)
+
+    def test_resume_survives_byte_duplicate_groups(self):
+        # rows read back from CSV are all strings; keeper_score compares
+        # chars_effective >= 500 and negates bytes, so a reused duplicate
+        # group used to raise TypeError (real corpora are full of copies).
+        raw = self.corpus()
+        body = (raw / "a.txt").read_bytes()
+        (raw / "a_copy.txt").write_bytes(body)
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        fresh_bytes = Path(self.p("out", "corpus_files.csv")).read_bytes()
+        fresh_summary = load_json(self.p("out", "corpus_summary.json"))
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertNotIn("Traceback", second.stderr)
+        self.assertEqual(Path(self.p("out", "corpus_files.csv")).read_bytes(),
+                         fresh_bytes)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"]["reused"], 4)
+        # dedupe bookkeeping is recomputed, not carried: same counts as a
+        # full rerun
+        self.assertEqual(summary["duplicate_files"],
+                         fresh_summary["duplicate_files"])
+
+    def test_resume_requires_the_summary_next_to_the_csv(self):
+        # without corpus_summary.json the previous sampling frame cannot be
+        # verified, so reuse would silently mix frames (the auditors'
+        # "stale rows presented as an optimization" failure mode)
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        Path(self.p("out", "corpus_summary.json")).unlink()
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume", "--min-chars", "5")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("corpus_summary.json is missing", second.stderr)
+
+    def test_truncated_run_resumed_equals_a_full_rerun(self):
+        # equivalence, not self-consistency: interrupt at --max-files, then
+        # resume with the same frame and compare against a from-scratch run
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--max-files", "2")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertTrue(load_json(self.p("out", "corpus_summary.json"))["truncated"])
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"],
+                         {"enabled": True, "reused": 2, "reprocessed": 0,
+                          "vanished": 0})
+        self.assertEqual(summary["total_files"], 3)
+        full = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("full"))
+        self.assertEqual(full.returncode, 0, full.stderr)
+        for name in ("corpus_files.csv", "corpus_audit.csv",
+                     "sample_flow.csv", "corpus_duplicates.csv"):
+            self.assertEqual(Path(self.p("out", name)).read_bytes(),
+                             Path(self.p("full", name)).read_bytes(), name)
+        resumed = load_json(self.p("out", "corpus_summary.json"))
+        fresh = load_json(self.p("full", "corpus_summary.json"))
+        for key in ("total_files", "valid_files", "unique_valid_files",
+                    "duplicate_groups", "duplicate_files", "redundant_files",
+                    "pages_total", "chars_total"):
+            self.assertEqual(resumed[key], fresh[key], key)
+
+    def test_truncated_resume_does_not_count_unvisited_rows_as_vanished(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume", "--max-files", "1")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("not counted as vanished", second.stderr)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"]["vanished"], 0)
+
+    def test_ext_and_skip_dir_frame_mismatches_are_refused(self):
+        raw = self.corpus()
+        (raw / "note.md").write_text("SYNTHETIC markdown 材料。", encoding="utf-8")
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume", "--ext", "md")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("sampling frame", second.stderr)
+        third = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                    "--resume", "--skip-dir", "sub")
+        self.assertEqual(third.returncode, 2)
+        self.assertIn("sampling frame", third.stderr)
+
+    def test_size_change_alone_is_reprocessed(self):
+        raw = self.corpus()
+        first = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        with open(raw / "a.txt", "a", encoding="utf-8") as fh:
+            fh.write("追加一段改变文件大小的正文。" * 2)
+        second = run("audit_corpus.py", "--root", raw, "--out-dir", self.p("out"),
+                     "--resume")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        summary = load_json(self.p("out", "corpus_summary.json"))
+        self.assertEqual(summary["resume"]["reprocessed"], 1)
+
+
 class StatisticsAudit(TempCase):
     def test_unknown_requested_columns_and_kano_pairs_never_disappear(self):
         import methods_pack as mp

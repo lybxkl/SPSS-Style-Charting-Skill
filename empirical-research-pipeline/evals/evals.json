@@ -140,6 +140,11 @@
       "id": 28,
       "prompt": "审稿人问「类别流向」和「多状态共现」该配什么图？图包能直接出吗？和堆叠图比好在哪？",
       "expected_output": "流向用 flow_sankey（两列类别变量的交叉表计数，条带/节点高度严格按计数成比例，完整案例；每侧 >8 类直接拒绝留痕、不发明“其他”桶），共现用 binary_upset（≥2 个二元变量的 UpSet 交集图，集合 >3 时优于维恩图；≤5 个二元变量画全部非空交集，更多只画单变量与两两交集并在图注声明；含缺失行按完整案例剔除并计数，不属于任何集合的观测不进图但写进图注）。两者都在 auto_chart_pack 默认清单（D 多变量段）里，写进 CHART_CATALOG 与 07 图谱表。与 100% 堆叠图的差别：堆叠答“各组构成如何”，Sankey 额外显示“流量本身的大小”（条带宽度），UpSet 显示多集合同时成立/互斥的结构，堆叠与维恩在集合多时读不出交集层级。诚实边界：figsemantics 目前不自动覆盖这两类图的语义对账，交付前人工核对图与表。"
+    },
+    {
+      "id": 29,
+      "prompt": "十万份文件的语料审计跑了三小时被中断了，怎么继续？改了一个抽取脚本想只重跑受影响的阶段行吗？",
+      "expected_output": "两件事都有正路：①断点续跑——audit_corpus.py 原参数原样再来一遍加 --resume：size+mtime 都没变的文件直接复用上一轮整行（状态/页数/字符/MD5 不重算），新增或变更的照常处理，消失的文件移除并计数；续跑产物与一次跑完逐字节一致（有回归测试）。抽样框（--ext/--skip-dir/--min-chars/哈希开关）不一致直接 exit 2 拒绝，不混框。--extract 同理：make_coding_sheet.py --resume 复用 extract_journal.jsonl 的逐文档记账，frame（root/keywords/profile/audit 等的 sha256）不一致拒绝。②rerunRules 已细化：改 scripts/pubfig.py 只重跑 stats/figures/manuscript/qa，不再整链重来；规则按数组顺序首条命中，34 条精确脚本规则排在通用 scripts/ 前缀之前；建议性工具（mine_candidates/sample_review/compute_kappa 等）只映射自己的阶段；未被任何 step 或导入链覆盖的脚本保守落到 scripts/=全链。不要为了省时间手改 output/ 产物或跳过审计。"
     }
   ]
 }

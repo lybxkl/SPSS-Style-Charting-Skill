@@ -173,6 +173,15 @@ V-05 当前按声明的 sample/subset 分组、按 n_scope 区分口径，对 `c
 - **旧版本结果**：因 n_dropna 误用产生的 V-05 结果需用修复版重跑；临时“待复核”可注明“旧版字段语义错误，等待重新核查”，不能长期把该错误优先级解释为统计规则。
 - **新版本结果**：仅在本次比较覆盖充分、无差异且无无法核对项时显示“本次 V-05 检查通过”；有实际差异、资料不足或其他未完成复核时保留“待复核”及具体原因。通过不代表所有数据来源与研究语义已经验证。
 
+## 14. 重跑规则（`workflow.json` 的 `rerunRules`）
+
+- 规则按**数组顺序、首条命中生效**（引擎 `rerunStages` 用第一个 exact 或前缀匹配）。因此 34 条 `scripts/<名字>.py` 精确规则排在通用 `scripts/` 前缀之前；改一个具体脚本只重跑它实际供血的阶段（含传递下游），不再整链重来。
+- 规则清单由工作流自身声明推导：某脚本被某阶段的 step/action 执行 → 该阶段 + 传递依赖闭包；库脚本（`pubfig`/`methods_lib`/`analysis_utils`/`text_extract`/`extract_lib`）→ 导入它的那些脚本（含传递导入）的**阶段并集**。
+- **建议性工具映射为「只重跑自己的阶段」**：`mine_candidates.py`/`suggest_profiles.py`/`check_decisions.py`/`sample_review.py`/`compute_kappa.py` 的产物没有机器下游消费者，改它们只影响各自的建议/校验输出，不推翻数据集。
+- 其余约 30 个未被任何 step/导入链覆盖的脚本（`entities.py`、`validation.py`、`gates.py`、`claims.py` 等；`contract_v2.py` 有自己的精确规则，不在其中）落到通用 `scripts/` 前缀=全链重跑：引擎无法推断时的保守默认。
+- `recheck`/`publish` 不进任何规则（既有约定：归档档与宿主交接由引擎另行驱动）；`scope` 阶段同不进规则（范围界定永远人工发起）。
+- `data/` 前缀=全链（输入变了，一切下游作数）；各 `output/` 前缀=其消费者阶段。`output/mining/` 等无机器消费者的目录不加规则（与建议性工具同口径）。
+
 ---
 
 本文件随 skill 一起打包（`references/10-contracts.md`）。

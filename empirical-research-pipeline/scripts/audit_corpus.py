@@ -48,7 +48,7 @@ from text_extract import (
 HIDDEN_ATTR = getattr(stat, "FILE_ATTRIBUTE_HIDDEN", 0x2)
 # Written into every product: a report on a desk is worthless if nobody can tell
 # which version of the script produced it.
-SCRIPT_VERSION = "2.0.0"
+SCRIPT_VERSION = "2.1.1"
 YEAR_RE = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 BRACKET_YEAR_RE = re.compile(r"[（(]((?:19|20)\d{2})[)）]")
 COPY_MARKER_RE = re.compile(r"副本|复件|复印件|copy|_dup|dup\d|\(1\)|（1）", re.I)
@@ -74,7 +74,7 @@ ERROR_KIND_STATUS = {
 }
 
 FIELDS = [
-    "rel_path", "relpath", "top", "name", "ext", "kind", "bytes",
+    "rel_path", "relpath", "top", "name", "ext", "kind", "bytes", "mtime",
     "pages", "chars", "chars_effective", "images", "encrypted",
     "status", "year_hint", "md5", "dup_group", "dup_content_group",
     "dup_role", "dup_role_content", "dedupe_group", "dedupe_role", "error", "error_kind",
@@ -207,6 +207,30 @@ def write_csv(path: str, rows: list[dict], fields: list[str]) -> None:
         writer.writerows(rows)
 
 
+NUMERIC_FIELDS = ("bytes", "mtime", "pages", "chars", "chars_effective", "images")
+
+
+def hydrate_cached_row(entry: dict) -> dict:
+    """Turn a row read back from CSV into the types a fresh row has.
+
+    DictReader yields strings; ``keeper_score`` compares ``chars_effective``
+    with ``>= 500`` and negates ``bytes`` -- on strings that is a TypeError.
+    Empty cells (None on a fresh row) go back to None so ``or`` guards and
+    ``is None`` checks keep their fresh-run meaning.
+    """
+    row = dict(entry)
+    for key in NUMERIC_FIELDS:
+        value = row.get(key)
+        if value in (None, ""):
+            row[key] = None
+        else:
+            try:
+                row[key] = int(value)
+            except (TypeError, ValueError):
+                row[key] = None
+    return row
+
+
 def classify(path: str, rec: dict, ext: str, min_chars: int) -> str:
     """Map one inspect_file() record to a status (see references/01-corpus-audit.md)."""
     kind = kind_of(path)
@@ -330,6 +354,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--skip-dir", action="append", default=[], help="directory name to skip")
     ap.add_argument("--max-files", type=int, default=0, help="scan at most N files (0 = all)")
     ap.add_argument("--no-hash", action="store_true", help="skip MD5 hashing")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse rows from the previous corpus_files.csv when a file's "
+                         "size and mtime are unchanged (the sampling frame must "
+                         "match; see references/01-corpus-audit.md)")
     ap.add_argument("--content-dedupe", action="store_true",
                     help="also group valid files by normalized text (sha1); slower")
     ap.add_argument("--fail-on-issues", action="store_true",
@@ -390,6 +418,76 @@ def main(argv: list[str] | None = None) -> int:
     truncated = False
     seen = 0
 
+    # --resume: reuse the previous run's row when the file is byte-for-byte
+    # unchanged (same size + same mtime, both machine facts). The sampling
+    # frame must match exactly, otherwise a mixed-frame table would ship.
+    resume_cache: dict[str, dict] = {}
+    resume_state = {"enabled": bool(args.resume), "reused": 0,
+                    "reprocessed": 0, "vanished": 0}
+    if args.resume:
+        previous_csv = os.path.join(out_dir, "corpus_files.csv")
+        if not os.path.isfile(previous_csv):
+            print("note: --resume found no previous corpus_files.csv; "
+                  "running a full scan", file=sys.stderr)
+        else:
+            previous_summary = os.path.join(out_dir, "corpus_summary.json")
+            # The frame check below lives in corpus_summary.json. A csv
+            # without its summary (manual cleanup, partial copy, a crashed
+            # first run) cannot prove the rows came from this frame, so
+            # reusing them would silently mix sampling frames - the exact
+            # "stale rows presented as an optimization" failure mode this
+            # gate exists to prevent.
+            if not os.path.isfile(previous_summary):
+                print("error: --resume refused: corpus_summary.json is missing "
+                      "next to corpus_files.csv, so the previous sampling "
+                      "frame cannot be verified; rerun without --resume",
+                      file=sys.stderr)
+                return 2
+            frame_ok = True
+            try:
+                with open(previous_summary, encoding="utf-8") as fh:
+                    old_summary = json.load(fh)
+                old_frame = old_summary.get("sampling_frame") or {}
+                old_hash_disabled = old_summary.get("hash_disabled")
+            except (OSError, ValueError):
+                old_frame = {}
+                old_hash_disabled = None
+            if sorted(old_frame.get("ext") or []) != sorted(only_ext) \
+                    or [d for d in (old_frame.get("skip_dir") or []) if d] \
+                    != [d for d in skip_dirs if d] \
+                    or old_frame.get("min_chars") != args.min_chars:
+                frame_ok = False
+            if old_hash_disabled is not None \
+                    and bool(old_hash_disabled) != bool(args.no_hash):
+                print("error: --resume refused: the previous run "
+                      f"{'skipped' if old_hash_disabled else 'computed'} MD5 "
+                      f"hashes, this run {'computes' if not args.no_hash else 'skips'} them; "
+                      "rerun without --resume for a full scan", file=sys.stderr)
+                return 2
+            if not frame_ok:
+                print("error: --resume refused: the sampling frame "
+                      "(--ext / --skip-dir / --min-chars) differs from the "
+                      "previous run; a mixed-frame corpus table would be "
+                      "silently wrong. Rerun without --resume", file=sys.stderr)
+                return 2
+            try:
+                with open(previous_csv, encoding="utf-8-sig", newline="") as fh:
+                    reader = csv.DictReader(fh)
+                    csv_fields = reader.fieldnames or []
+                    for entry in reader:
+                        rel = entry.get("rel_path") or entry.get("relpath") or ""
+                        if rel:
+                            resume_cache[rel] = hydrate_cached_row(entry)
+            except (OSError, csv.Error) as exc:
+                print(f"error: --resume cannot read the previous corpus_files.csv: "
+                      f"{exc}; rerun without --resume", file=sys.stderr)
+                return 2
+            if csv_fields and "mtime" not in csv_fields:
+                print("error: --resume refused: the previous corpus_files.csv has "
+                      "no mtime column (generated by an older audit_corpus.py); "
+                      "rerun without --resume", file=sys.stderr)
+                return 2
+
     for path in iter_files(root, walk_errors):
         if args.max_files and len(rows) >= args.max_files:
             truncated = True
@@ -404,19 +502,51 @@ def main(argv: list[str] | None = None) -> int:
         name = os.path.basename(path)
         parts = rel.split("/")
         top = parts[0] if len(parts) > 1 else "(root)"
-        ext = os.path.splitext(name)[1].lower().lstrip(".")
+        ext = os.path.splitext(name)[1].lstrip(".").lower()
         quarantined = any(os.path.normcase(p) in skip_fold for p in parts[:-1])
+
+        # --resume fast path: unchanged size + unchanged mtime means the
+        # previous row (status, pages, chars, md5, ...) is still the truth
+        # about this file; re-inspecting would cost a full read for nothing.
+        if resume_cache:
+            cached = resume_cache.pop(rel, None)
+            if cached is not None:
+                try:
+                    st_cache = os.stat(win_path(path))
+                    mtime_ns = st_cache.st_mtime_ns
+                    cached_bytes = cached.get("bytes")
+                    cached_mtime = cached.get("mtime")
+                    if (isinstance(cached_bytes, int)
+                            and cached_bytes == st_cache.st_size
+                            and isinstance(cached_mtime, int)
+                            and cached_mtime == mtime_ns):
+                        row = dict(cached)
+                        # post-pass fields are recomputed for every row below;
+                        # carrying the previous run's groups would leak stale
+                        # dedupe state into this run
+                        for key in ("dup_group", "dup_content_group", "dup_role",
+                                    "dup_role_content", "dedupe_group", "dedupe_role"):
+                            row[key] = ""
+                        row["_depth"] = len(parts) - 1
+                        rows.append(row)
+                        resume_state["reused"] += 1
+                        continue
+                except OSError:
+                    pass  # stat failed: fall through to the normal path
+                resume_state["reprocessed"] += 1
+
         rec = {
             "rel_path": rel, "relpath": rel, "top": top, "name": name, "ext": ext,
-            "kind": kind_of(path), "bytes": None, "pages": None, "chars": None,
-            "chars_effective": None, "images": None, "encrypted": None,
-            "status": "", "year_hint": year_hint(name), "md5": "",
+            "kind": kind_of(path), "bytes": None, "mtime": None, "pages": None,
+            "chars": None, "chars_effective": None, "images": None,
+            "encrypted": None, "status": "", "year_hint": year_hint(name), "md5": "",
             "dup_group": "", "dup_content_group": "", "dup_role": "",
             "dup_role_content": "", "error": "", "error_kind": "", "_depth": len(parts) - 1,
         }
         try:
             st = os.stat(win_path(path))
             rec["bytes"] = st.st_size
+            rec["mtime"] = st.st_mtime_ns
             hidden_path = (
                 any(p.startswith(".") for p in parts[:-1])
                 or name.startswith(".")
@@ -479,6 +609,24 @@ def main(argv: list[str] | None = None) -> int:
         rows.append(rec)
         if len(rows) % 200 == 0:
             print(f"  ... scanned {len(rows)} files")
+
+    if resume_cache:
+        if truncated:
+            # The walk stopped at --max-files; the unclaimed entries were
+            # never visited, so counting them as "vanished" would claim
+            # something this run did not check.
+            print(f"note: run truncated at --max-files; {len(resume_cache)} "
+                  "cached row(s) beyond the cutoff were not visited (not "
+                  "counted as vanished; they are absent from this run's "
+                  "table and will be re-inspected on the next full run)",
+                  file=sys.stderr)
+        else:
+            # entries never claimed by a completed walk: those files are gone
+            # (or their directories became unreadable); they must not survive
+            # in the table
+            resume_state["vanished"] = len(resume_cache)
+            print(f"note: --resume dropped {len(resume_cache)} file(s) from the "
+                  "previous run that no longer exist under --root", file=sys.stderr)
 
     # Byte-level duplicate groups (same MD5).
     byte_stats = {"groups": 0, "files": 0, "redundant": 0, "ties": 0}
@@ -560,6 +708,7 @@ def main(argv: list[str] | None = None) -> int:
         "out_dir_inside_root": out_inside,
         "out_dir_same_as_root": out_same_root,
         "out_products_skipped": out_products_skipped,
+        "resume": resume_state,
         "total_files": len(rows),
         "status_counts": dict(status_counts),
         "unreadable_files": unreadable,
@@ -669,6 +818,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.max_files:
         lines.append(f"- 截断：仅扫描前 {args.max_files} 个文件"
                      + ("（已达上限）" if truncated else "（未达上限）"))
+    if resume_state["enabled"]:
+        lines.append(
+            f"- 断点续跑：复用上一轮 {resume_state['reused']} 行、重新处理 "
+            f"{resume_state['reprocessed']} 行、移除已消失文件 "
+            f"{resume_state['vanished']} 行（判据=大小与修改时间均未变）")
     lines += [
         "",
         "## 文件状态",

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-18 批次6：增量断点 + rerunRules 细化 + dist/manifest 一致性（提交 ed23c94 之上）
+
+- **`audit_corpus.py --resume`**（十万级语料中断续跑）：`corpus_files.csv` 新增 `mtime` 列（`st_mtime_ns`，纳秒精度）；`--resume` 读上一轮 csv（复用行数值列从 CSV 字符串水化回 int/None——`keeper_score`/汇总对字符串行会 TypeError，含重复副本的语料首轮即触发），对每个文件先 stat——**大小与 mtime 都未变即复用上一轮整行**（状态/页数/字符/MD5 全不重算），变更/新增照常处理，消失文件移除并在 `corpus_summary.json` 的 `resume` 块计数（reused/reprocessed/vanished；`--max-files` 截断的运行不把未走到行计成 vanished）；抽样框（--ext/--skip-dir/--min-chars）或哈希模式（--no-hash）不一致直接 exit 2 拒绝（不混框）；**上轮 summary 缺失（csv 独存）同样拒绝**——没有快照就无法证明旧行出自本次抽样框；去重分组与汇总每轮全量重算。**续跑产物与全量重跑逐字节一致**（回归测试钉住，含重复副本语料与截断→续跑场景）。SCRIPT_VERSION 2.1.1。
+- **`make_coding_sheet.py --resume`**（抽取层断点）：每处理完一份文档即把**整份产物**（rec/编码行/字段行/证据/复核行/NA 分桶；含读失败的 unreadable 跳过）追加写 `<out>/extract_journal.jsonl` 并 flush——日志每次运行都写，不只 --resume 时；续跑命中判据同审计层（size+mtime），复用输出**逐字节一致**；日志每行带 `frame`（root/ext/min-chars/keywords/profile/audit/dedupe 的 sha256+文本开关），不一致 exit 2；崩溃半行（torn tail）忽略并提示；收尾压缩重写（每文档最后一行胜出；**完成整趟遍历才把未见到条目判为消失剔除，`--max-files` 截断保留截断点之后的条目**），不跨轮增长；位置性编号（run_order/_row_id）按本轮遍历重新编号；`run.json` 记 resume 块。SCRIPT_VERSION 2.2.1。
+- **rerunRules 细化**（workflow.json 34→57 条，引擎语义=数组顺序首条命中）：34 条 `scripts/<名字>.py` 精确规则**排在通用 `scripts/` 前缀之前**——改一个脚本只重跑它实际供血的阶段（含传递下游）：`pubfig.py`→stats/figures/manuscript/qa、`assemble_manuscript.py`→manuscript/qa、`qa_outputs.py`→qa、`audit_corpus.py`→全链。映射由工作流自身声明推导（step/action 执行→所属阶段+传递闭包；库脚本→导入它的那些脚本（含传递导入）的**阶段并集**）；**建议性工具映射为仅自身阶段**（mine_candidates/suggest_profiles/check_decisions/sample_review/compute_kappa——产物无机器下游消费者）；未覆盖脚本保守落 `scripts/`=全链；recheck/publish 维持不进任何规则的既有约定。references/10 新增第 14 节记录语义。
+- **dist/manifest 一致性修复**（批次0 起预存）：`build_skill.py` 打包时**重写内嵌 `contracts/gates/package-manifest.json`**，剔除不随包成员（evals/evals.json——发运策略明言 evals 不随包），归档自洽（归档内 manifest 成员=归档实际文件）；`--check` 按重写字节比对；意外成员被剔除时 SystemExit 拒绝静默改写；仓库侧 manifest 不变（CI 重建的是它）。
+- 测试：test_audit_regressions 新增 AuditResume 12 例（逐字节一致/mtime 捕获同尺寸改写/size 变更/消失文件/框拒绝（min-chars+ext+skip-dir）/哈希模式拒绝/无前轮全量跑/**重复副本语料续跑存活**/**summary 缺失拒绝**/**截断→续跑=全量等价**（4 产物+9 键）/截断不误报 vanished）；test_coding_layer 新增 TestExtractResume 10 例（逐字节一致（10 产物）+run.json 复用计数/同尺寸改写重抽/size 变更重抽/profile 变化拒绝/ext+min-chars+no-text 框拒绝/断尾容忍/日志不增长/**--max-files 截断保留条目+跨截断回放=全新全量跑**/**消失文档剔除**）；test_workflow_contract 新增 3 例（精确规则先于前缀+具体映射钉死+规则与自有 step/导入闭包对账——advisory/库白名单）。
+- 文档：01「断点续跑」节（判据、诚实边界：mtime 判据非哈希、对抗性场景不在防线、框一致性、逐字节一致承诺）+表格列加 mtime；09 §3.5 抽取断点节；SKILL.md 审计命令段+脚本表两行；10-contracts §14。evals id29。
+
 ## 2026-11-18 批次5：成稿适配（提交 8dcbd97 之上）
 
 - `assemble_manuscript.py` 三类新 block（成稿侧「只能去 Word 里手点」的三件事脚本化）：

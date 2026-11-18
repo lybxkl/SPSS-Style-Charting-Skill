@@ -20,7 +20,7 @@ python -m unittest discover -s tests -p "test_stats_charts*.py" -v
 python -m unittest discover -s tests -p "test_chart_pack*.py" -v
 ```
 
-要求：Python 3.9+，只用标准库 `unittest`（不依赖 pytest）。第三方依赖与技能本身一致（PyMuPDF、pandas、numpy、matplotlib、statsmodels、python-docx、scipy）。
+要求：Python 3.9+，只用标准库 `unittest`（不依赖 pytest）。第三方依赖与技能本身一致（PyMuPDF、pandas、numpy、matplotlib、statsmodels、python-docx、scipy）；`mine_candidates.py` 另需 scikit-learn（jieba 可选，缺了自动降级并在 receipt 记录分词器档位，两条路径都有测试）。
 
 ## 约定
 
@@ -42,6 +42,7 @@ python -m unittest discover -s tests -p "test_chart_pack*.py" -v
 | `test_kappa.py` | `compute_kappa.py`（κ 数学、KEY_COLUMNS/单侧字段、coding-sample.md） |
 | `test_clean_data.py` | `clean_data.py`（配方执行、拒绝路径、台账指纹链、flow 合并） |
 | `test_report_tables.py` | `report_tables.py`（报表包、溯源锚、skipped/warnings 可见性） |
+| `test_mine_candidates.py` | `mine_candidates.py`（挖掘候选、证据锚真实性、两种语料清单、k 守卫、无 sklearn/jieba 的降级路径） |
 
 ## 新增用例时
 

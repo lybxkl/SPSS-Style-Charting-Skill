@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "98160f2b141597cba4eee5e839dbd631734c6989ae09bfeb991d72b224a75977"
+      "sha256": "0f08e61db99b389d74a0ca1c6fcf6425b0dd7cead0aa939d09f21b9f29a7a859"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -70,15 +70,15 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "37b74032dafe50d258975191bf8e4100127d2ec0ed3bbe75bc12f517446247f4"
+      "sha256": "75ecf1a261a18545c83c33fc92cbda8bfdf18157edbd4312ee06e6d2e9aa63fe"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
-      "sha256": "32a80141ad2c90143e198cc72fb15efcfc962eb840fe06c3914905aea9da7268"
+      "sha256": "a013cb068874d87b0ed1238cc74b396f788815d1feee460385659d20b617b0de"
     },
     {
       "path": "evals/evals.json",
-      "sha256": "bdf8981adf84b3ec74f892fc18bb54250e7719e21267077c1676f8436a995e82"
+      "sha256": "8e6f77407896ab7a4c579ed571fb0ef02c7f18ce11afbff69e8864a9f7424d73"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -126,7 +126,7 @@
     },
     {
       "path": "references/09-field-extraction.md",
-      "sha256": "9af2eadb490b289edb2417c2c0410990b4276335ac79983eaa35fe4ce2450a94"
+      "sha256": "38539c5b818b855bb680abb34958f35bed06b6636b80a9614d1e5f214fff66be"
     },
     {
       "path": "references/10-contracts.md",
@@ -303,6 +303,10 @@
     {
       "path": "scripts/methods_pack.py",
       "sha256": "046f9ade8eafc14d9deb76ce9c18c0a80b7026825d789fcd4983a909dda1c86d"
+    },
+    {
+      "path": "scripts/mine_candidates.py",
+      "sha256": "d03b716fdfa70fcc9e8dcb8a189160d999f998efa788bdc6c92a0f8a9c429174"
     },
     {
       "path": "scripts/models.py",

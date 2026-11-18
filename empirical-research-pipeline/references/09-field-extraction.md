@@ -280,3 +280,40 @@ Flag 语义：
 14. 每个字段带 `candidates/flags/needs_review`；`--require-review` 与 `--decisions` 形成复审闭环。
 15. `canon` 过滤被更长命中包含的子串（`不满意` 不再同时算 `满意`）。
 16. 孤立的「点/點」不再被读成数字 0。
+
+---
+
+## 8. 材料挖掘候选层（`mine_candidates.py`）
+
+抽取层回答"这份材料的 X 等于几"；挖掘层回答更早的问题——"这批材料里**可能有什么值得抽的东西**"。它跑在写 profile 之前：TF-IDF 关键词、句内共现词对（带 PMI）、NMF 主题分组，供读过样本的研究者决定哪些词是构念、哪些进 codebook。
+
+**候选不是事实**。输出表里每一行都是"这个候选值得你亲自看"的提议，行上带着 `rel_path`+行号锚；采纳任何候选（把它写进 profile 字段、codebook 类目或停用词表）都是**你的**决定，引擎不写 decisions 台账、不进任何闸门。
+
+```bash
+python scripts/mine_candidates.py --root . \
+    --corpus output/audit/corpus_files.csv --out output/mining \
+    --stopwords draft/stopwords.txt --topics 5 --scan-k 3,4,5,6 \
+    --seed 20261118
+```
+
+（Windows PowerShell 里把多行命令写成一行再执行。）
+
+| 产物 | 内容 |
+|---|---|
+| `keyword_candidates.csv` | 词、文档频次、TF-IDF 均值、Top-2 证据文档+行号（锚=词在该文档**首次出现**的行；证据文档按该词 TF-IDF 权重取最高，平局按清单顺序破） |
+| `pair_candidates.csv` | 句内共现词对、计数、PMI、Top-2 证据锚（共现对常是构念的线索：如「服务×响应」；锚行=两词共同出现的那个句子所在行） |
+| `topic_assignments.csv` | 每份文档的主题归属与权重（NMF，K 由你声明） |
+| `k_profile.csv` | `--scan-k` 各 K 的轮廓系数曲线——**给你读的，不是机器替你选 K**；K 超出语料支持的行记 `skipped` 而不是崩 |
+| `mine_receipt.json` | 溯源锚：corpus 清单/停用词表 sha256、清单格式（csv/tsv）与哈希算法（sha256/md5）、跳档明细、语料字节数、参数（含 seed）、分词器档位、各表行数 |
+
+英文停用词示例（写进你自己的 `draft/stopwords.txt`，按材料语言删改）：the a an and or of to in on for with by at from as is are was were be been this that these those it its if then than so such not no we you they he she i。
+
+约定：
+
+- **判断权**：引擎唯一丢弃的是无内容机器件（纯标点/数字/符号串、单个 ASCII 字母）。英文虚词（the/was…）与中文虚词**不丢**——那是内容判断，属于你的停用词文件（`--stopwords`，一行一词，`#` 注释）。英文虚词示例（the/a/an/of/to/in/is/…）只是文档示例，不随包预置。全角拉丁字母（ＡＢＣ）与半角片假名是**有内容的字母**，引擎不丢；全角数字/标点按无内容机器件丢。
+- **确定性**：主题建模必须 `--seed`（不传直接 exit 2）；同 corpus+同参数+同 seed 产出逐字节一致。NMF 用 `init=nndsvda`（确定性初始化）：seed 记录在 receipt 里作为复现契约的一部分，本初始化方式下不引入随机性；换 seed 重跑仍要在 protocol/方法说明里写明理由。
+- **K 归你**：`--topics` 是你声明的主题数，且必须小于文档数（K≥文档数直接 exit 2，K 超出词表规模 exit 2 报原因）；`--scan-k` 只给轮廓曲线。
+- **分词器档位**：装了 jieba 用 jieba（中文词典分词）；没装退化成英文空格+中文单字与字 bigram（质量降级但确定性不变）；receipt 的 `inputs.tokenizer` 记录实际用的档位。依赖 scikit-learn（未装 exit 3 报错）。两表口径：关键词表保留单汉字（词频视角），词对表只用 ≥2 字符的词（共现降噪视角）。
+- **输入**：corpus 清单两种都认——① audit 的 `corpus_files.csv`（表头以 `rel_path,` 开头、或 `.csv` 文件带逗号表头/单列表头恰为 `rel_path`，即按 CSV 读：`status != valid` 的行、`dedupe_role = duplicate` 的行按 audit 已判定的机器事实跳过并记进 receipt；`md5`/`sha256` 列用于字节校验，哈希不匹配跳过记 `skipped_hash_mismatch`）；② 手写 TSV（`rel_path` 或 `rel_path\tsha256` 每行一条，`#` 注释、空行跳过）。两种清单里重复的 `rel_path` 只算一次（记 `skipped_duplicate`）；文件不存在记 `skipped_missing`；三种编码都解不开的文件记 `skipped_undecodable`（与 missing 分开，原因不吞）；全部跳光 = exit 2。拒绝路径不落任何盘上痕迹（输出目录也不创建）。
+- **时机**：audit 之后、写 profile/清洗配方之前——读候选表是「模型读过这批样本后自己决定怎么切」里"读"的一部分。
+- **规模边界（诚实披露）**：单线程全内存，语料字节数记进 receipt。句内共现按句切分，无句读的超长单行文件词对数按词数平方增长——上千词的单行不适用本工具（先给材料断句）。10MB 级纯文本秒级到分钟级；更大的语料拆批跑。

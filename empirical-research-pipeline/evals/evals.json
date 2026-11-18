@@ -110,6 +110,16 @@
       "id": 22,
       "prompt": "结论句写的是「并没有因此出现明显的上升」，引用的模型系数是负的，机器核查会不会把它当成矛盾？",
       "expected_output": "不会。方向检查对每个 cue 先过相邻否定窗（「不再上升」直接跳过），再过子句否定检查——「并没有」在四个字符窗口之外但同子句在前，机器解不开就把该 cue 从判定中拿掉，报 cue_negation 警告（severity=warning，不改论断状态），direction 显示不适用、交人工读句。有对比词（反而/但/却）挡在否定词之后时 cue 照常生效；干净 cue 对上反向系数仍照旧 contradicted。指代主语（该效应显著上升）另报 anaphora 警告：先确认指代对象是引用的那个结果。"
+    },
+    {
+      "id": 23,
+      "prompt": "这批材料我还没想好要抽什么字段。能不能让工具先看看材料里大概有什么词、哪些词经常一起出现，我再决定写什么 profile？",
+      "expected_output": "用 mine_candidates.py（先挖掘、再写 profile）：--corpus 直接给 audit 的 corpus_files.csv（status!=valid 或 dedupe_role=duplicate 的行按 audit 机器事实跳过并记进 receipt），或手写 TSV rel_path\\tsha256 清单，产出 keyword_candidates.csv（TF-IDF 关键词+证据行号锚，锚=词首次出现的真实行）、pair_candidates.csv（句内共现+PMI）、可选 topic_assignments.csv 与 k_profile.csv。主题数 K 由作者声明（--topics），--scan-k 只给轮廓曲线不替你选 K；主题建模必须 --seed，同 seed 逐字节复现。候选不是事实：哪些词成构念、进 codebook、进停用词表都由作者读过候选后声明；引擎不丢虚词（英文 the/was 留在候选里），停用词表是研究者的声明文件。产出 mine_receipt.json 锚 corpus/停用词 sha256、清单格式与哈希算法、跳档明细与语料字节数。"
+    },
+    {
+      "id": 24,
+      "prompt": "挖掘工具给我列了一堆关键词候选和主题，我直接把前 20 个关键词当成变量写进 codebook 可以吗？",
+      "expected_output": "不可以。候选表只是「这里有个值得你亲自看的词」的提议，每行带 rel_path+行号让你回原文读语境；TF-IDF 高分≠构念成立、共现≠因果、主题分组≠类别体系。正确流程：读候选→回原文读语境→决定哪些进 profile 字段/codebook/停用词表→写进你自己的剖面与 codebook，并把 K 的选择理由（若用了 --scan-k）写进方法说明。采纳是研究决定，机器不代写、也不进任何闸门。"
     }
   ]
 }

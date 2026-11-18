@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-11-18 批次3：材料数据挖掘候选层（提交 e93c7f5 之上）
+
+- 新增 `scripts/mine_candidates.py`：挖掘候选层——TF-IDF 关键词、句内共现词对（PMI add-one 平滑）、NMF 主题（K 归人声明，`--scan-k` 只给轮廓曲线）、可选 jieba 分词（无则确定性降级：英文空格+中文单字与字 bigram）；产物 keyword/pair/topic/k_profile 候选表（每行 rel_path+行号证据锚）+ mine_receipt.json（清单格式/哈希算法/跳档明细/语料字节数/参数与 seed/分词器档位）。候选不是事实：引擎不写任何 decisions/claims/闸门，采纳归研究者。
+- 输入契约直连 audit：corpus 清单认 `audit_corpus.py` 的 `corpus_files.csv`（`status != valid`/`dedupe_role = duplicate` 的行按 audit 机器事实跳过，md5/sha256 列字节校验）或手写 TSV `rel_path[\tsha256]`；重复 rel_path 去重、不可解码文件与缺失分开记录、编码链 utf-8-sig→gb18030→big5 覆盖清单与停用词文件。
+- 第一轮独立审计 19 项发现全部修复，其中三个重要级：F1 证据锚选择错误（CSR `getcol().indices` 是列索引——锚恒指清单第一份文档且近半虚构；改 `.tocsc()` 取真行索引+词不在文档正文时不再虚构行号）、F2 输入契约断桥（文档引用的 `corpus_files.txt` 全仓无生产者；改为直读 corpus_files.csv）、F3 `--topics` 无 k 守卫（k≥文档数/超出词表规模曾裸 traceback exit 1；现 exit 2 报原因，且全部表先在内存构建、失败不留孤儿 CSV）。次要：全角拉丁字母/半角假名不再当标点丢弃（\W/\d 已正确划分全角区段）、undecodable 与 missing 分账、`--scan-k` 解析提前、jieba 构建日志静默、--out/--corpus 相对基准在 help 写明。
+- 测试 21→39 例：新增锚真实性类（逐行验证词/词对真的在锚定行、唯一词锚到唯一文档、CRLF 行号、second 文档真实存在）、audit CSV 清单类（audit 机器事实分账、md5 校验、重复去重、部分哈希跳档、corpus_bytes）、k 守卫类（k≥文档数/单文档/超词表 exit 2 且无孤儿表）、隔离类（假 sklearn 包→exit 3 干净消息；假 jieba 包→CLI 级 fallback 档位+bigram 进表）、全角字母存活于引擎地板；evals id23 基准同步。
+
 ## 2026-11-18 批次2：核实溯源强化
 
 - claims 语义硬化：子句级否定检查（长程否定中「并没有因此出现明显的上升」、英含缩合否定 didn't/wasn't 整族）与指代主语检查（该效应/此/it 开头的 cue 句）——机器解不开的 cue 从判定中拿掉，报 `cue_negation`/`anaphora` 警告（warning 级、不改论断状态）转人工读句；相邻否定窗对 never/缩合形统一路由到子句过滤器，宁可警告不可静默。因果检测力代价（否定词把因果判定降为警告）已在 14 文档点名，复核 `claims review` 须覆盖此类句子。

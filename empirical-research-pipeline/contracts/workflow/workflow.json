@@ -265,6 +265,7 @@
       "manualInstructions": [
         "先写 docs/decisions/inclusion.md，正文含「纳入确认：」和排除口径。没有这份确认不能全量抽取。",
         "跑已登记动作 suggest-profiles，只看示例剖面有哪些字段。抽取规则由你读样本后决定：切段起点、取第一次还是最后一次、结束符，写进项目自己的剖面或 draft/ 解析器。不要改技能包，也不要把示例剖面当成这批材料的规则。",
+        "写 profile 前先跑 mine-candidates（材料挖掘候选表）：关键词/共现/主题候选行带 rel_path+行号锚，读候选是「读样本」的一部分；哪些候选成构念、进 codebook、进停用词表由你声明，主题数 K 由你定（--scan-k 只给曲线）。候选不是事实。",
         "在 draft/ 上对冻结样本试跑，把误差写进 draft/sample_errors.md。draft/ 的修改不使审计失效。",
         "样本可接受后调用 data_analysis_adopt_command，把解析器冻成该阶段命令并全量跑一次。不要手跑脚本代替回执。",
         "抽样复核走 scripts/sample_review.py：draw 带声明种子分层抽（needs_review 行强制单独成层），复核者回原文核对后只填 保持/改判/无法核对；tally 统计改判率并把没填完的样本判为未完成。不要自己挑样本。"
@@ -275,7 +276,8 @@
         ],
         "draftTask": "codebook",
         "artifactPrefixes": [
-          "output/coding/"
+          "output/coding/",
+          "output/mining/"
         ]
       },
       "legacyAdmission": {}
@@ -1147,6 +1149,50 @@
           ],
           "produces": [
             "output/coding/profile_candidates.json"
+          ],
+          "continueOnError": true
+        }
+      ],
+      "admission": {}
+    },
+    {
+      "id": "mine-candidates",
+      "tool": "mine-candidates",
+      "stage": "coding",
+      "label": "材料挖掘候选表",
+      "steps": [
+        {
+          "script": "scripts/mine_candidates.py",
+          "args": [
+            "--root",
+            ".",
+            "--corpus",
+            "output/audit/corpus_files.csv",
+            "--out",
+            "output/mining"
+          ],
+          "optionalArgs": [
+            {
+              "flag": "--stopwords",
+              "file": "draft/stopwords.txt"
+            },
+            {
+              "flag": "--topics",
+              "value": "5"
+            },
+            {
+              "flag": "--scan-k",
+              "value": "3,4,5,6"
+            },
+            {
+              "flag": "--seed",
+              "value": "20261118"
+            }
+          ],
+          "produces": [
+            "output/mining/keyword_candidates.csv",
+            "output/mining/pair_candidates.csv",
+            "output/mining/mine_receipt.json"
           ],
           "continueOnError": true
         }

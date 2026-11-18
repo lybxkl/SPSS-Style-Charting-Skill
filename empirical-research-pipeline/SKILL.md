@@ -307,6 +307,7 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 把"解析失败"算进"未提及"，等于把工具的无能写成了研究对象的行为。
 
 - **领域写在 JSON 里，不写在代码里**。`profiles/` 里的裁判文书、访谈和词汇满意度都是**示例夹具**，不是目标用户，也不限制研究领域；写一份新 profile 就能换领域，不用改 Python。引擎不内置任何文体的字段或切段，`--extract` 也拒绝直接使用包内 `profiles/`（要先把示例复制到 `draft/`、读过样本改好切段再传）。
+- **先挖掘，再写 profile**。`scripts/mine_candidates.py` 从语料清单（audit 的 `corpus_files.csv`，或手写 TSV `rel_path`+可选 sha256）跑 TF-IDF 关键词、共现词对（PMI）与 NMF 主题，产出候选表（每行带 `rel_path`+行号证据锚，锚=词首次出现的真实行）与 `mine_receipt.json`（corpus/停用词 sha256、清单格式与哈希算法、跳档明细、参数与 seed 入账）。候选不是事实：哪些词是构念、哪些进 codebook、哪些进停用词表都由你读过候选后声明；主题数 K 你定（`--scan-k` 只给轮廓曲线）。详见 `references/09-field-extraction.md` §8。
 - **`na` 必填**：缺失要落短语（`未提及` / `不适用` / `未判罚金`），不能落空串——空串分不清"没提到"与"不适用"。
 - **NA ≠ 0 ≠ False**：`contains` 字段在段存在但未命中时是 `False`（不是 NA），`count_unique` 的 `0` 是值。把"没投诉"写成缺失，等于扔掉一次测量。
 - **证据可回验**：每条证据的偏移必须能在原文 `text[s:e]` 命中，用 `extract_lib.verify_evidence()` 校验（不要自己另写一份解析）。
@@ -642,6 +643,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/compute_kappa.py` | 两轮独立编码对齐：按文档+字段算每变量一致率与 Cohen's κ，逐条分歧带双方证据行，生成 `kappa_report.csv`/`disagreements.csv`/`coding-sample.md` |
 | `scripts/sample_review.py` | 结构化抽样复核：种子必填、分层+强制 flagged 维度、同 seed 逐字节复现；`tally` 统计保持/改判/无法核对并列改判项，未裁决完 exit 2，`--fail-above` 守用户上限 |
 | `scripts/clean_data.py` | 按项目配方（draft/cleaning.json）执行清洗：去重/值映射/类型转换/越界标记/缺行剔除，逐步写台账（cleaning_log.jsonl 指纹链）与 flow.csv；未声明的清洗一律拒绝，max_drop_fraction 超限中止，`--emit-template` 起步 |
+| `scripts/mine_candidates.py` | 材料挖掘候选层：TF-IDF 关键词/共现词对(PMI)/NMF 主题，候选行带 rel_path+行号证据锚；产出候选表+mine_receipt.json（corpus/停用词 sha256、seed 入账）；候选不是事实，采纳归研究者；需 scikit-learn，可选 jieba |
 | `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source） |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |

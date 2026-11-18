@@ -148,6 +148,22 @@ class QAResolutionTest(TempCase):
         proc = run("qa_outputs.py", "--pdf", pdf, "--exit-zero")
         self.assertEqual(proc.returncode, 0)
 
+    def test_retired_flags_are_loudly_rejected(self):
+        """--strict/--min-width are gone; argparse must not absorb them as
+        prefixes (--strict silently parsing as --strict-palette changed the
+        semantics of an old no-op flag)."""
+        data = write_csv(self.p("data.csv"), ["rel_path", "in_analysis"],
+                         [["a.pdf", 1]])
+        proc = run("qa_outputs.py", "--data", data, "--strict")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("unrecognized", proc.stderr)
+        proc = run("qa_outputs.py", "--data", data, "--min-width", "100")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("unrecognized", proc.stderr)
+        # the live flag still works in its full form
+        proc = run("qa_outputs.py", "--data", data, "--strict-palette")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
 
 @unittest.skipUnless(sys.platform == "win32", "Word COM is Windows-only")
 class ExportHiresTest(TempCase):

@@ -26,7 +26,6 @@ CLI::
     python contract_v2.py --dump-schema assets/contracts-v2.json
     python contract_v2.py --validate path/to/record.json
     python contract_v2.py --validate-ledger output/v2/claim.jsonl
-    python contract_v2.py --migrate-v1 --root .
 """
 from __future__ import annotations
 
@@ -1251,67 +1250,6 @@ def atomic_write_json(path: str | os.PathLike, obj: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# migration (v1 -> v2) - never inherits "verified"
-# ---------------------------------------------------------------------------
-MIGRATION_LIMITS = {
-    "verified": "review_pending",
-    "prepared": "prepared",
-}
-
-
-def migrate_v1_dataset_entry(entry: Mapping, *, producer: Mapping) -> dict:
-    """Build a ``cell_evidence`` skeleton for a v1 registry dataset entry.
-
-    The v1 registry describes *datasets*, not cells; migration can only carry
-    the dataset identity forward.  Status is ``candidate`` and every cell must
-    be re-prepared and re-reviewed - a v1 ``verified`` receipt is never
-    inherited (see A02/A47).
-    """
-    missing = [k for k in ("id", "path", "key", "unit") if k not in entry]
-    if missing:
-        raise SchemaError(f"v1 dataset entry missing {missing}")
-    payload = {
-        "dataset": entry["id"],
-        "key": ["<composite-key>"] if isinstance(entry["key"], list) else ["<key>"],
-        "column": "<migrated-dataset>",
-        "value": "",
-        "kind": "structural",
-        "sources": [{"path": entry["path"], "sha256": entry.get("sha256", "")}],
-        "origin": "v1-migration",
-        "reason": "dataset identity only; cells must be re-prepared and re-read",
-    }
-    rec = make_record(
-        "cell_evidence", f"migrated:{entry['id']}", payload, producer=producer,
-        status="candidate", optional_features=("open-adapters",),
-        extensions={"v1_entry": dict(entry)})
-    return rec
-
-
-def migration_diff(v1: Mapping, v2_records: Iterable[Mapping]) -> dict:
-    """Human/machine readable report of what migration did *not* carry over."""
-    recs = list(v2_records)
-    inherited_verified = [
-        r["id"] for r in recs
-        if (r.get("extensions", {}).get("v1_status") == "verified"
-            and r["status"] == "verified")
-    ]
-    return {
-        "records": len(recs),
-        "kinds": sorted({r["kind"] for r in recs}),
-        "v1_status_inherited_as_verified": inherited_verified,
-        "not_carried": [
-            "per-cell provenance (v1 provenance.jsonl stays authoritative "
-            "until re-prepared)",
-            "review receipts (v1 record_sha256 bindings are recomputed, never "
-            "reused)",
-            "verified status (downgraded to review_pending/candidate)",
-        ],
-        "requires": ["re-run prepare", "re-read every cell", "re-run final"],
-        "v1_keys": sorted(v1.keys()) if isinstance(v1, Mapping) else [],
-    }
-
-
-# ---------------------------------------------------------------------------
 # schema dump
 # ---------------------------------------------------------------------------
 def dump_schema() -> dict:
@@ -1349,7 +1287,6 @@ def _main(argv: list[str]) -> int:
     ap.add_argument("--dump-schema")
     ap.add_argument("--validate")
     ap.add_argument("--validate-ledger")
-    ap.add_argument("--migrate-v1", action="store_true")
     ap.add_argument("--root", default=".")
     args = ap.parse_args(argv)
     if args.dump_schema:
@@ -1371,23 +1308,6 @@ def _main(argv: list[str]) -> int:
             validate_record(json.loads(line))
             n += 1
         print(f"OK: {n} record(s) in {path.name}")
-        return 0
-    if args.migrate_v1:
-        proj = Project(args.root, create=False)
-        registry_path = Path(args.root) / "research_registry.json"
-        if not registry_path.is_file():
-            print("no research_registry.json to migrate")
-            return 2
-        reg = json.loads(registry_path.read_text(encoding="utf-8"))
-        prod = producer_for("contract_v2.migrate_v1", version="2.0",
-                            module_file=__file__, config={"registry": str(
-                                registry_path)})
-        recs = [migrate_v1_dataset_entry(e, producer=prod)
-                for e in reg.get("datasets", [])]
-        out = proj.write_snapshot("migration/v1_to_v2.json",
-                                  migration_diff(reg, recs))
-        print(f"migration report: {out}")
-        print(f"records prepared: {len(recs)} (nothing was marked verified)")
         return 0
     ap.print_help()
     return 2

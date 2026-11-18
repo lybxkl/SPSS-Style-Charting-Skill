@@ -194,18 +194,29 @@ class AuditFixes(TempCase):
         p = self.project()
         CL.register_block(p, block_id="B", section="用户自定章节", text="estimate={beta}", claims=[])
         with self.assertRaises(MS.ManuscriptError):
-            MS.build_docx(p, docx_path=Path(self.tmp)/"paper.docx", title="synthetic", authors="audit",
-                          numbers={"beta": 999999}, trace={"beta": {"model": "DOES_NOT_EXIST"}})
+            MS.resolve_numbers("estimate={beta}", {"beta": 999999},
+                               {"beta": {"model": "DOES_NOT_EXIST"}}, project=p)
 
-    def test_c16_custom_sections_are_preserved_and_missing_spans_fail(self):
+    def test_c16_custom_sections_are_preserved_and_partial_print_fails(self):
+        from docx import Document
         p = self.project()
         for section in ("研究说明", "appendix", "额外补充"):
             CL.register_block(p, block_id=section, section=section, text="Synthetic " + section, claims=[])
-        info = MS.build_docx(p, docx_path=Path(self.tmp)/"paper.docx", title="synthetic", authors="audit", numbers={}, trace={})
-        self.assertEqual(set(info["spans"]), {"研究说明", "appendix", "额外补充"})
-        self.assertTrue(MS.verify_printed(p, docx_path=info["docx"], spans=info["spans"])["ok"])
-        del info["spans"]["appendix"]
-        self.assertFalse(MS.verify_printed(p, docx_path=info["docx"], spans=info["spans"])["ok"])
+        doc = Document()
+        for section in ("研究说明", "appendix", "额外补充"):
+            doc.add_paragraph("Synthetic " + section)
+        full = Path(self.tmp)/"paper.docx"
+        doc.save(full)
+        self.assertTrue(MS.verify_printed(p, docx_path=full, persist=False)["ok"])
+        partial = Document()
+        partial.add_paragraph("Synthetic 研究说明")
+        partial.add_paragraph("Synthetic 额外补充")
+        part = Path(self.tmp)/"partial.docx"
+        partial.save(part)
+        res = MS.verify_printed(p, docx_path=part, persist=False)
+        self.assertFalse(res["ok"])
+        self.assertIn("appendix", [b["block"] for b in res["blocks"]
+                                   if b["status"] == "stale"])
 
     def test_c17_refit_invalidates_old_validation(self):
         p = self.project()
@@ -472,15 +483,20 @@ json.dump({"type":"curve", "target_parameter":"x", "unit":"score points", "scale
         p = known_project(self.tmp, n=20)
         CL.register_block(p, block_id="methods", section="methods", text="Synthetic table validation example.", claims=[])
         target = p.root/"paper.docx"
-        info = MS.build_docx(p, docx_path=target, title="Synthetic validation", authors="", numbers={}, trace={},
-                             tables=[{"csv":"data/person.csv", "table_id":"raw"}])
-        self.assertTrue(MS.verify_printed(p, docx_path=target, spans=info["spans"])["tables_ok"])
-        document = Document(target)
-        self.assertEqual(document.paragraphs[0].style.name,"Title")
-        self.assertEqual(document.styles["Title"].element.xpath(".//w:pBdr"),[])
-        self.assertTrue(next(par for par in document.paragraphs if par.text=="二、研究方法").paragraph_format.keep_with_next)
+        spec = {"csv": "data/person.csv", "table_id": "raw"}
+        rows = MS.table_rows(p, spec)
+        doc = Document()
+        doc.add_paragraph("Synthetic table validation example.")
+        table = doc.add_table(rows=len(rows), cols=len(rows[0]))
+        for r, row in enumerate(rows):
+            for c, value in enumerate(row):
+                table.cell(r, c).text = value
+        doc.save(target)
+        res = MS.verify_printed(p, docx_path=target, tables=[spec], persist=False)
+        self.assertTrue(res["tables_ok"])
+        self.assertTrue(res["ok"], res)
         doc = Document(target); doc.tables[0].cell(1,2).text = "999"; doc.save(target)
-        self.assertFalse(MS.verify_printed(p, docx_path=target, spans=info["spans"])["ok"])
+        self.assertFalse(MS.verify_printed(p, docx_path=target, tables=[spec], persist=False)["ok"])
         csv_write(p.root/"fake.csv", ["estimate"], [["999"]])
         with self.assertRaises(MS.ManuscriptError):
             MS.table_rows(p, {"csv":"fake.csv"})

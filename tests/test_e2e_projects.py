@@ -400,16 +400,26 @@ class TestE2EMixedMaterials(TempCase):
             CL.register_block(proj, block_id=f"b_{section}", section=section,
                               text=text_, claims=[])
         docx = self.p("out", "paper.docx")
-        info = MS.build_docx(proj, docx_path=docx, title="合成验证稿",
-                             authors="Agent",
-                             numbers={"total": "128"},
-                             trace={"total": {"dataset": "totals", "key": "3", "column": "value"}},
-                             figures=[{"figure_id": "F1", "png": png,
-                                       "caption": "合成示例图", "width_cm": 12}])
-        self.assertEqual(info["figures"], 1)
+        os.makedirs(os.path.dirname(docx), exist_ok=True)
+        numbers = {"total": "128"}
+        trace = {"total": {"dataset": "totals", "key": "3", "column": "value"}}
+        from docx import Document
+        from docx.shared import Cm
+        doc = Document()
+        doc.add_picture(str(png), width=Cm(12))
+        doc.add_paragraph("图 1　合成示例图")
+        for section, text_ in {
+            "abstract": "本验证稿使用合成材料，仅用于检验流水线。" * 10,
+            "introduction": "研究背景与研究问题在此说明，并交代分析策略。" * 35,
+            "methods": "材料包含一份混合 PDF 与一份工作簿，并附有扫描页。" * 24,
+            "results": "工作簿合计为 {total}，与独立重算的结果一致。" * 25,
+            "discussion": "该结果只用于流水线验证，不构成任何实证结论。" * 24,
+        }.items():
+            expected, _ = MS.resolve_numbers(text_, numbers, trace, project=proj)
+            for chunk in expected.split("\n\n"):
+                doc.add_paragraph(chunk.strip())
+        doc.save(docx)
         printed = MS.verify_printed(
-            proj, docx_path=docx,
-            spans={k: list(v) for k, v in info["spans"].items()},
-            numbers={"total": "128"},
-            trace={"total": {"dataset": "totals", "key": "3", "column": "value"}})
+            proj, docx_path=docx, numbers=numbers, trace=trace,
+            figures=[{"figure_id": "F1", "png": str(png), "caption": "合成示例图"}])
         self.assertTrue(printed["ok"], printed)

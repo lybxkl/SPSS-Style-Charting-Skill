@@ -31,7 +31,7 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 
 验收档为 archive 时阅读 [references/12-exhaustive-research.md](references/12-exhaustive-research.md) 和 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)：开放数据集注册表、全资料覆盖、逐格证据、整合后的第二遍复读都在那里。submission 使用事先写明的抽样复读、全量解析器重放和残余误差样本，不把 14 万格逐格第二遍当作默认门槛。统计与图表的数字一致，不等于原始数据正确。
 
-当前 v2 代码在 archive 档使用上述维护流程：严格恢复解码、活跃来源代次、逐单元范围复读、按字段的独立校核，以及自动追踪依赖的只读发布检查。系数通过不代表标准误/区间/p 值已核；阶段 complete 不代表全研究 ready。完整交付范围须声明 `full_research` 并包含实际分析报告与 DOCX/PDF；`release show` 检查当前版本，旧发布状态不能沿用。
+当前契约账本层在 archive 档使用上述维护流程：严格恢复解码、活跃来源代次、逐单元范围复读、按字段的独立校核，以及自动追踪依赖的只读发布检查。系数通过不代表标准误/区间/p 值已核；阶段 complete 不代表全研究 ready。完整交付范围须声明 `full_research` 并包含实际分析报告与 DOCX/PDF；`release show` 检查当前版本，旧发布状态不能沿用。
 
 ## 何时使用
 
@@ -50,16 +50,16 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 | XLSX / XLSM | 工作表、单元格文本；只读打开 | `.xls` 先转换；建议安装 `openpyxl` |
 | CSV / TSV / JSON / JSONL | 字段、行数、编码、缺失；表格数据质量审计 | 编码工作表会跳过表格，直接走 `auto_stats` |
 | TXT / MD / HTML / XML / YAML / RTF | 纯文本抽取；HTML 去标签 | 网页正文可用，脚本/样式会被去掉 |
-| 图片（PNG/JPG/TIFF 等） | 文件清单；尺寸/页数；v2 可调用 RapidOCR | 需要实际安装 OCR 引擎；转写未核，必须回原图核对 |
-| 音频/视频 | 文件清单；v2 可调用 Vosk、ffmpeg | 需要实际引擎与语言模型；保留时间定位、未听范围和说话人争议 |
-| 压缩包 | v1 文件清单；v2 逐成员登记与安全提取 | 保留父原件、成员序号和哈希；成员数不是观察数，未知格式继续处置 |
+| 图片（PNG/JPG/TIFF 等） | 文件清单；尺寸/页数；契约账本层可调用 RapidOCR | 需要实际安装 OCR 引擎；转写未核，必须回原图核对 |
+| 音频/视频 | 文件清单；契约账本层可调用 Vosk、ffmpeg | 需要实际引擎与语言模型；保留时间定位、未听范围和说话人争议 |
+| 压缩包 | 主链文件清单；契约账本层逐成员登记与安全提取 | 保留父原件、成员序号和哈希；成员数不是观察数，未知格式继续处置 |
 | 未知/专有格式 | 文件清单 | 先转换或导出为上述格式 |
 
 “任何资料”不等于“任何二进制都能直接解析”。本 skill 会先把所有文件纳入审计和样本对账；不能直接读的格式会明确标记并给出转换路径，不会静默漏掉。
 
 ## 硬规则
 
-归档档的 v2 任务才读取 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)。它规定该档的复核签名、搜索范围、执行绑定、独立校核、语境复读和发布行为；不能用台账里的 `verified/passed` 字样代替这些实际检查。可投稿档不要打开这份文档来补做全格复核。
+归档档的深度核验任务才读取 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)。它规定该档的复核签名、搜索范围、执行绑定、独立校核、语境复读和发布行为；不能用台账里的 `verified/passed` 字样代替这些实际检查。可投稿档不要打开这份文档来补做全格复核。
 
 1. **先审计，再编码/建模。** 没弄清文件数、可读文本数、重复数、字段缺失和排除原因之前，不要开始统计。
 2. **按内容去重，不按文件名。** 同名不同文、同文不同名都很常见；至少用 MD5，再用标题/关键字段/正文抽样复核。
@@ -119,25 +119,42 @@ python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目�
 
 每个阶段都有“闸门”。当前验收档以内的闸门不过，不进入下一阶段。低于当前档的判据不适用。有工作台时按任务卡推进；下面这张图是没有工作台时的 CLI 对照。
 
+### 材料多时允许子代理并行（建议，非强制）
+
+材料量很大（成百上千份文档、逐份 OCR/ASR/编码）时，可以把**纯机械的批处理**交给多个子代理并行做。这是吞吐建议，不是质量捷径，五条护栏必须守住：
+
+1. **分片互斥**：每个子代理领一组互不重叠的 `rel_path`（或文件清单切片），不共享写同一份产物。
+2. **契约不打折**：并行的是同一批 CLI 的同一套参数，审计/编码/转写的台账与证据锚一样不少；不能用「并行了」降低任何闸门判据。
+3. **合并显式**：子代理只产出自己的分片产物；合并由主会话逐一验收（台账对账、去重、重编号）后写入总产物，不能各自直接写总目录。
+4. **口径先行**：分词器档位、编码 sheet 字段、OCR 引擎、语言模型等口径先定并写进 frame/契约，子代理照抄，不得各自发明。
+5. **收益刀刃**：只在每份材料独立、判断权已在协议里定死的环节并行（读文件/跑 OCR/抽字段）；抽样复核、争议裁决、语义判断留在单一会话里做。
+
+并行数量由模型按材料规模与机器情况自定。支持 `--resume` 的阶段（语料审计、编码抽取）有逐字节等价的回归测试钉住，合并后应当抽查复跑验证；OCR/ASR/账本类分片产物没有等价的机器保证，靠护栏 3 的显式合并与对账兜底。
+
 这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段。可投稿档补数后重跑受影响的统计、图表和文稿，并更新抽样复核。归档档才在补数后做全格复核。内置脚本可被等价、自选实现替换，但来源、样本与运行回执契约不能省略。
 
-### 可选的 v2 契约层
+### 归档档深度核验链（契约账本层）
 
-归档档需要在混合资料里做「可审计的中间结论」时（扫描页/音视频/跨页表、逐格复核、
-多输入模型、独立数值校核、发布范围），用 `scripts/` 下的 v2 模块把每一步落成
-带内容哈希与状态机的记录：`source_units → ocr_provider/asr_provider →
-table_recovery → audit_view → discovery → search_index → gaps →
-review_workbench → entities → models → validation → claims → layout_check →
-lifecycle → release`。
+只有一个版本的流水线。归档档在混合资料里做「可审计的中间结论」（扫描页/音
+视频/跨页表、逐格复核、多输入模型、独立数值校核、发布范围）时，用 `scripts/`
+下的契约账本模块把每一步落成带内容哈希与状态机的记录：`source_units →
+ocr_provider/asr_provider → table_recovery → audit_view → discovery →
+search_index → gaps → review_workbench → entities → models → validation →
+claims → layout_check → lifecycle → release`。它不是第二条流水线：数据面
+（OCR/ASR/表格恢复/来源单元）与发布面（版本失效、发布事务）补的是主链没有的
+能力，账本（`contract_v2`/`txn`，文件名沿用历史命名）把「恢复程度、没找到、
+转写未核、N 的语义、求解质量、复核范围」这些容易被含糊掉的东西显式记下来；
+统计与成稿**始终用主链引擎**（`auto_stats`、`assemble_manuscript`、
+`export_pdf_hires`），`models` 只做归档档多输入模型的登记执行，
+`manuscript` 只做印后数字溯源与实印核对——没有第二套统计引擎或成稿引擎。
+没有 v1→v2 迁移路径：账本要么按当前契约建立，要么就不存在。
+启用方式、记录种类、命令与每个模块的硬性拒绝见
+[references/13-contract-v2.md](references/13-contract-v2.md)。
+explore/可投稿档不需要这一层；归档档的深度检查依赖它产出的账本。
 
-它不替代本文件下面的阶段闸门，而是把「恢复程度、没找到、转写未核、N 的语义、
-求解质量、复核范围」这些容易被含糊掉的东西显式记下来。启用方式、记录种类、
-命令与每个模块的硬性拒绝见 [references/13-contract-v2.md](references/13-contract-v2.md)。
-不启用时原有链路照旧工作。
+契约账本层的维护入口包括：
 
-v2 的维护入口包括：
-
-- **成稿**：`refs.py` 记录实际访问层级、原文支持与撤稿/更正查核；`manuscript.py` 保留自选章节和附录，核验正文、表格、图注与实印 DOCX/PDF。章节和最低字数默认不固定。
+- **成稿**：`refs.py` 记录实际访问层级、原文支持与撤稿/更正查核；`manuscript.py` 不排版——DOCX 由 `assemble_manuscript.py` 生成、PDF 由 `export_pdf_hires.py` 导出，它只做印后核验（每个印出的数字绑定 validated 模型结果/已复核数据集单元/已查参考文献；实印文本与审核文本的包含比对；表格逐行对账）。章节和最低字数默认不固定。
 - **设计与图**：`designcheck.py` 联查设计、诊断、角色 N 与泄漏；`figsemantics.py` 对账实际图元与交付 PNG，测量标签边界；配色只推荐。`layout_check.py` 检查最终安置。位图字号须有完全对应的实际渲染字体证据，单独的源 PDF 不能证明位图内部字号。
 - **验收**：仓库的 `tools/run_acceptance.py` 保存真实执行、原始日志、逐项结果与当前代码/fixture 哈希；`tools/acceptance_cards.py` 核对执行前冻结的场景映射，不接受仅源码或自报 passed。历史先后顺序不能用事后时间戳证明。
 
@@ -612,7 +629,7 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --min-dpi 600
 ```
 
-退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--strict` 已无必要（保留兼容），`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。`--min-width` 仍可传但已停用（像素宽不等于分辨率）。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）给分类色板灰度建议，`--colorblind` 另加protanopia/deuteranopia 色觉模拟提示；这些默认不拦截配色选择，只有显式 `--strict-palette` 才将声明的分类色板低灰度间隔作为错误。
+退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）给分类色板灰度建议，`--colorblind` 另加protanopia/deuteranopia 色觉模拟提示；这些默认不拦截配色选择，只有显式 `--strict-palette` 才将声明的分类色板低灰度间隔作为错误。
 
 **数字溯源另跑一条** `scripts/verify_numbers.py`：
 
@@ -699,7 +716,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `references/10-contracts.md` | 查脚本之间的键列/漏斗/N/缺失值/退出码约定时 |
 | `references/11-methods-catalog.md` | 选方法、查变量要求与前置判据、写结果句式、避开常见误用时 |
 | `references/12-exhaustive-research.md` | 只在归档档阅读：全资料发现、开放数据集/模型、全格回源复核、补数闭环与交付契约 |
-| `references/14-reviewed-workflow.md` | 只在归档档阅读：v2 当前维护流程、真实复核、版本失效与成稿发布 |
+| `references/14-reviewed-workflow.md` | 只在归档档阅读：契约账本层当前维护流程、真实复核、版本失效与成稿发布 |
 
 ## 模板
 

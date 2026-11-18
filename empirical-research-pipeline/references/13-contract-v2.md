@@ -1,20 +1,24 @@
-# 13 · v2 契约层（研究证据台账）
+# 13 · 契约账本层（研究证据台账）
 
 当前维护流程与审计修正规则同时见 [references/14-reviewed-workflow.md](14-reviewed-workflow.md)，特别是签名、实际复读、版本绑定和正式发布；旧实现记录不能代替当前执行证据。
 
-本文件描述 2026-11 新增的 v2 契约层：它把「资料恢复 → 发现/回查 → 逐格复核 →
-模型/校核 → 论断/版面 → 发布」的每一个中间结论都落成带内容哈希、带状态机、
-带来源绑定的记录。它是**可选层**：不启用时原有 `audit_corpus.py` /
-`verify_dataset.py` / `run_model.py` / `research_gate.py` 链路照旧工作。
+本文件描述归档档深度核验链的契约账本层（模块名沿用 `contract_v2` 等历史命
+名）：它把「资料恢复 → 发现/回查 → 逐格复核 → 模型/校核 → 论断/版面 → 发
+布」的每一个中间结论都落成带内容哈希、带状态机、带来源绑定的记录。这是单一
+流水线的一部分，不是第二条链：统计与成稿始终用主链引擎
+（`auto_stats.py` / `assemble_manuscript.py` / `export_pdf_hires.py`），
+本层补主链没有的数据面（OCR/ASR/表格恢复/来源单元）、多输入模型登记与
+发布事务。explore/可投稿档不启用；归档档的深度检查依赖它产出的账本。
+没有 v1→v2 迁移路径：账本要么按当前契约建立，要么不存在。
 
 启用方式：给项目建一个 `output/v2/`（`Project(root)` 会自动建），然后按下面的
 顺序调用。模块位于 `scripts/`；有 CLI 的模块用 `python <module>.py --help` 查看参数，其余通过 Python API 调用。下面是 Bash 命令示意，含占位值的行需要按实际项目填写，不是自动批量确认流程。
 
 ## 1. 为什么要这一层
 
-旧链路的问题是「结论无法溯源到证据形态」：一个 `verified` 只说明某个人说见过，
+主链的问题是「结论无法溯源到证据形态」：一个 `verified` 只说明某个人说见过，
 不说明他见过的是原件、OCR 转写还是模型输出；一个 `N` 只说明某张表有多少行，
-不说明这些行是不是独立观测。v2 层把这些问题拆成互不替代的记录：
+不说明这些行是不是独立观测。账本层把这些问题拆成互不替代的记录：
 
 | 问题 | 记录 | 谁写 |
 | --- | --- | --- |
@@ -51,7 +55,7 @@ created_at, input_refs[], requires_features[], content_hash
 `python contract_v2.py --dump-schema` 打印全部 kind 的必填/可选字段，这就是
 权威 schema；本文件不重复字段清单，避免两份定义漂移。
 
-## 3. 一条完整的 v2 流程
+## 3. 一条完整的账本流程
 
 ```bash
 SCRIPTS=empirical-research-pipeline/scripts
@@ -145,25 +149,25 @@ python "$SCRIPTS/release.py" --root . build --scope scope.json
 - `release`：空 scope、缺证据、有未完成的硬闸门，都不会返回 `complete`；
   `limited` 需要显式 `allow_limited` 且硬闸门全过。
 
-## 5. 与旧链路的关系
+## 5. 与主链的关系
 
 - 逐格复核的**唯一真相**仍是 `verify_dataset.py` 的 prepare/final 与 `review`
-  文件；`review_workbench.import_second_pass` 产出的就是它要吃的 v1 review 行，
+  文件；`review_workbench.import_second_pass` 产出的就是它要吃的主链 review 行，
   同时额外写 `review_event` 供审计。
 - `release.py` 读取 `output/dataset/dataset_verification.json` 与
   `output/verify/number_issues.csv`，不会另造一套「已验证」。
-- 模型结果在 v1 `model_plan.jsonl` 与 v2 `model_spec` 中各有一份时，两份都必须
-  终态；v2 侧负责多输入、无样本 N、求解质量和独立校核。
+- 模型结果在主链 `model_plan.jsonl` 与账本 `model_spec` 中各有一份时，两份都必须
+  终态；账本侧负责多输入、无样本 N、求解质量和独立校核。
 
 ## 6. 第二轮补充（T13/T20/T23/T27/T28/T29/T30/T33/T34/T39）
 
-- **verify_dataset 的 v2 检查**（`--stage prepare/final` 自动启用，条件是
+- **verify_dataset 的账本检查**（`--stage prepare/final` 自动启用，条件是
   `output/v2/source_unit.jsonl` 存在）：值类型义务（`estimated/imputed/simulated/
   image_approx` 必须带 method/uncertainty/inputs 或 sources）、证据单元必须同版本、
   `partial` 单元只能支撑 `image_approx` 且需记录回读、0 行数据集必须有
   `audit_view` 范围证据（window/denominator/source hash/re-read），
   `review_event` 必须签名有效、归属当前格、时间晚于快照、独立性可解释。
-  报告多出 `contract_v2` 段。旧项目无 v2 账本时行为不变。
+  报告多出 `contract_v2` 段。项目没有账本时该段检查不存在（归档档应当有）。
 - **`designcheck.py`**：`infer` 推断设计特征，`link` 检查结果是否报告了该设计
   要求的诊断，`roles` 按角色与观测单位核算 N 并检测 fit/test 泄漏与重复测量
   （行数≠独立单位）。`record_linkage` 写 `validation_result(target.kind=
@@ -172,11 +176,23 @@ python "$SCRIPTS/release.py" --root . build --scope scope.json
   `full_text/abstract/metadata/unavailable`；`full_text` 需要实际取得的文本；短文本需解释真实范围，全文含参考文献不应被误判成未读。存储文本要求严格 UTF-8；其他编码先明确无损转换并保留原件绑定。摘要层不能支撑 `full_text` 的论断；引文必须
   在存储文本中 verbatim 出现。DOI 元数据可来自 Crossref 或本地记录，核验失败
   不会升级访问层级。
-- **`manuscript.py`**：`compose` 按用户选择的 outline 和 required-sections 检查章节，不预设统一字数；必须没有未解决的占位符。每个 `{number}` 必须同时有值和 trace
-  （model/result/parameter/unit），否则拒绝；`export` 走真实 Word（或
-  LibreOffice）；`verify` 用回读的实印文本与**已代入数字**的审核文本比对，
-  不一致把块置 `stale`，PDF 侧做去空白包含检查。`register_media_dependencies`
-  把图接到结果与成稿块上，供失效传播使用。
+- **`manuscript.py`**：不排版。DOCX 只由 `assemble_manuscript.py` 生成、PDF 只由 `export_pdf_hires.py` 导出，本模块做印后核验。每个 `{number}` 必须同时有值和 trace
+  （model/result/parameter/unit 或 dataset cell/aggregate 或 checked
+  reference），否则拒绝；`{占位符}` 语法**总是**被解析——numbers 表为空时块文本
+  里的占位符同样报错，字面花括号不是受支持的转义。`sections` 报告账本章节与
+  字数，`--required` 声明的章节缺失或账本有 `stale` 块时 exit 2；`verify` 用回读
+  的实印文本与**已代入数字**的审核文本做去空白包含比对，不一致把块置
+  `stale`，PDF 侧同样做包含检查；表格逐行与数据源对账，不许丢格或造格。
+  CLI `verify`（persist 语义）会把核验结果写进 `output/v2/manuscript/verification.json`
+  快照；`release.evaluate` 以 persist=False 只读调用，不落盘。包含比对的诚实边界：
+  去空白后无法区分「1 2」与「12」（数字精度另由 `resolve_trace` 的 1e-12 比对
+  把关），且账本之外的多印文本不在本检查视野内——版面由 `layout_check` 与
+  人工核对兜底。
+- **`release.py` 的成稿 scope**：`docx`/`pdf` 是项目相对路径的真实产物；
+  `numbers`/`trace` 是印出数字与证据 trace；`figure_specs`/`table_specs` 是印后
+  核验用的题注/表格规格（`figures` 仍是 figure_spec 的 id 列表）。省略
+  `numbers`/`trace` 时核验的数字为 0，**不会**把缺失的 number-trace 报告升级成
+  「已验证」——只记 warning，`numbers_traceable` 保持失败。
 - **`figsemantics.py`**：`describe_axes/check_figure` 从真实 artist 读柱高、误差
   棒、散点、折线、图例并与数据对账；`label_geometry` 用旋转矩形 SAT 测 60 类
   密集标签的真实重叠；`layout_options` 只给 rotate/expand/widen/subplot 且
@@ -194,11 +210,16 @@ python "$SCRIPTS/release.py" --root . build --scope scope.json
 
 ## 7. 已知边界（如实）
 
-- `release.py` 仍是 v2 的唯一发布消费端；`research_gate.py`（v1）未改写，
-  v2 发布端复用旧链路的来源/模型检查并检查当前 final，不要求用另一张状态 JSON 替代它。
+- `release.py` 是账本层的发布消费端；`research_gate.py`（主链门）未改写，
+  发布端复用主链的来源/模型检查与当前 final，成稿核验消费 `assemble_manuscript.py`
+  产出的真实 DOCX/PDF（scope 声明 `docx`/`pdf`/`numbers`/`trace`/`figure_specs`/
+  `table_specs`，键语义见 §6），不要求用另一张状态 JSON 替代它。另一处如实边界：
+  release 的 `failed` 状态目前只对含 tamper/contradict 字样的错误点火，docstring
+  列举的 untraceable number/stale review 实际落 `not_ready`（同样拦发布，状态名
+  不同）——预存在行为，收敛时未改动。
 - `refs.py` 的 DOI 查询依赖网络且只取 Crossref 元数据，不能证明原文支持某句；
   真正的支持必须靠 `support` 的 verbatim 引文与人工阅读。
-- `manuscript.py` 不生成研究叙事本身：章节内容由 Agent 写进 `manuscript_block`；章节/最低字数默认不固定，额外附录完整保留。正文、表格与图注须有真实溯源及实印核对。
+- `manuscript.py` 不生成研究叙事、也不排版：章节内容由 Agent 写进 `manuscript_block`（与 `assemble_manuscript.py` 的 spec 正文一致），排版归主链成稿器；`verify` 的包含比对验的就是「印出的就是审核过的」。章节/最低字数默认不固定，额外附录完整保留。正文、表格与图注须有真实溯源及实印核对。
 - `figsemantics` 对位图只能核尺寸/像素，图元与标签几何判不了；
   `layout_check` 优先读取最终 PDF 的真实文字层；位图须有当前 `figure_spec` 的完整 live-artist 字体证据、交付 PNG 像素复现和 DOCX/PDF 实际匹配安置，才可换算字号。仅源 PDF 不够，没有这些证据仍是 `no_text_layer`，不放行。
 - OCR/ASR 的引擎是本地可替换提供方（RapidOCR、Vosk）；没有引擎时记录

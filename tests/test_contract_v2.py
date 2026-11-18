@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""v2 record contract: schema, feature negotiation, status machine, migration.
+"""v2 record contract: schema, feature negotiation, status machine.
 
 Covers acceptance scenarios A02, A03 (contract half), A44 (precision/rules
-surface), A47 and the migration clauses of A54.
+surface), A47.
 """
 import json
 import os
@@ -163,28 +163,19 @@ class TestStatusMachine(TempCase):
             C.transition(rec, "active")      # not a dependency_event status
 
 
-class TestMigration(TempCase):
-    def test_v1_dataset_migrates_as_candidate_not_verified(self):
-        entry = {"id": "d1", "path": "data/d1.csv", "key": ["id"],
-                 "unit": "person", "status": "verified"}
-        rec = C.migrate_v1_dataset_entry(entry, producer=prod())
-        self.assertEqual(rec["status"], "candidate")
-        C.validate_record(rec)
-        diff = C.migration_diff({"datasets": [entry]}, [rec])
-        self.assertEqual(diff["v1_status_inherited_as_verified"], [])
-        self.assertTrue(any("verified" in x for x in diff["not_carried"]))
-
-    def test_cli_migrate_writes_report_and_marks_nothing_verified(self):
+class TestCli(TempCase):
+    def test_v1_registry_is_not_migrated_automatically(self):
+        # the v1->v2 migration machinery was removed with the dual-version
+        # compat layer: there is no --migrate-v1 entry point any more
         reg = {"schema_version": 1, "datasets": [
             {"id": "d1", "path": "data/d1.csv", "key": ["id"], "unit": "person"}]}
         with open(self.p("research_registry.json"), "w", encoding="utf-8") as fh:
             json.dump(reg, fh)
         out = run("contract_v2.py", "--migrate-v1", "--root", self.tmp)
-        self.assertEqual(out.returncode, 0, out.stderr)
-        self.assertIn("nothing was marked verified", out.stdout)
-        report = json.load(open(self.p("output", "v2", "migration",
-                                       "v1_to_v2.json"), encoding="utf-8"))
-        self.assertEqual(report["v1_status_inherited_as_verified"], [])
+        self.assertEqual(out.returncode, 2)
+        self.assertNotIn("nothing was marked verified", out.stdout)
+        self.assertFalse(os.path.exists(
+            self.p("output", "v2", "migration", "v1_to_v2.json")))
 
     def test_schema_dump_is_machine_readable(self):
         out = run("contract_v2.py", "--dump-schema",

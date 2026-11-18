@@ -292,16 +292,15 @@ def read_rows(path: str) -> list[dict]:
     return read_csv(path)[1]
 
 
-def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
+def check_pdf(path: str, min_dpi: int = 600,
               min_fontsize: float | None = None,
               target_width_cm: float | None = None,
               allow_raster_text: bool = False,
               raster_expected: bool = False) -> dict:
     """Check PDF pagination, captions, figure resolution and *placed* font size.
 
-    Pixel width alone is not resolution: a 15 cm figure needs 3 543 px for 600 dpi,
-    so ``--min-width 3000`` accepts a 508 dpi image.  dpi is pixel width divided by
-    the placed width in inches, which is what a printer sees.
+    dpi is pixel width divided by the placed width in inches, which is what a
+    printer sees; pixel width alone is not resolution.
 
     Fonts are judged after placement, not as exported: a figure designed 15 cm
     wide and printed at 13.2 cm scales every glyph by 0.88, so an 8.5 pt label
@@ -459,14 +458,12 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
     # xrefs made "0 figures" look like a clean PDF.
     result["images_checked"] = len(figure_images)
     result["images_skipped"] = len(widths) - len(figure_images)
-    low = [w for w in figure_images if min_width and w["width"] < min_width]
     # 15 cm at 600 dpi is 3543.3 px, so an exact 3543 px figure measures 599.9.
     # Judge with a 0.5% tolerance instead of failing perfect output on rounding.
     dpi_limit = min_dpi * 0.995 if min_dpi else 0
     low_dpi = [w for w in figure_images if dpi_limit and w["dpi"] < dpi_limit]
     result["images"] = len(widths)
     result["figure_images"] = len(figure_images)
-    result["low_resolution"] = low
     result["low_dpi"] = low_dpi
     result["dpi_min"] = min((w["dpi"] for w in figure_images), default=None)
     result["captions"] = dict(sorted(captions.items()))
@@ -531,8 +528,6 @@ def check_pdf(path: str, min_width: int = 0, min_dpi: int = 600,
         result["errors"].append(
             f"{len(low_dpi)} figure image(s) below {min_dpi} dpi at placed size "
             f"(min {result['dpi_min']:.0f} dpi); re-export with export_pdf_hires.py")
-    if low:
-        result["errors"].append(f"{len(low)} figure image(s) below {min_width}px")
     if not figure_images:
         result["warnings"].append("no figure-sized embedded images found")
     return result
@@ -913,7 +908,7 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
                 continue
             stem = os.path.splitext(name)[0]
             placed_width = placement_by_stem.get(stem, width_cm)
-            pdf_info = check_pdf(os.path.join(path, name), 0, 0, min_fontsize,
+            pdf_info = check_pdf(os.path.join(path, name), 0, min_fontsize,
                                  placed_width, allow_raster_text,
                                  raster_expected=False)
             if stem in placement_by_stem and not pdf_info.get("errors") and pdf_info.get("font_spans", 0) > 0:
@@ -970,7 +965,11 @@ def check_figures(path: str, min_dpi: int = 600, width_cm: float = 15.0,
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="QA the final outputs.")
+    # allow_abbrev=False: retired flags (--strict, --min-width) must be loudly
+    # rejected, not silently absorbed as a prefix of a live flag
+    # (--strict would otherwise parse as --strict-palette and change meaning).
+    parser = argparse.ArgumentParser(description="QA the final outputs.",
+                                     allow_abbrev=False)
     parser.add_argument("--pdf", default=None)
     parser.add_argument("--docx", default=None)
     parser.add_argument("--figures", default=None)
@@ -982,8 +981,6 @@ def main() -> int:
     parser.add_argument("--manifest", default=None, help="chart_manifest.csv")
     parser.add_argument("--min-dpi", type=int, default=600,
                         help="required effective resolution of figures (0 disables)")
-    parser.add_argument("--min-width", type=int, default=0,
-                        help="legacy pixel-width check (0 disables)")
     parser.add_argument("--figure-width-cm", type=float, default=15.0,
                         help="printed width used to compute figure dpi")
     parser.add_argument("--min-fontsize", type=float, default=None,
@@ -1009,7 +1006,6 @@ def main() -> int:
                         help="downgrade no_text_layer (bitmap figures whose type "
                              "cannot be measured) from error to warning")
     parser.add_argument("--out", default=None, help="write JSON report here")
-    parser.add_argument("--strict", action="store_true", help="(kept for compatibility; errors already exit 2)")
     parser.add_argument("--exit-zero", action="store_true",
                         help="always exit 0 even when errors are found (do not use in CI)")
     args = parser.parse_args()
@@ -1026,14 +1022,8 @@ def main() -> int:
     strict_type = bool(args.min_fontsize and args.min_fontsize > 0)
     min_fontsize = float(args.min_fontsize) if strict_type else None
     raster_is_error = strict_type and not args.allow_raster_text
-    if args.min_width:
-        # Documented as retired: pixel width ignores the printed width, so a
-        # 3543 px figure is fine at 15 cm and wrong at 5 cm.  Keep parsing the
-        # flag so old commands run, but do not let it veto figures.
-        print("warning: --min-width is retired (use --min-dpi / "
-              "--target-width-cm); the value is ignored", file=sys.stderr)
     if args.pdf:
-        report["checks"]["pdf"] = check_pdf(args.pdf, 0, args.min_dpi,
+        report["checks"]["pdf"] = check_pdf(args.pdf, args.min_dpi,
                                             min_fontsize, target_cm,
                                             not raster_is_error,
                                             raster_expected=True)

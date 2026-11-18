@@ -43,7 +43,7 @@ def model_inputs(project, spec, *, verification=None, adapters=()):
 
 
 def source_coverage(project, verifier):
-    """Reuse the maintained v1 original-file coverage rules, not its model-N rule."""
+    """Reuse the maintained main-chain original-file coverage rules, not its model-N rule."""
     from research_gate import ResearchGate
     gate = ResearchGate("research_registry.json", project.root)
     gate.source_coverage()

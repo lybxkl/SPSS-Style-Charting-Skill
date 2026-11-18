@@ -41,8 +41,8 @@ Rules:
   before hashing; the original string stays in the payload untouched, because
   the normalised form is a comparison view, not the value;
 * warnings (time-scope extrapolation) are reported with ``ok=False`` but do not
-  by themselves change the status - they are review flags, like
-  ``qa_outputs.py --fail-on-warn``;
+  by themselves change the status - they are review flags, the same way
+  ``qa_outputs.py`` warnings never move its exit code (only errors do);
 * an unverifiable link is never "pass": a dangling reference/result is
   ``unsupported``, an inaccessible reference is ``pending``.
 

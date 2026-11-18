@@ -89,7 +89,8 @@
 - `export_pdf_hires.py` 回填原图后必须 `page.clean_contents(sanitize=True)`，
   并以 `garbage=4` 保存；否则旧低分辨率副本留在 `/Resources` 里。所给图题必须匹配；缺图、定位失败和多条映射重复指向同图以错误结束。
 - `qa_outputs.py` 的分辨率判据是**有效 dpi**（像素宽 ÷ 版面宽英寸），不是像素宽；
-  默认 `--min-dpi 600`，`--min-width` 仅作兼容保留。
+  默认 `--min-dpi 600`。旧的像素宽旗标 `--min-width` 与空操作旗标 `--strict` 已删除
+  （传入 exit 2 报无法识别；解析器关闭前缀缩写，`--strict` 不会被吞成 `--strict-palette`）。
 - **字号也按版面折算**：独立源图用 `--min-fontsize 7.2` 与 `--target-width-cm`（默认 15）；最终稿须传 DOCX 的实际宽高，以图片内容 SHA 关联源 PNG/同名矢量 PDF，不能对所有图统一套默认 15 cm。
   15 cm 的图排进 8.5 cm 双栏后，8.5 pt 只剩 4.8 pt——按原始宽度报"合格"等于没检查。
   PDF 里没有文字层的图（回填成位图之后）**不能因为"没有 span"就判通过**，必须显式报 `no_text_layer`。

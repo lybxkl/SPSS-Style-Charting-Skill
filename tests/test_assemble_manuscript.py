@@ -98,6 +98,26 @@ class TestBuild(AssemblerCase):
         self.assertIn("表 1", xml)
         self.assertIn("N=1,689", xml)
 
+    def test_headings_and_table_captions_keep_with_next(self):
+        # a heading or a table caption must never strand at a page bottom
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "heading", "level": 1, "text": "一、引言"},
+            {"type": "table", "csv": csv_path, "caption": "罪名结构", "n": "1,689",
+             "columns": [{"col": "charge", "label": "罪名"},
+                         {"col": "n", "label": "文书数", "fmt": "{:.0f}"},
+                         {"col": "pct", "label": "占比（%）", "fmt": "{:.1f}"}]},
+        ]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        from docx import Document
+        doc = Document(self.p("out", "manuscript.docx"))
+        heading = next(p for p in doc.paragraphs
+                       if p.text.strip() == "一、引言")
+        self.assertTrue(heading.paragraph_format.keep_with_next)
+        caption = next(p for p in doc.paragraphs if p.text.startswith("表 1"))
+        self.assertTrue(caption.paragraph_format.keep_with_next)
+
     def test_caption_n_comes_from_dollars_and_numbers_file(self):
         csv_path = self.table_csv()
         blocks = [

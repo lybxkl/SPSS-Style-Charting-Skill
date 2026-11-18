@@ -49,7 +49,7 @@
     {
       "id": 10,
       "prompt": "图表包生成了 45 张图，我怎么快速检查每张图的 N、图注、文件路径是否对得上，而不是一张张点开？",
-      "expected_output": "用 qa_outputs.py --manifest 检查 chart_manifest.csv：必需列、重复图号、N 是否为正且不超过数据行数、图注是否含匹配的 N=、PNG/PDF 文件是否存在；错误进入 --strict 退出码，人工再按 06-qa-checklist 核对方向与解释。"
+      "expected_output": "用 qa_outputs.py --manifest 检查 chart_manifest.csv：必需列、重复图号、N 是否为正且不超过数据行数、图注是否含匹配的 N=、PNG/PDF 文件是否存在；错误直接进入退出码（2），人工再按 06-qa-checklist 核对方向与解释。"
     },
     {
       "id": 11,
@@ -145,6 +145,11 @@
       "id": 29,
       "prompt": "十万份文件的语料审计跑了三小时被中断了，怎么继续？改了一个抽取脚本想只重跑受影响的阶段行吗？",
       "expected_output": "两件事都有正路：①断点续跑——audit_corpus.py 原参数原样再来一遍加 --resume：size+mtime 都没变的文件直接复用上一轮整行（状态/页数/字符/MD5 不重算），新增或变更的照常处理，消失的文件移除并计数；续跑产物与一次跑完逐字节一致（有回归测试）。抽样框（--ext/--skip-dir/--min-chars/哈希开关）不一致直接 exit 2 拒绝，不混框。--extract 同理：make_coding_sheet.py --resume 复用 extract_journal.jsonl 的逐文档记账，frame（root/keywords/profile/audit 等的 sha256）不一致拒绝。②rerunRules 已细化：改 scripts/pubfig.py 只重跑 stats/figures/manuscript/qa，不再整链重来；规则按数组顺序首条命中，34 条精确脚本规则排在通用 scripts/ 前缀之前；建议性工具（mine_candidates/sample_review/compute_kappa 等）只映射自己的阶段；未被任何 step 或导入链覆盖的脚本保守落到 scripts/=全链。不要为了省时间手改 output/ 产物或跳过审计。"
+    },
+    {
+      "id": 30,
+      "prompt": "这套 skill 是不是有 v1 和 v2 两个版本？统计该用 models.py 还是 auto_stats.py？成稿该用 manuscript.py 还是 assemble_manuscript.py？",
+      "expected_output": "只有一个版本、一条流水线。统计与成稿永远用主链引擎：auto_stats（含 mixed/cox/logrank/交互项/插补/权重）与 assemble_manuscript + export_pdf_hires。contract_v2/models/manuscript 这些名字带 2 的模块不是第二套引擎，而是归档档的契约账本层：数据面（source_units/OCR/ASR/表格恢复）、多输入模型的登记与独立校核、印后数字溯源与实印核对、发布事务。models.py 不会替代 auto_stats 跑主链统计；manuscript.py 不排版——DOCX 只由 assemble_manuscript 生成，它只验「印出的数字可溯源、印出的文本=审核过的文本」。不存在 v1→v2 迁移路径，也没有「不启用就退回旧链路」的双轨：账本要么按当前契约建立，要么该档不需要它。"
     }
   ]
 }

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Release gate and release snapshot: four states, no green-washing.
 
-The gate reads the v2 ledgers and the v1 research-registry evidence and decides
+The gate reads the contract ledgers (output/v2) and the main-chain
+research-registry evidence and decides
 
 * ``complete``   - every declared scope item is covered and every hard truth gate
                    passed;
@@ -15,6 +16,14 @@ The gate reads the v2 ledgers and the v1 research-registry evidence and decides
 ``partial`` never bypasses a hard gate: a limited release still needs full-cell
 review and traceable numbers for the cells it claims, it simply claims fewer
 cells/sections.  Every check records the evidence path it looked at.
+
+Scope keys: ``datasets``/``models``/``claims``/``figures`` are identity lists;
+a manuscript release additionally declares ``sections`` plus the actual
+print artifacts ``docx`` and ``pdf`` (project-relative), the printed-number
+map ``numbers`` with its evidence ``trace``, and the caption/table specs the
+print check reads (``figure_specs``/``table_specs``).  Omitting
+``numbers``/``trace`` verifies zero numbers and cannot upgrade a missing
+trace report.
 
 CLI::
 
@@ -81,7 +90,7 @@ def evaluate(project: C.Project, scope: Mapping) -> dict:
             result["hard_failed"].append("evidence_changed_during_evaluation")
         result["bindings"]=before
         return result
-    except (C.ContractError, ValueError, OSError, KeyError) as exc:
+    except (C.ContractError, ValueError, OSError, KeyError, TypeError, AttributeError) as exc:
         return {"status": "failed" if isinstance(exc, C.IntegrityError) else "not_ready",
                 "checks": [{"check": "current_evidence", "ok": False, "hard": True, "detail": str(exc), "evidence": []}],
                 "errors": [{"check": "current_evidence", "detail": str(exc)}], "warnings": [],
@@ -117,7 +126,7 @@ def _evidence_snapshot(project,scope):
         if path.is_file():add(path);walk(project.read(kind))
     for path in Path(__file__).parent.glob("*.py"):add(path)
     for path in project.path("models","specs").glob("*.json"):add(path)
-    for name in ("output/dataset/dataset_verification.json","output/data_verification/dataset_verification.json","output/dataset_verification.json","output/v2/manuscript/compose.json","output/v2/units/materials.json"):
+    for name in ("output/dataset/dataset_verification.json","output/data_verification/dataset_verification.json","output/dataset_verification.json","output/v2/manuscript/verification.json","output/v2/units/materials.json"):
         path=project.root/name;add(path)
         if path.is_file():walk(json.loads(path.read_text(encoding="utf-8")))
     walk(dict(scope))
@@ -133,6 +142,23 @@ def _evaluate(project: C.Project, scope: Mapping) -> dict:
     datasets = list(scope.get("datasets") or [])
     sections = list(scope.get("sections") or [])
     figures = list(scope.get("figures") or [])
+    # scope.figures is the historical identity list (figure_spec ids); the print
+    # check specs live under figure_specs/table_specs. Validate both shapes up
+    # front so a wrong form folds into not_ready instead of a raw traceback.
+    bad = [f for f in figures if not isinstance(f, str)]
+    if bad:
+        raise ValueError(f"scope.figures must be figure id strings, got: {bad[:3]}")
+    for key in ("figure_specs", "table_specs"):
+        items = list(scope.get(key) or [])
+        bad = [i for i in items if not isinstance(i, dict)]
+        if bad:
+            raise ValueError(f"scope.{key} must be a list of spec objects, got: {bad[:3]}")
+    trace_decl = scope.get("trace") or {}
+    if not isinstance(trace_decl, dict):
+        raise ValueError("scope.trace must be an object mapping placeholder keys to trace entries")
+    bad = [v for v in trace_decl.values() if not isinstance(v, dict)]
+    if bad:
+        raise ValueError(f"scope.trace entries must be objects, got: {bad[:3]}")
     specs = _latest_by_id(project, "model_spec")
     model_ids = list(scope.get("models") or []) if "models" in scope else sorted(specs)
     claims = _latest_by_id(project,"claim")
@@ -146,18 +172,18 @@ def _evaluate(project: C.Project, scope: Mapping) -> dict:
         for block in blocks.values():
             claim_ids.extend(cid for cid in block["data"].get("claims",[]) if cid not in claim_ids)
         claim_ids.extend(cid for cid,claim in claims.items() if claim["data"]["block_id"] in blocks and cid not in claim_ids)
-        compose=project.path("manuscript","compose.json")
-        if compose.is_file():
-            document=json.loads(compose.read_text(encoding="utf-8"))
-            for item in document.get("figure_specs",[]):
-                if item.get("figure_id") not in figures:figures.append(item.get("figure_id"))
-            for item in document.get("trace",{}).values():
-                rid=item.get("result") or item.get("model")
-                if rid:
-                    rec=project.latest("model_result",rid)
-                    mid=rec["data"]["model"] if rec else rid
-                    if mid not in model_ids:model_ids.append(mid)
-                if item.get("dataset") and item["dataset"] not in datasets:datasets.append(item["dataset"])
+        # the scope declares what the printed manuscript carries (figure specs
+        # and the number trace); the compose.json sidecar is gone with the dual builder
+        for item in scope.get("figure_specs") or []:
+            fid = item.get("figure_id")
+            if fid and fid not in figures:figures.append(fid)
+        for item in (scope.get("trace") or {}).values():
+            rid=item.get("result") or item.get("model")
+            if rid:
+                rec=project.latest("model_result",rid)
+                mid=rec["data"]["model"] if rec else rid
+                if mid not in model_ids:model_ids.append(mid)
+            if item.get("dataset") and item["dataset"] not in datasets:datasets.append(item["dataset"])
     for cid in claim_ids:
         for item in (claims.get(cid) or {}).get("data",{}).get("support",[]):
             if item.get("kind") in ("result","model_result"):
@@ -176,7 +202,7 @@ def _evaluate(project: C.Project, scope: Mapping) -> dict:
                 datasets.append(ident)
     verifier = None
 
-    # -- datasets: v1 verification report, if the project uses one ----------
+    # -- datasets: main-chain verification report, if the project uses one ----
     verification_rel = scope.get("verification") or \
         "output/dataset/dataset_verification.json"
     verification_path = project.root / verification_rel
@@ -315,7 +341,7 @@ def _evaluate(project: C.Project, scope: Mapping) -> dict:
                    "evidence": [], "hard": True})
     errors.extend(claim_errors)
 
-    # -- numbers traceable (v1 verify report) -------------------------------
+    # -- numbers traceable (main-chain verify report) -----------------------
     trace_rel = scope.get("number_trace") or "output/verify/number_issues.csv"
     trace_path = project.root / trace_rel
     if trace_path.is_file():
@@ -331,27 +357,42 @@ def _evaluate(project: C.Project, scope: Mapping) -> dict:
                              f"traceable numbers", [trace_rel]))
     if sections:
         import manuscript as MS
-        compose = project.path("manuscript", "compose.json")
+        docx_rel = scope.get("docx")
         try:
-            manuscript = json.loads(compose.read_text(encoding="utf-8"))
-            for figure in manuscript.get("figure_specs", []):
-                if figure.get("figure_id") not in figures:
-                    figures.append(figure.get("figure_id"))
+            if not docx_rel:
+                raise ValueError("a manuscript release needs the DOCX assembled by assemble_manuscript (scope.docx)")
+            docx_path = project.root / docx_rel
+            if not docx_path.is_file():
+                raise ValueError(f"{docx_rel} is missing; the actual manuscript DOCX is required")
             if not scope.get("pdf"):
                 raise ValueError("a manuscript release needs its actual exported PDF as well as DOCX")
             actual_sections = {b["data"]["section"] for b in MS.latest_blocks(project).values()}
             if not set(sections).issubset(actual_sections):
                 raise ValueError("claimed sections have no registered manuscript blocks")
-            verified_text = MS.verify_printed(project, docx_path=Path(manuscript["docx"]), spans=manuscript["spans"],
+            verified_text = MS.verify_printed(project, docx_path=docx_path,
                                               pdf_path=project.root / scope["pdf"],
-                                              numbers=manuscript["numbers"], trace=manuscript["trace"],persist=False)
+                                              numbers=scope.get("numbers") or {},
+                                              trace=trace_decl,
+                                              figures=scope.get("figure_specs") or (),
+                                              tables=scope.get("table_specs") or (), persist=False)
             if not verified_text["ok"]:
                 raise ValueError(f"printed manuscript failed: {verified_text}")
             if not trace_path.is_file():
-                errors[:] = [e for e in errors if e.get("check") != "numbers_traceable"]
-                for check in checks:
-                    if check["check"] == "numbers_traceable":
-                        check.update(ok=True, detail="current trace targets and actual DOCX/PDF numbers verified", evidence=[str(compose)])
+                # Upgrade numbers_traceable only when this run actually bound
+                # numbers to evidence; an empty trace verifies nothing and must
+                # not launder a missing trace file into "verified". A declared
+                # trace with zero resolved numbers is still zero bindings.
+                bound = bool(verified_text.get("numbers_used"))
+                if bound:
+                    errors[:] = [e for e in errors if e.get("check") != "numbers_traceable"]
+                    for check in checks:
+                        if check["check"] == "numbers_traceable":
+                            check.update(ok=True, detail=f"{len(verified_text.get('numbers_used') or [])} number(s) bound to current evidence via the printed DOCX/PDF", evidence=[str(docx_path)])
+                else:
+                    warnings.append({"check": "numbers_traceable",
+                                     "detail": "no numbers were bound to evidence (scope.numbers/trace empty); "
+                                               "a manuscript release without traceable numbers is not complete",
+                                     "evidence": [str(docx_path)]})
             checks.append(_check("manuscript_verified", errors, warnings, True, "actual blocks/numbers/support match the printed document"))
         except Exception as exc:
             checks.append(_check("manuscript_verified", errors, warnings, False, str(exc)))

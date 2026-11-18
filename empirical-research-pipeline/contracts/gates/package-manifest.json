@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "c314ff051a013d440ad5530a7bc4bfc5fba8a7c09a6580bfe50e9d2c22242487"
+      "sha256": "9a88e4f9944f01a24a40fc480da4f09f585e72438390585b8452cfc03507c2b7"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -78,7 +78,7 @@
     },
     {
       "path": "evals/evals.json",
-      "sha256": "47857a2ddaf48f3a29843bae139185bff5c705692abb393930e0619665a52f75"
+      "sha256": "212248d6f1c29997c493419b2d6b185beb2cc778c861ece360aca6d3be8ab795"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -114,7 +114,7 @@
     },
     {
       "path": "references/06-qa-checklist.md",
-      "sha256": "00634983072cfb27c05202ec81c9453b6fc91d91db064f47db1e60e458100f09"
+      "sha256": "6cb918217598e77b72d777d569a1073933d1333f733ba6c4245c3f73594f82a7"
     },
     {
       "path": "references/07-chart-atlas.md",
@@ -130,7 +130,7 @@
     },
     {
       "path": "references/10-contracts.md",
-      "sha256": "9227e83c0534e2c4d40f37df49b9744ce01fae6b449fafaca50cb057e041b684"
+      "sha256": "2de6cf73ea40479dab3a32ce3e76c9c10b193675af8dd49961c1a1799e065c01"
     },
     {
       "path": "references/11-methods-catalog.md",
@@ -142,11 +142,11 @@
     },
     {
       "path": "references/13-contract-v2.md",
-      "sha256": "dde256101cd964f5e126155eddf6fe18e2516f113cb4ab1cc7e6a62181e151b5"
+      "sha256": "a94c1e743533484f10eda9d102f96cfb2de8df1372be0195797d5647f0573556"
     },
     {
       "path": "references/14-reviewed-workflow.md",
-      "sha256": "2c04f77e689446e9512521a2b692c77122a296075d4f27c0116a42aece632510"
+      "sha256": "bf8fc41cf98f880d3a351bc51783a4af2e164a8e7b78d2b9e8b78c56382d64ca"
     },
     {
       "path": "references/15-gate-reports.md",
@@ -186,7 +186,7 @@
     },
     {
       "path": "scripts/claims.py",
-      "sha256": "3ebd407bf4311e7831834f259008563f547c42f34e418b5b4b0b5f93e0cefc27"
+      "sha256": "98f7ebf58f7851521fe50b7b195aaea1eaca862283e03a07b7bf89b45a2616c9"
     },
     {
       "path": "scripts/clean_data.py",
@@ -198,7 +198,7 @@
     },
     {
       "path": "scripts/contract_v2.py",
-      "sha256": "e02421cd4d88ea5cc1401aa888aaaff53d4ec251e798708f687c971d780b37e4"
+      "sha256": "99cd2ed813009647b89bf4fcafb6f7c893cb51b1684d09627a70d6528800db82"
     },
     {
       "path": "scripts/csv_to_spss_syntax.py",
@@ -226,7 +226,7 @@
     },
     {
       "path": "scripts/evidence.py",
-      "sha256": "fd4f24f0825a84d9b301e4ba27073922fb1bd0afdb792de75b7b1471095ddf69"
+      "sha256": "3b0b6edf980a84634de588114476397fd2a3b96d5dcb7adbac35b46c2d23ec61"
     },
     {
       "path": "scripts/execution.py",
@@ -294,7 +294,7 @@
     },
     {
       "path": "scripts/manuscript.py",
-      "sha256": "7de8a310994c32dfa16d3c363c06fcd1722bb5d9522c6c022107a4b9303be354"
+      "sha256": "e2edcf81ca1bd9421ff035c16401917aa5f793aabedbd3f8d5031fd9b336ed4c"
     },
     {
       "path": "scripts/methods_lib.py",
@@ -326,7 +326,7 @@
     },
     {
       "path": "scripts/qa_outputs.py",
-      "sha256": "d770f0c87d3094c2f336eb3799d10796a53aa1fe068b1c6f070d41bae7dc0df6"
+      "sha256": "43d2be71efb0fa9c4dd68196785bcbaa46b69ebd631ce5f6a8b75dd27857efcc"
     },
     {
       "path": "scripts/refs.py",
@@ -334,7 +334,7 @@
     },
     {
       "path": "scripts/release.py",
-      "sha256": "0867925c4ec2068ae84af0334ca30715b3d8f6cb3adc6bac7ac68acb7b831d50"
+      "sha256": "1c3531d2679ab1dfdfc30db81e8bc6ab570709fbbad59de34fac79b4093666ea"
     },
     {
       "path": "scripts/report_tables.py",
@@ -350,7 +350,7 @@
     },
     {
       "path": "scripts/review_workbench.py",
-      "sha256": "dede5f3c690b7a024cf55ab54d47ba576800c04a1f2f327862a6c6bb21aaa043"
+      "sha256": "b9bbbccc13a192ebbffcd28650a962695f628fe2918005baaed6baba18b1a90e"
     },
     {
       "path": "scripts/run_model.py",

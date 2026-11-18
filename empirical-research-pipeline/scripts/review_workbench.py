@@ -16,10 +16,10 @@ It refuses the shapes that would fake completeness: an event without a real
 `reread_scope`, a generic note, a timestamp before the snapshot, or a file that
 claims every cell verified without per-cell evidence.
 
-The review *file* it emits is the v1 ``review`` JSONL consumed by
+The review *file* it emits is the main-chain ``review`` JSONL consumed by
 ``verify_dataset.py`` (one source of truth for "is this cell reviewed"); in
-addition every event is stored as a v2 ``review_event`` so the independence and
-the conflict chain stay auditable.
+addition every event is stored as a ``review_event`` ledger record so the
+independence and the conflict chain stay auditable.
 
 CLI::
 

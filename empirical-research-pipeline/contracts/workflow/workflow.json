@@ -268,7 +268,8 @@
         "写 profile 前先跑 mine-candidates（材料挖掘候选表）：关键词/共现/主题候选行带 rel_path+行号锚，读候选是「读样本」的一部分；哪些候选成构念、进 codebook、进停用词表由你声明，主题数 K 由你定（--scan-k 只给曲线）。候选不是事实。",
         "在 draft/ 上对冻结样本试跑，把误差写进 draft/sample_errors.md。draft/ 的修改不使审计失效。",
         "样本可接受后调用 data_analysis_adopt_command，把解析器冻成该阶段命令并全量跑一次。不要手跑脚本代替回执。",
-        "抽样复核走 scripts/sample_review.py：draw 带声明种子分层抽（needs_review 行强制单独成层），复核者回原文核对后只填 保持/改判/无法核对；tally 统计改判率并把没填完的样本判为未完成。不要自己挑样本。"
+        "抽样复核走 scripts/sample_review.py：draw 带声明种子分层抽（needs_review 行强制单独成层），复核者回原文核对后只填 保持/改判/无法核对；tally 统计改判率并把没填完的样本判为未完成。不要自己挑样本。",
+        "双人编码信度走 scripts/compute_kappa.py --a 甲.csv --b 乙.csv：产出 kappa_report.csv（逐变量 κ）、disagreements.csv（不一致行）与 coding-sample.md；κ<0.6 的变量会点名，重议口径后再编一轮。（未编码）占位与 *_src 溯源列自动排除；只在单侧出现的变量会点名而不是静默丢。"
       ],
       "ui": {
         "panels": [
@@ -1166,7 +1167,7 @@
           "script": "scripts/mine_candidates.py",
           "args": [
             "--root",
-            ".",
+            "data",
             "--corpus",
             "output/audit/corpus_files.csv",
             "--out",

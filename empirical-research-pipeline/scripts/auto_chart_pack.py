@@ -18,7 +18,7 @@ and file paths.
 
 Usage:
     python auto_chart_pack.py --data data/analysis.csv --out output/chart_pack
-    python auto_chart_pack.py --data ... --config chart_config.json --tiff
+    python auto_chart_pack.py --data ... --config chart_config.json --no-tiff
 """
 from __future__ import annotations
 
@@ -2251,10 +2251,8 @@ def main() -> int:
     parser.add_argument("--width-cm", type=float, default=15.0,
                         help="figure width in cm for every chart (3-30; "
                              "default 15 = A4 text column at 3.17 cm margins)")
-    parser.add_argument("--tiff", dest="tiff", action="store_true", default=True,
-                        help="写 LZW TIFF（默认开启；这是默认行为，保留该开关只为兼容旧命令）")
     parser.add_argument("--no-tiff", dest="tiff", action="store_false",
-                        help="不写 TIFF，只出 png+pdf（三格式约慢 30%%）")
+                        help="不写 TIFF，只出 png+pdf（LZW TIFF 默认写出；三格式约慢 30%%）")
     args = parser.parse_args()
 
     if args.list_charts:

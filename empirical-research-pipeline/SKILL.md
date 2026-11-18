@@ -509,7 +509,7 @@ SPSS 语法模板与解释规范见 `references/03-analysis-spss.md`；扩展分
 python scripts/auto_chart_pack.py \
   --data data/analysis.csv \
   --config assets/chart_config.example.json \
-  --out output/chart_pack --tiff
+  --out output/chart_pack
 ```
 
 连续/多分类结果不需要改脚本：结果变量会自动切换为“结果分布 + 分组均值/构成”图；文本结果同样可用 `outcome_map` 指定编码。`--coef` 支持 `metric`（OR/HR/RR/beta）与 `n` 列，森林图会按模型样本量写 N；`--pred` 支持 0/1 或“是/否”标签，常数预测/单一类别会跳过 ROC/PR/校准并写明原因。`term_labels` 可把 `lv3` 这类模型项名映射为中文。双比例哑铃图需在 config 里用 `dumbbell` 指定两个 0/1 列。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可加 `--survival-group`）生成 Kaplan–Meier 曲线。
@@ -547,7 +547,7 @@ set_style()  # 15 cm 版心，宋体/Times New Roman，600 dpi
 - 物理宽度 15 cm（A4 正文 15.4 cm 内），字号 7.2–8.5 pt。
 - 中文宋体、西文 Times New Roman；PDF 字体嵌入（Type 42）。
 - 图内不放标题；图题、图注在 Word 中排。
-- 同时输出 PNG 600 dpi、矢量 PDF、LZW TIFF（`--tiff`）。
+- 同时输出 PNG 600 dpi、矢量 PDF、LZW TIFF（TIFF 默认写出，不需要时 `--no-tiff`）。
 - 误差线注明 95% CI；森林图实心点=显著、空心点=不显著。
 - 偏态连续变量用 log10 或 P99 截断，并在轴标签/图注注明。
 
@@ -716,7 +716,9 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `references/10-contracts.md` | 查脚本之间的键列/漏斗/N/缺失值/退出码约定时 |
 | `references/11-methods-catalog.md` | 选方法、查变量要求与前置判据、写结果句式、避开常见误用时 |
 | `references/12-exhaustive-research.md` | 只在归档档阅读：全资料发现、开放数据集/模型、全格回源复核、补数闭环与交付契约 |
+| `references/13-contract-v2.md` | 归档档深度核验链的契约结构：账本种类、状态机、复核签名与发布事务（`contract_v2`/`release`/`gate_facts` 深检的判据来源） |
 | `references/14-reviewed-workflow.md` | 只在归档档阅读：契约账本层当前维护流程、真实复核、版本失效与成稿发布 |
+| `references/15-gate-reports.md` | 工作台门禁报告的入口、覆盖范围、迁移与恢复；接 `data_analysis_*` 工作台或排查门禁报告时 |
 
 ## 模板
 

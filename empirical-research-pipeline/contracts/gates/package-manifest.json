@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "9a88e4f9944f01a24a40fc480da4f09f585e72438390585b8452cfc03507c2b7"
+      "sha256": "13d72ca2a9b71f920b65f0119b7738f3492ac4e82e732bd91f4a3d549453fee2"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -70,11 +70,11 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "d3040fbfc8165b6292cdd034a595b092a0b7a2bacc8c44ac2bae6a9caa518be8"
+      "sha256": "15fcdad0354b37c5b664fdc4792898fb44cdc86ed999e32f16c2243540e033be"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
-      "sha256": "a013cb068874d87b0ed1238cc74b396f788815d1feee460385659d20b617b0de"
+      "sha256": "ffb2946c37a9309619def878dd75e426f6872a19f6dee1f5629618f9b7c71080"
     },
     {
       "path": "evals/evals.json",
@@ -114,7 +114,7 @@
     },
     {
       "path": "references/06-qa-checklist.md",
-      "sha256": "6cb918217598e77b72d777d569a1073933d1333f733ba6c4245c3f73594f82a7"
+      "sha256": "9fdbf14c05a62156a06a1ba4eddbe0291c5ec20c4e0a353e229af184773e0ca9"
     },
     {
       "path": "references/07-chart-atlas.md",
@@ -126,11 +126,11 @@
     },
     {
       "path": "references/09-field-extraction.md",
-      "sha256": "68ff5ed7f980271d239dd753d76e8492ccb19443b89b77a9eceda78d30cc0334"
+      "sha256": "f237d1d8a78d774a7b97c767ab609190e7595ea3eb08fff2c762ba5ea204c218"
     },
     {
       "path": "references/10-contracts.md",
-      "sha256": "2de6cf73ea40479dab3a32ce3e76c9c10b193675af8dd49961c1a1799e065c01"
+      "sha256": "71327b280102481f8ebb3e97320bd3e07774936ed38426b8713c1bf38a0ded50"
     },
     {
       "path": "references/11-methods-catalog.md",
@@ -142,7 +142,7 @@
     },
     {
       "path": "references/13-contract-v2.md",
-      "sha256": "a94c1e743533484f10eda9d102f96cfb2de8df1372be0195797d5647f0573556"
+      "sha256": "522e64017ff64aa58420c1787e0b601d7cc94cc5e4803bed9c494207f30d1d73"
     },
     {
       "path": "references/14-reviewed-workflow.md",
@@ -174,7 +174,7 @@
     },
     {
       "path": "scripts/auto_chart_pack.py",
-      "sha256": "434f5969ea1336f37d8537e2930cdbc4d3945504f212c6dd31553be169068baf"
+      "sha256": "8b261e4b7c6fc4491788abe8081d358e8c4f10290c46690bd26a42987e56bc03"
     },
     {
       "path": "scripts/auto_stats.py",
@@ -306,7 +306,7 @@
     },
     {
       "path": "scripts/mine_candidates.py",
-      "sha256": "d03b716fdfa70fcc9e8dcb8a189160d999f998efa788bdc6c92a0f8a9c429174"
+      "sha256": "086c02fd5f1f50326658baae5dc11d95f4716902938b986c87ec3a35ad149c52"
     },
     {
       "path": "scripts/models.py",

@@ -104,6 +104,7 @@
 ## 8. 退出码
 
 - `0` 成功；`2` 参数错误或校验失败。
+- `3` 是**少数脚本各自成文的特定非致命/环境边界**，语义按脚本 docstring：`mine_candidates.py`=挖掘引擎自身失败（缺 scikit-learn）；`auto_chart_pack.py`=一张图都没产出（数据列或 --only/--sections 过滤问题，台账仍写出）；`gates.py`=台账锁冲突（并发写，重试即可）。其余脚本不用 3。
 - `qa_outputs.py` 发现 error 时**默认返回 2**；`--exit-zero` 可显式降级（CI 里不要用）。
 - 任何脚本「产出 0 行」都不得视为成功：必须有非零退出或显式 `--allow-empty`。
 - `check_decisions.py` 有任何 error 返回 2；`make_coding_sheet.py --require-review` 在仍有未复审字段时返回 2（即使 dataset 已写出，也明确告知不是成品）。

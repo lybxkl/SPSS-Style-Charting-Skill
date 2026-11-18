@@ -158,6 +158,12 @@ python "$SCRIPTS/release.py" --root . build --scope scope.json
   `output/verify/number_issues.csv`，不会另造一套「已验证」。
 - 模型结果在主链 `model_plan.jsonl` 与账本 `model_spec` 中各有一份时，两份都必须
   终态；账本侧负责多输入、无样本 N、求解质量和独立校核。
+- **内部支撑模块**（被上述 CLI 与工作台门禁框架导入，不单独调用，无独立入口）：
+  `evidence.py`（证据信封与 locator）、`execution.py`（执行回执：输入/代码/输出
+  SHA256+退出码）、`support_review.py`（论断复核绑定）、`workflow_contract.py`
+  （workflow.json 的 schema 校验）、`gate_facts.py`/`gate_checks.py`/
+  `gate_claims.py`/`gate_lock.py`/`gate_roots.py`（工作台门禁框架的事实聚合、
+  版面实测、论断语义、台账锁与项目根解析，消费方见 references/15）。
 
 ## 6. 第二轮补充（T13/T20/T23/T27/T28/T29/T30/T33/T34/T39）
 

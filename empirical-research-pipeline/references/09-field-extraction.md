@@ -306,13 +306,13 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 **候选不是事实**。输出表里每一行都是"这个候选值得你亲自看"的提议，行上带着 `rel_path`+行号锚；采纳任何候选（把它写进 profile 字段、codebook 类目或停用词表）都是**你的**决定，引擎不写 decisions 台账、不进任何闸门。
 
 ```bash
-python scripts/mine_candidates.py --root . \
+python scripts/mine_candidates.py --root data \
     --corpus output/audit/corpus_files.csv --out output/mining \
     --stopwords draft/stopwords.txt --topics 5 --scan-k 3,4,5,6 \
     --seed 20261118
 ```
 
-（Windows PowerShell 里把多行命令写成一行再执行。）
+（Windows PowerShell 里把多行命令写成一行再执行。`--root` 传 audit 步骤用的同一个根——标准布局里 audit 用 `--root data`，`corpus_files.csv` 的 `rel_path` 就相对 `data/`；`--corpus`/`--out` 相对当前工作目录解析。）
 
 | 产物 | 内容 |
 |---|---|

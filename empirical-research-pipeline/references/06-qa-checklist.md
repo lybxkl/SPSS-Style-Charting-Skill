@@ -68,7 +68,7 @@
 - [ ] `--figures` 检查的是**有效 dpi**（像素宽 ÷ 版面英寸），不是像素宽；15 cm 宽的 600 dpi 图是 3543 px，3000 px 只有 508 dpi。
 - [ ] 正文主图与附录图不重复；每个主发现至少有主图 + 稳健性/诊断图。
 - [ ] 图数没有被人为压到 8 张；分布、异质性、诊断图齐全或已说明跳过原因。
-- [ ] 每张图有 PNG 600 dpi、PDF 矢量；投稿要求 TIFF 时用 `auto_chart_pack.py --tiff` 输出 LZW 无损 TIFF（`pubfig.save_fig` 默认已含 tiff）。
+- [ ] 每张图有 PNG 600 dpi、PDF 矢量；LZW 无损 TIFF 由 `auto_chart_pack.py` 默认写出（不需要时 `--no-tiff`；`pubfig.save_fig` 默认已含 tiff）。
 - [ ] 图在实际安置宽高下最小字号合格；严格检查传 `--docx`、对应原始 PNG/同名矢量 PDF 和 `--min-fontsize 7.2`，不能只检查源图字号。
 - [ ] 类别多/名称长时同图倾斜 45°，必要时 60°/75° 并增加底部留白；没有自动分页、截掉项目或缩小字号，导出后无重叠/裁切。
 - [ ] 中文宋体、西文 Times New Roman，PDF 字体嵌入。

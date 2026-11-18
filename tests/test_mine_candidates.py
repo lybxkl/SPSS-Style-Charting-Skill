@@ -727,5 +727,53 @@ class TestIsolation(TempCase):
                             for term in terms))
 
 
+class TestStandardLayout(TempCase):
+    """The shape the workflow action registers must work end to end from
+    a project root: audit writes corpus_files.csv with ``--root data``,
+    mining consumes it with the same ``--root`` while ``--corpus``/``--out``
+    resolve against the working directory (audit step args and action args
+    are both cwd-relative there)."""
+
+    AUDIT = os.path.join(SCRIPTS, "audit_corpus.py")
+
+    def test_registered_action_shape_runs_from_project_root(self):
+        for name, text in TEXTS.items():
+            self.write(f"data/{name}", text)
+        proc = subprocess.run(
+            [sys.executable, self.AUDIT, "--root", "data",
+             "--out-dir", "output/audit", "--min-chars", "1"],
+            cwd=self.tmp, capture_output=True, text=True,
+            encoding="utf-8", timeout=300)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(os.path.isfile(
+            self.p("output", "audit", "corpus_files.csv")))
+
+        # exactly the args workflow.json's mine-candidates action binds
+        proc = subprocess.run(
+            [sys.executable, SCRIPT, "--root", "data",
+             "--corpus", "output/audit/corpus_files.csv",
+             "--out", "output/mining", "--min-df", "1",
+             "--seed", "20261118"],
+            cwd=self.tmp, capture_output=True, text=True,
+            encoding="utf-8", timeout=300)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        receipt_path = self.p("output", "mining", "mine_receipt.json")
+        with open(receipt_path, encoding="utf-8") as handle:
+            receipt = json.load(handle)
+        inputs = receipt["inputs"]
+        self.assertEqual(inputs["n_documents"], len(TEXTS))
+        self.assertEqual(inputs["skipped_missing"], [])
+        self.assertEqual(inputs["corpus"],
+                         "output/audit/corpus_files.csv")
+        keyword_path = self.p("output", "mining",
+                              "keyword_candidates.csv")
+        self.assertTrue(os.path.isfile(keyword_path))
+        with open(keyword_path, encoding="utf-8-sig") as handle:
+            body = handle.read()
+        # evidence anchors must name the real documents under data/
+        self.assertIn("a.txt", body)
+
+
 if __name__ == "__main__":
     unittest.main()

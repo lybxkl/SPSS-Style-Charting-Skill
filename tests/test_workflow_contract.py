@@ -147,4 +147,46 @@ class WorkflowContractTests(unittest.TestCase):
                     self.fail(f"{path} has no owning step and is not a "
                               f"documented advisory tool or imported library")
 
+    def test_mine_action_root_matches_the_audit_step_root(self):
+        """mine_candidates resolves corpus rel_paths against --root, and
+        audit_corpus writes those rel_paths relative to its own --root:
+        the registered action must bind the same root the audit step used,
+        or every document resolves to skipped_missing and the action
+        dies with exit 2 (silently, it is continueOnError)."""
+        value=json.loads((PACKAGE/'contracts/workflow/workflow.json')
+                         .read_text(encoding='utf-8'))
+        def flag(args,name):
+            return args[args.index(name)+1] if name in args else None
+        audit=[stage for stage in value['stages'] if stage['id']=='audit'][0]
+        audit_step=audit['steps'][0]
+        self.assertEqual(Path(audit_step['script']).name,'audit_corpus.py')
+        mine=[action for action in value['actions']
+              if action['id']=='mine-candidates'][0]
+        mine_step=mine['steps'][0]
+        self.assertEqual(flag(mine_step['args'],'--root'),
+                         flag(audit_step['args'],'--root'),
+                         'mine-candidates --root must equal the audit '
+                         'step --root the corpus listing was written with')
+        self.assertIn(flag(mine_step['args'],'--corpus'),
+                      audit_step['produces'],
+                      'the action must consume the listing the audit '
+                      'step actually produces')
+
+    def test_schema_generator_reproduces_the_checked_in_schema(self):
+        """tools/build_workflow_contract.py is the schema's single source:
+        regenerating must reproduce the checked-in file byte-for-byte, or
+        the tool has drifted (it once lagged the schema by 11 keys)."""
+        spec=importlib.util.spec_from_file_location(
+            'build_workflow_contract',
+            PACKAGE.parent/'tools'/'build_workflow_contract.py')
+        tool=importlib.util.module_from_spec(spec);spec.loader.exec_module(tool)
+        with tempfile.TemporaryDirectory() as tmp:
+            tool.DEST=Path(tmp)
+            tool.build()
+            generated=(tool.DEST/'workflow.schema.json').read_bytes()
+        checked=(PACKAGE/'contracts'/'workflow'/'workflow.schema.json').read_bytes()
+        self.assertEqual(generated,checked,
+                         'schema drifted from its generator; rerun '
+                         'tools/build_workflow_contract.py and commit both')
+
 if __name__=='__main__':unittest.main()

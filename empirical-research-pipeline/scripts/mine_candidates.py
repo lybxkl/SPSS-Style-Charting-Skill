@@ -16,18 +16,21 @@ the ``sha256``/``md5`` columns verify the bytes when present, rows the
 audit already marked ``status != valid`` or ``dedupe_role == duplicate``
 are skipped with a receipt note), or a plain TSV with one ``rel_path``
 or ``rel_path\tsha256`` per line (``#`` comments and blank lines
-skipped). Files are read from the project root; repeated rel_paths are
-dropped so a document cannot be counted twice. Every candidate row
-keeps ``rel_path`` and a line number so a human opens the source at the
-exact spot.
+skipped). Documents are read relative to ``--root`` (pass the same
+``--root`` audit_corpus.py used, e.g. ``data``); ``--corpus`` and
+``--out`` resolve against the current working directory. Repeated
+rel_paths are dropped so a document cannot be counted twice. Every
+candidate row keeps ``rel_path`` and a line number so a human opens the
+source at the exact spot.
 
-CLI::
+CLI (project root as working directory, audit step ran with
+``--root data``)::
 
-    python scripts/mine_candidates.py --root . \
+    python scripts/mine_candidates.py --root data \
         --corpus output/audit/corpus_files.csv \
         --out output/mining
 
-    python scripts/mine_candidates.py --root . --corpus ... --out ... \
+    python scripts/mine_candidates.py --root data --corpus ... --out ... \
         --stopwords draft/stopwords.txt --top 30 --min-df 2 \
         --topics 5 --scan-k 3,4,5,6 --seed 20261118
 
@@ -540,12 +543,15 @@ def main(argv: list[str]) -> int:
         description="material mining: candidates with evidence anchors, "
                     "for the researcher to adjudicate")
     parser.add_argument("--root", default=".",
-                        help="project root the corpus paths resolve "
-                             "against (default .)")
+                        help="project root the corpus rel_paths resolve "
+                             "against - pass the same --root "
+                             "audit_corpus.py used (e.g. data)")
     parser.add_argument("--corpus", required=True,
-                        help="corpus listing, resolved against --root: "
-                             "audit_corpus.py's corpus_files.csv, or a "
-                             "plain TSV of rel_path[\\tsha256] lines")
+                        help="corpus listing: audit_corpus.py's "
+                             "corpus_files.csv, or a plain TSV of "
+                             "rel_path[\\tsha256] lines; relative paths "
+                             "resolve against the current working "
+                             "directory (like --out)")
     parser.add_argument("--out", required=True,
                         help="output directory for candidate tables and "
                              "the receipt, resolved against the current "
@@ -581,7 +587,7 @@ def main(argv: list[str]) -> int:
     root = Path(args.root).resolve()
     corpus_path = Path(args.corpus)
     if not corpus_path.is_absolute():
-        corpus_path = root / corpus_path
+        corpus_path = Path.cwd() / corpus_path
     if not corpus_path.is_file():
         return _fail(f"corpus listing not found: {args.corpus}")
     listing = read_corpus_listing(str(corpus_path))
@@ -725,7 +731,7 @@ def main(argv: list[str]) -> int:
         "version": SCRIPT_VERSION,
         "generated_at": now_iso(),
         "inputs": {
-            "corpus": str(Path(args.corpus)),
+            "corpus": args.corpus,
             "corpus_sha256": sha256_file(str(corpus_path)),
             "listing_format": listing_meta["format"],
             "hash_algorithm": "+".join(sorted(hash_kinds)) or "none",

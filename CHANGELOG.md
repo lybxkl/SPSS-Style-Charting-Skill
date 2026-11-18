@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 2026-11-18 批次5：成稿适配（提交 8dcbd97 之上）
+
+- `assemble_manuscript.py` 三类新 block（成稿侧「只能去 Word 里手点」的三件事脚本化）：
+  - **交叉引用**：正文任何文本写 `[@tab:N]`/`[@fig:N]` → 渲染为指向表/图题书签（`_RefTabN`/`_RefFigN`）的 Word REF 域（`\h` 超链接），域带缓存文本「表N」——`verify_numbers.py` 在 F9 之前也能读到编号。表/图编号改为**预扫描两遍法**：先扫全部 blocks 定号（显式 `number` 优先、重复 exit 2）再渲染，前向引用（正文在表前说「见表2」）合法；引用不存在的编号 exit 2 报错，不把 `[@tab:9]` 原样印给读者。
+  - **参考文献**：`{"type": "references", "csv": ..., "title": ...}` 读一列 `text` 的 CSV——每条是研究者**已排好版式**的条目（GB/T 7714/APA/Vancouver 由研究者定，顺序=CSV 行序，脚本不替研究选样式）；悬挂缩进按字符（`w:hangingChars`，默认 2）+ 可选 `[n]` 编号（`numbering: bracket|none`）；条目支持 `{key}` 占位符；空行 exit 2、重复条目 WARNING 留痕。
+  - **目录**：`{"type": "toc", "levels": "1-3"}` 插入 Word TOC 域（fldSimple），域内缓存「打开后 Ctrl+A、F9 更新」提示——页码只有 Word 渲染时才知道，导 PDF 前必须更新域；levels 参数校验（低≤高）。
+- `pubfig.py` 新增两个纯 matplotlib 绘图函数（无新依赖）：
+  - `sankey(ax, left_labels, right_labels, matrix, ...)`：两列流向图，条带/节点高度严格按计数成比例（两列共用同一值-高度比例尺），负值/NaN/零总数/标签维度不符 ValueError 拒绝；
+  - `upset(ax_sizes, ax_matrix, ax_sets, set_labels, combos, sizes, ...)`：UpSet 交集图三轴布局（交集大小柱+成员矩阵+集合大小柱），校验组合非空/不重复/索引在界内/集合总数与组合一致，排序归调用方（不替数据排名）。
+- `auto_chart_pack.py`：CHART_CATALOG 新增 D 段两行 `flow_sankey`（两列类别交叉表计数，每侧 >8 类拒绝留痕不发明「其他」桶）与 `binary_upset`（≥2 个二元变量；≤5 个画全部非空交集，>5 只画单变量+两两交集并在图注/manifest 声明；含缺失行完整案例剔除并计数；不属于任何集合的观测不进图但写进图注；combos_shown/combos_total 进 chart_pack.json）；**`--width-cm`**（3–30，默认 15）全包统一改输出宽度，px_width 随宽度换算、600 dpi 不变；修复两个既有缺陷：①`group==treatment` 时 `df[[g,t]]` 双列同名使每处 `cell[g]` 变 DataFrame（C 段 Grouper 报错、D 段 ValueError: 2——现可见跳过/回退去重候选列）；②`outcome_group_treatment_heatmap` 对数据中不存在的 group×treatment 组合 `int(cnt.values.sum())` 遇 NaN 崩（现 N=完整案例三列计数）；③无图可出的运行此前不写 chart_pack.json（跳过台账全丢）——现 manifest/json/md 恒写、exit 3 语义不变。
+- `qa_outputs.py --min-fontsize` help 修正：默认**不启用**（帮助文本此前谎称 default 7.2；实际设计=始终测量并报告、只有显式传值才作为闸门，避免分辨率专项跑被字号误伤）。
+- 测试：test_assemble_manuscript 19→42 例（REF 域 XML/书签/缓存文本/前向引用/坏引用 exit 2/显式编号/占位符后交叉引用/悬挂缩进/编号开关/空行/缺列/缺 CSV/重复条目/TOC 域/坏 levels/提示文案）；test_chart_pack 新增 16 例（sankey 发图+caption、>8 类拒绝、group==treatment 不崩、UpSet 全组合/单二元跳过/集合大小数值断言/丢弃组合台账/非 0/1 拒绝、--width-cm 换算 px_width、越界拒绝、pubfig 级 upset 真值/单例推导/缺单例报错/重复索引/小数拒绝、sankey scale 守卫）。evals id27/28。
+- 文档：05 新增「交叉引用、参考文献与目录」节+组装器段落更新；07 图谱表+两行/SPSS 对照表两行/§3 选图表/「Sankey 与 UpSet 的边界」段（含 figsemantics 不自动覆盖这两类、集合大小=逐列真值、combos_total 语义、--figure-width-cm 同步提醒的诚实声明）+宽度段改口；SKILL.md blocks 类型清单+两个要点+脚本表两行。
+- 第一轮独立审计（batch5-audit）**有条件通过**：OOXML 经真实 Word 打开-更新域-重存全链路验证（REF 解析为书签文本、TOC 填充页码与超链接）、sankey 几何逐坐标手算全对、07 表与 CHART_CATALOG 程序化逐行全等、三处既有缺陷修复实测生效。1 重要+7 次要+8 建议全部修复：
+  - **#1（重要）UpSet 左面板集合大小数值错误**——原实现把显示中的重叠组合相加（同一行被计 2^(|M|-1) 次，可印出超过 N 的数；截断后非空集合可印 0）：改为 `binary_upsets` 从数据逐列传真 `set_totals`，pubfig.upset 的 set_totals 校验从「对账重叠和」（主动拒绝真值）改为真值权威+整数校验；无 set_totals 时只从单例组合推导（缺单例=报错要求数据）；重复索引组合与小数 sizes 拒绝；`dropped_combos`（名字+大小）与 `set_totals` 进 chart_pack.json；pubfig 级数值断言测试（3,3,2,1 案例与 N 上界）。
+  - #2 TOC 缓存提示「1-1-3」拼接错误→「域参数 1-3 级标题」；#3 近似笔误标记（`[@TAB:1]`/`[@tab: 1]`）静默照印→XREF_NEAR_MISS 双层守卫（spec 预扫描+_add_text 运行时），参考文献行同样覆盖；#4 书签 start 插在 pPr 前（CT_P 序违反，Word 容忍但严格校验器不保证）→插到 pPr 后；#5 references 行 XREF 逃过预扫描→运行时守卫；#6 声明式 binary 非 0/1 值（{1,2} 编码）静默误读→与 binary_prevalence 同口径拒绝留痕（字符串列「无法按数值读取」单独分账）；#7 sankey scale≤0（≥30 节点或 gap 过大）不报错画垃圾→ValueError+gap∈[0,1) 校验；#8 sankey 轴标签硬编码「来源/去向」→参数化（引擎不定义列语义）；#9 显式+自动混排非单调编号→WARNING；#10 截断丢弃组合 size 全丢→dropped_combos 台账；#12 组合内重复索引双计→拒绝；#13 节点总量 int() 截断→整数原样/小数保留；#14 05 缓存文本空格表述修正；#15 07 补 --figure-width-cm 同步句；#16 CHANGELOG 措辞+文件尾换行。
+
 ## 2026-11-18 批次4：统计现代化（提交 2549807 之上）
 
 - `auto_stats.py --spec` 支持五种模型类型与三项字段扩展，全部带类型归属校验（字段写错类型直接 exit 2，不静默忽略）：

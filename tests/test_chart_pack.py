@@ -505,5 +505,294 @@ class DegenerateCorrespondenceCase(TempCase):
         return fig
 
 
+class ModernChartsCase(TempCase):
+    """flow_sankey / binary_upset / --width-cm (batch 5)."""
+
+    def setUp(self):
+        super().setUp()
+        self.data = write_csv(self.p("x.csv"), HEADER, synthetic_rows())
+        self.cfg = self.p("cfg.json")
+        with open(self.cfg, "w", encoding="utf-8") as fh:
+            json.dump({"outcome": "outcome_binary"}, fh, ensure_ascii=False)
+
+    def out(self, name="out"):
+        return self.p(name)
+
+    def manifest(self, out_dir):
+        path = os.path.join(out_dir, "chart_manifest.csv")
+        self.assertTrue(os.path.isfile(path), path)
+        return read_csv(path)
+
+    def ok_row(self, out_dir, slug):
+        rows = self.manifest(out_dir)
+        hits = [r for r in rows if slug in r.get("png", "")]
+        self.assertTrue(hits, [r.get("id") + r.get("status", "") for r in rows])
+        return hits[0]
+
+    def test_sankey_emits_from_group_and_treatment(self):
+        cfg = self.p("cfg_gt.json")
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"outcome": "outcome_binary", "group": "region",
+                       "treatment": "stage"}, fh, ensure_ascii=False)
+        out = self.out("sankey")
+        proc = run(SCRIPT, "--data", self.data, "--out", out, "--config", cfg,
+                   "--only", "flow_sankey", "--min-n", "3")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        row = self.ok_row(out, "flow_sankey")
+        self.assertEqual(row["status"], "ok")
+        self.assertEqual(row["chart_type"], "sankey")
+        self.assertIn("stage", row["variables"])
+        self.assertIn("region", row["variables"])
+        self.assertIn("完整案例", row["caption"])
+        self.assertIn("计数成比例", row["caption"])
+        self.assertGreaterEqual(int(row["px_width"]), WIDTH_FLOOR)
+        self.assertTrue(os.path.isfile(os.path.join(out, row["png"])))
+
+    def skipped_list(self, out_dir):
+        with open(os.path.join(out_dir, "chart_pack.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+        return meta["skipped"]
+
+    def test_sankey_refuses_when_a_side_has_more_than_8_levels(self):
+        header = ["id", "region", "stage", "outcome_binary", "nine_cat", "amount"]
+        rows = []
+        for i in range(120):
+            rows.append({"id": f"C{i:03d}", "region": REGIONS[i % 3],
+                         "stage": STAGES[i % 3], "outcome_binary": i % 2,
+                         "nine_cat": f"类{i % 9}", "amount": 100 + i})
+        data = write_csv(self.p("wide.csv"), header, rows)
+        cfg = self.p("cfg_wide.json")
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"outcome": "outcome_binary", "group": "region",
+                       "treatment": "nine_cat"}, fh, ensure_ascii=False)
+        out = self.out("wide")
+        proc = run(SCRIPT, "--data", data, "--out", out, "--config", cfg,
+                   "--only", "flow_sankey", "--min-n", "3")
+        # the only requested chart was refused: the pack exits 3 (no charts),
+        # and the refusal reason is recorded in chart_pack.json
+        self.assertEqual(proc.returncode, 3, proc.stderr[-2000:])
+        reasons = [s["reason"] for s in self.skipped_list(out)]
+        self.assertTrue(any("类别过多" in r for r in reasons), reasons)
+        # nothing was drawn for it: no manifest row
+        self.assertFalse(any("flow_sankey" in r.get("png", "")
+                             for r in self.manifest(out)))
+
+    def test_sankey_with_same_group_and_treatment_column_does_not_crash(self):
+        # group == treatment made df[[g, t]] a two-column frame and every
+        # cell[g] a DataFrame; now it is a visible skip (C and G stages) and
+        # the sankey falls back to two distinct categoricals
+        cfg = self.p("cfg_same.json")
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"outcome": "outcome_binary", "group": "stage",
+                       "treatment": "stage"}, fh, ensure_ascii=False)
+        out = self.out("same")
+        proc = run(SCRIPT, "--data", self.data, "--out", out, "--config", cfg,
+                   "--only", "sample_by_group", "--min-n", "3")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        self.assertNotIn("Grouper", proc.stderr)
+
+    def test_upset_emits_all_combos_for_three_binaries(self):
+        header = ["id", "region", "outcome_binary", "flag_a", "flag_b"]
+        rows = []
+        for i in range(120):
+            rows.append({"id": f"C{i:03d}", "region": REGIONS[i % 3],
+                         "outcome_binary": i % 2, "flag_a": (i % 3 == 0) * 1,
+                         "flag_b": (i % 4 < 2) * 1})
+        data = write_csv(self.p("bin.csv"), header, rows)
+        out = self.out("upset")
+        proc = run(SCRIPT, "--data", data, "--out", out, "--config", self.cfg,
+                   "--only", "binary_upset", "--min-n", "3")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        row = self.ok_row(out, "binary_upset")
+        self.assertEqual(row["status"], "ok")
+        self.assertEqual(row["chart_type"], "UpSet")
+        self.assertIn("交集", row["caption"])
+        with open(os.path.join(out, "chart_pack.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+        entry = next(c for c in meta["charts"] if "binary_upset" in c.get("png", ""))
+        self.assertEqual(int(entry["combos_total"]), 7)  # 2^3 - 1 non-empty combos
+        self.assertEqual(int(entry["combos_shown"]), 7)
+
+    def test_upset_skips_with_a_single_binary(self):
+        out = self.out("one")
+        proc = run(SCRIPT, "--data", self.data, "--out", out, "--config", self.cfg,
+                   "--only", "binary_upset", "--min-n", "3")
+        self.assertEqual(proc.returncode, 3, proc.stderr[-2000:])
+        reasons = [s["reason"] for s in self.skipped_list(out)]
+        self.assertTrue(any("二元变量不足" in r for r in reasons), reasons)
+
+    def test_upset_caps_combos_and_notes_the_scope_for_many_binaries(self):
+        header = ["id", "region", "outcome_binary"] + [f"f{k}" for k in range(6)]
+        rows = []
+        for i in range(200):
+            row = {"id": f"C{i:03d}", "region": REGIONS[i % 3], "outcome_binary": i % 2}
+            for k in range(6):
+                row[f"f{k}"] = (i + k) % 2
+            rows.append(row)
+        data = write_csv(self.p("many.csv"), header, rows)
+        out = self.out("many")
+        proc = run(SCRIPT, "--data", data, "--out", out, "--config", self.cfg,
+                   "--only", "binary_upset", "--min-n", "3")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        row = self.ok_row(out, "binary_upset")
+        self.assertEqual(row["status"], "ok")
+        self.assertIn("两两交集", row["caption"])
+        self.assertIn("scope=", row.get("note", ""))
+        with open(os.path.join(out, "chart_pack.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+        entry = next(c for c in meta["charts"] if "binary_upset" in c.get("png", ""))
+        # prevalence binaries include the outcome column: 6 flags + outcome
+        # = 7 sets -> 7 singles + C(7,2) = 28 candidate combos
+        self.assertEqual(int(entry["combos_total"]), 28)
+        self.assertLessEqual(int(entry["combos_shown"]), 15)
+
+    def test_width_cm_rescales_every_chart(self):
+        out15 = self.out("w15")
+        out12 = self.out("w12")
+        for out, width in ((out15, "15"), (out12, "12")):
+            proc = run(SCRIPT, "--data", self.data, "--out", out,
+                       "--config", self.cfg, "--only", "sample_by_group",
+                       "--width-cm", width, "--min-n", "3")
+            self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        w15 = int(self.ok_row(out15, "sample_by_group")["px_width"])
+        w12 = int(self.ok_row(out12, "sample_by_group")["px_width"])
+        self.assertAlmostEqual(w15 / w12, 15 / 12, delta=0.06)
+        self.assertAlmostEqual(w15, 3543, delta=6)
+        self.assertAlmostEqual(w12, 2835, delta=6)
+
+    def test_width_cm_out_of_range_is_refused(self):
+        proc = run(SCRIPT, "--data", self.data, "--out", self.out("bad"),
+                   "--config", self.cfg, "--only", "sample_by_group",
+                   "--width-cm", "40")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("3-30", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
+
+class UpsetSankeySemanticsCase(TempCase):
+    """pubfig-level semantics for the batch-5 charts (audit round 1).
+
+    The CLI tests assert manifest rows; these assert the NUMBERS the figure
+    actually prints — the audit found the set-size panel drawing an
+    over-counted, sometimes >N value that no manifest-level test could see.
+    """
+
+    def axes(self):
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(6, 4))
+        gs = fig.add_gridspec(2, 2, height_ratios=[3, 2], width_ratios=[1, 3])
+        return (fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[1, 1]),
+                fig.add_subplot(gs[1, 0]))
+
+    def texts(self, ax):
+        return [t.get_text() for t in ax.texts]
+
+    def test_upset_set_panel_shows_true_set_sizes(self):
+        from pubfig import upset
+        # 4 sets; memberships: [1,1,1,1],[1,1,0,0],[1,0,0,0],[0,0,1,0],[0,1,0,0]
+        # true |S| = (3, 3, 2, 1); overlap-sum of the pairwise/single combos
+        # would print 11 for set 0 (the audit's failing example)
+        combos = [(0, 1), (0, 1, 2, 3), (0,), (2,), (1,), (0, 2), (0, 3), (1, 2)]
+        sizes = [1, 1, 1, 1, 1, 1, 1, 1]
+        ax_sizes, ax_matrix, ax_sets = self.axes()
+        upset(ax_sizes, ax_matrix, ax_sets, ["a", "b", "c", "d"], combos, sizes,
+              set_totals=(3, 3, 2, 1))
+        self.assertEqual(self.texts(ax_sets), ["3", "3", "2", "1"])
+
+    def test_upset_derives_totals_from_singletons_when_omitted(self):
+        from pubfig import upset
+        combos = [(0,), (1,), (0, 1)]
+        sizes = [5, 4, 2]
+        ax_sizes, ax_matrix, ax_sets = self.axes()
+        upset(ax_sizes, ax_matrix, ax_sets, ["a", "b"], combos, sizes)
+        self.assertEqual(self.texts(ax_sets), ["5", "4"])
+
+    def test_upset_without_singletons_demands_set_totals(self):
+        from pubfig import upset
+        combos = [(0, 1)]
+        ax_sizes, ax_matrix, ax_sets = self.axes()
+        with self.assertRaises(ValueError) as ctx:
+            upset(ax_sizes, ax_matrix, ax_sets, ["a", "b"], combos, [3])
+        self.assertIn("set_totals", str(ctx.exception))
+
+    def test_upset_rejects_repeated_set_index_in_a_combo(self):
+        from pubfig import upset
+        ax_sizes, ax_matrix, ax_sets = self.axes()
+        with self.assertRaises(ValueError):
+            upset(ax_sizes, ax_matrix, ax_sets, ["a", "b"], [(0, 0)], [5])
+
+    def test_upset_rejects_fractional_sizes(self):
+        from pubfig import upset
+        ax_sizes, ax_matrix, ax_sets = self.axes()
+        with self.assertRaises(ValueError):
+            upset(ax_sizes, ax_matrix, ax_sets, ["a", "b"], [(0,)], [3.7],
+                  set_totals=(5, 4))
+
+    def test_sankey_refuses_a_non_positive_scale(self):
+        from pubfig import sankey
+        import numpy as np
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(6, 4))
+        n = 30
+        with self.assertRaises(ValueError) as ctx:
+            sankey(ax, [f"l{i}" for i in range(n)], [f"r{i}" for i in range(n)],
+                   np.eye(n))
+        self.assertIn("scale", str(ctx.exception))
+
+    def test_binary_upset_records_true_set_totals_and_dropped_combos(self):
+        # >5 binaries: 6 flags + the binary outcome = 7 sets, 28 candidate
+        # combos, 13 dropped by the top-15 cap — the ledger the truncated
+        # figure cannot show must land in chart_pack.json
+        header = ["id", "region", "outcome_binary"] + [f"f{k}" for k in range(6)]
+        rows = []
+        for i in range(200):
+            row = {"id": f"C{i:03d}", "region": REGIONS[i % 3], "outcome_binary": i % 2}
+            for k in range(6):
+                row[f"f{k}"] = (i + k) % 2
+            rows.append(row)
+        data = write_csv(self.p("many.csv"), header, rows)
+        cfg = self.p("cfg.json")
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"outcome": "outcome_binary"}, fh, ensure_ascii=False)
+        out = self.p("out")
+        proc = run(SCRIPT, "--data", data, "--out", out, "--config", cfg,
+                   "--only", "binary_upset", "--min-n", "3")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-2000:])
+        with open(os.path.join(out, "chart_pack.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+        entry = next(c for c in meta["charts"] if "binary_upset" in c.get("png", ""))
+        self.assertEqual(int(entry["combos_total"]), 28)
+        self.assertEqual(len(entry["dropped_combos"]), 28 - int(entry["combos_shown"]))
+        # set totals are the true column sums from the data
+        import csv as _csv
+        with open(data, encoding="utf-8-sig", newline="") as fh:
+            data_rows = list(_csv.DictReader(fh))
+        expect = [sum(int(r[c]) for r in data_rows)
+                  for c in ["outcome_binary"] + [f"f{k}" for k in range(6)]]
+        self.assertEqual([int(t) for t in entry["set_totals"]], expect)
+        # every |S_i| <= N: the overlap-sum bug printed 131 for N=60 data
+        self.assertTrue(all(0 <= t <= len(data_rows) for t in entry["set_totals"]))
+
+    def test_declared_binary_with_non_01_values_is_skipped(self):
+        header = ["id", "region", "outcome_binary", "flag_x"]
+        rows = []
+        for i in range(120):
+            rows.append({"id": f"C{i:03d}", "region": REGIONS[i % 3],
+                         "outcome_binary": i % 2, "flag_x": 1 + (i % 2)})  # {1,2}
+        data = write_csv(self.p("coded.csv"), header, rows)
+        cfg = self.p("cfg_bin.json")
+        with open(cfg, "w", encoding="utf-8") as fh:
+            json.dump({"outcome": "outcome_binary", "binary": ["flag_x"]},
+                      fh, ensure_ascii=False)
+        out = self.p("out2")
+        proc = run(SCRIPT, "--data", data, "--out", out, "--config", cfg,
+                   "--only", "binary_upset", "--min-n", "3")
+        self.assertEqual(proc.returncode, 3, proc.stderr[-2000:])
+        with open(os.path.join(out, "chart_pack.json"), encoding="utf-8") as fh:
+            meta = json.load(fh)
+        reasons = [s["reason"] for s in meta["skipped"]]
+        self.assertTrue(any("非 0/1" in r for r in reasons), reasons)
+
+
 if __name__ == "__main__":
     unittest.main()

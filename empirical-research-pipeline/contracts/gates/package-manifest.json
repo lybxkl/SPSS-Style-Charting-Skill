@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "4f5d19b45e0b699313e7330bced6405df511120962ee5a8a872cfd562b7681fd"
+      "sha256": "f006362af870a4a926ce3ddf8c64958d4da7126bbcadc8a52bdd1efff9aaca00"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -78,7 +78,7 @@
     },
     {
       "path": "evals/evals.json",
-      "sha256": "ce963edd0add1404d9bd5e811c179cd5c0666a092f216cc8256d1710e5f3bb3d"
+      "sha256": "eaadef4bf3fb5a96bc7e3833b42b5201e3ef16c8d5fb3448c12acb6bbe1974ba"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -110,7 +110,7 @@
     },
     {
       "path": "references/05-manuscript-assembly.md",
-      "sha256": "c1acf2bec69d1d11a9419a7c908e9dac7c0b0caa8eaf09b991be0461ca475681"
+      "sha256": "1d8b1a99d5f6b20778db83ff8aefd1e9108889d445e503ad6b580ea106c22d02"
     },
     {
       "path": "references/06-qa-checklist.md",
@@ -118,7 +118,7 @@
     },
     {
       "path": "references/07-chart-atlas.md",
-      "sha256": "ed844e26ad438b04b80aea32dede49e4973d2b5b824eba5c241c39d2938051a7"
+      "sha256": "31c5c6b30a4b2bc8633bc48f86e73e2063c91e3ef45c35370fc25b8cfdcb66ac"
     },
     {
       "path": "references/08-analysis-expansion.md",
@@ -162,7 +162,7 @@
     },
     {
       "path": "scripts/assemble_manuscript.py",
-      "sha256": "3857e563199f6ccea396d358cf23705a2699ec05006d7c8d997c811edf48c420"
+      "sha256": "a02f24f51dd664fca25775062aeb3aa66e4340c3d7c2b5cdc740aa93efbf0655"
     },
     {
       "path": "scripts/audit_corpus.py",
@@ -174,7 +174,7 @@
     },
     {
       "path": "scripts/auto_chart_pack.py",
-      "sha256": "9ea87d3cc809fc91ca909f5342f01af03131e526e4790926f7fea433499907d6"
+      "sha256": "434f5969ea1336f37d8537e2930cdbc4d3945504f212c6dd31553be169068baf"
     },
     {
       "path": "scripts/auto_stats.py",
@@ -322,11 +322,11 @@
     },
     {
       "path": "scripts/pubfig.py",
-      "sha256": "4bf5204cce4b2767a52a046f15153ba0e5d9dc10d0cda72bf79a9d0ac5938a31"
+      "sha256": "ddd9115fa4d2a1f2d319909e04da0101070773e071f5e1e651914b0f29250c2e"
     },
     {
       "path": "scripts/qa_outputs.py",
-      "sha256": "9797e73a794d2b21d6daa8151ee67809e24d4f518ddfc0f408c99d50a8262064"
+      "sha256": "d770f0c87d3094c2f336eb3799d10796a53aa1fe068b1c6f070d41bae7dc0df6"
     },
     {
       "path": "scripts/refs.py",

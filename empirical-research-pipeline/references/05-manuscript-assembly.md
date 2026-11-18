@@ -12,7 +12,7 @@
 
 ## 先跑脚本，再改 Word
 
-`scripts/assemble_manuscript.py` 已经实现了下面这张表的全部排版项（三线表、行不跨页、表头重复、图题不可分页、中西文字体、按字符的首行缩进、页脚页码）。**能用脚本就用脚本**：手打一次表，表里的 N 和正文的 N 从此各有一份，`verify_numbers.py` 之后能查出来的只是"两个数字不一致"，查不出哪个对。
+`scripts/assemble_manuscript.py` 已经实现了下面这张表的全部排版项（三线表、行不跨页、表头重复、图题不可分页、中西文字体、按字符的首行缩进、页脚页码），外加交叉引用 REF 域、参考文献悬挂缩进与目录 TOC 域。**能用脚本就用脚本**：手打一次表，表里的 N 和正文的 N 从此各有一份，`verify_numbers.py` 之后能查出来的只是"两个数字不一致"，查不出哪个对。
 
 ```bash
 python scripts/assemble_manuscript.py --spec manuscript.json --out output/manuscript.docx \
@@ -20,6 +20,16 @@ python scripts/assemble_manuscript.py --spec manuscript.json --out output/manusc
 ```
 
 它同时产出 `<out>_numbers.csv`（本文档实际印出的每个 N，喂给 `verify_numbers.py --numbers`）与 `figure_map.json`（给 `export_pdf_hires.py` 回填原图用）。注意区分：`--numbers` 是**输入**（你提供的 key,value 表），`<out>_numbers.csv` 是**输出**（脚本记录了实际印出的值）。下面的排版参数是**脚本的默认值**，改 `style` 段即可覆盖。
+
+## 交叉引用、参考文献与目录（脚本能做的部分）
+
+`assemble_manuscript.py` 的 blocks 多了三类，正好是以前“只能去 Word 里手点”的三件事：
+
+- **交叉引用**：正文任何文本（para/note/caption/title）里写 `[@tab:2]` 或 `[@fig:1]`，脚本把它变成指向表/图题书签的 Word REF 域——Word 里按 F9 后编号永远跟表题一致，表挪了位、改了号，正文跟着变。编号采用**预扫描**：先扫全部 blocks 定表/图号（含显式 `number`，重复即报错），再渲染，所以前向引用（正文在表之前说“见表 2”）也能查、能渲染；引用不存在的编号直接 exit 2，近似笔误（`[@TAB:1]`、`[@tab: 1]`、`[ @tab:1]`）同样 exit 2——不把任何像标记的括号文本原样印给读者（参考文献行里的标记走同一套运行时守卫）。REF 域里带缓存文本「表2」（无空格），`verify_numbers.py` 读文档正文时在 F9 之前也能看到编号；F9 后 Word 渲染成「表 2」（带空格，纯观感差异）。
+- **参考文献**：`{"type": "references", "csv": "output/refs.csv", "title": "参考文献"}`。CSV 需要一列 `text`（每行一条**已排好版式**的条目，GB/T 7714 / APA / Vancouver 由你定，脚本不替你选）；条目文本支持 `{key}` 占位符（从 numbers 表取值）。排版=悬挂缩进按字符（`hanging_chars` 默认 2）+ 可选 `[1] [2]` 编号（`numbering: "bracket"|"none"`）；顺序=CSV 行序（引用顺序制还是著者制由你排）。空行报错、重复条目出 WARNING 不拦。
+- **目录**：`{"type": "toc", "levels": "1-3"}`——插入真正的 Word TOC 域，域里缓存一句“打开文档后按 Ctrl+A、F9 更新”的提示。**目录不是脚本算的**：页码只有 Word 渲染时才知道；导出 PDF 前必须先更新域，否则目录页只有那句提示。
+
+判断边界照旧：引哪篇文献、正文怎么引（`[1]` 还是「作者（年份）」）、目录放哪，都是研究者的决定；脚本只保证排版正确、编号不失联。
 
 ## 版式参数
 

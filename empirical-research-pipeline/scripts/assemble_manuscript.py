@@ -13,6 +13,9 @@ This script closes that hop. It reads a spec that names CSVs and PNGs, and write
     that repeats, figures placed at a fixed width, captions that cannot be
     separated from what they caption, CJK + Latin fonts set per run, first-line
     indent in characters (not centimetres), and a page number in the footer;
+    cross-reference fields ([@tab:2] / [@fig:1] in any text become Word REF
+    fields bound to the caption bookmarks), a bibliography block with hanging
+    indents, and a TOC field;
   * ``<out>_numbers.csv`` — every N the document actually printed, so the
     manuscript, the tables and the figures share one source for that number;
   * ``figure_map.json`` — what ``export_pdf_hires.py`` needs to replace Word's
@@ -20,6 +23,9 @@ This script closes that hop. It reads a spec that names CSVs and PNGs, and write
 
 Nothing here decides content. If a number is missing, the build fails: a caption
 that silently says "N=" with nothing after it is worse than a build that stops.
+The reference engine typesets entries; it does not format citations (the entry
+text and its order are the researcher's), and the TOC is a field Word fills on
+update — the cached note says so instead of shipping a blank page.
 
 Usage:
   python scripts/assemble_manuscript.py --spec manuscript.json \\
@@ -35,7 +41,7 @@ import os
 import re
 import sys
 
-SCRIPT_VERSION = "1.0.0"
+SCRIPT_VERSION = "1.1.0"
 
 try:
     from docx import Document
@@ -49,6 +55,16 @@ except ImportError as exc:  # pragma: no cover - depends on the host
     raise SystemExit(2)
 
 PLACEHOLDER = re.compile(r"\{([\w.\-]+)\}")
+# Cross-reference markers in any rendered text: [@tab:2] / [@fig:1] become a
+# Word REF field pointing at the caption bookmark, so the prose shows the
+# number Word itself keeps current. The marker form is deliberately distinct
+# from {key} number placeholders: [@tab:2] never pulls a value from numbers.csv.
+XREF = re.compile(r"\[@(tab|fig):(\d+)\]")
+# Near-miss shapes of the marker (wrong case, stray space): a typo'd marker
+# must fail the build, never ship as literal bracket text. Matches exactly the
+# marker family — [@anything] or [ @anything] — so it also catches the legal
+# form, which is then filtered by the XREF check.
+XREF_NEAR_MISS = re.compile(r"\[\s*@([^\]]*)\]")
 FIGURE_PX_MIN = 3543  # 15 cm at 600 dpi
 
 ALIGNS = {
@@ -184,6 +200,102 @@ def _add_page_field(paragraph) -> None:
     run._r.append(end)
 
 
+def _bookmark(paragraph, name: str, bid: int) -> None:
+    """Wrap the whole paragraph text range in a named bookmark.
+
+    REF fields resolve to the text inside the bookmark range, so the bookmark
+    covers exactly the runs already present in ``paragraph``. The start
+    element goes AFTER ``w:pPr``: CT_P requires pPr to be the first child,
+    and while Word tolerates it up front and re-normalises on save, other
+    consumers (strict validators) do not have to.
+    """
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), str(bid))
+    start.set(qn("w:name"), name)
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), str(bid))
+    p = paragraph._p
+    ppr = p.find(qn("w:pPr"))
+    if ppr is not None:
+        ppr.addnext(start)
+    else:
+        p.insert(0, start)
+    p.append(end)
+
+
+def _add_ref_field(paragraph, bookmark: str, cached: str, size_pt: float,
+                   bold: bool, cjk: str, latin: str) -> None:
+    """A REF field that hyperlinks to ``bookmark`` and shows ``cached`` until
+    Word updates fields.
+
+    begin / instr / separate / cached-text run / end: the cached text is a real
+    run, so tools that read the document text (verify_numbers.py) see 「表 2」
+    even before the first F9.
+    """
+    run = paragraph.add_run()
+    _set_fonts(run, cjk, latin)
+    run.font.size = Pt(size_pt)
+    run.bold = bold
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = f" REF {bookmark} \\h "
+    sep = OxmlElement("w:fldChar")
+    sep.set(qn("w:fldCharType"), "separate")
+    run._r.append(begin)
+    run._r.append(instr)
+    run._r.append(sep)
+    text_run = paragraph.add_run(cached)
+    _set_fonts(text_run, cjk, latin)
+    text_run.font.size = Pt(size_pt)
+    text_run.bold = bold
+    tail = paragraph.add_run()
+    _set_fonts(tail, cjk, latin)
+    tail.font.size = Pt(size_pt)
+    tail.bold = bold
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+    tail._r.append(end)
+
+
+def _add_toc_field(paragraph, levels: str, note: str, cjk: str, latin: str) -> None:
+    """A TOC field in a fldSimple wrapper with a readable cached note.
+
+    Word (and LibreOffice) only fill a TOC on field update; the cached note
+    tells the reader what to press instead of showing an empty page.
+    """
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), f' TOC \\o "{levels}" \\h \\z \\u ')
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    rfonts = OxmlElement("w:rFonts")
+    rfonts.set(qn("w:ascii"), latin)
+    rfonts.set(qn("w:hAnsi"), latin)
+    rfonts.set(qn("w:cs"), latin)
+    rfonts.set(qn("w:eastAsia"), cjk)
+    rpr.append(rfonts)
+    run.append(rpr)
+    text = OxmlElement("w:t")
+    text.set(qn("xml:space"), "preserve")
+    text.text = note
+    run.append(text)
+    fld.append(run)
+    paragraph._p.append(fld)
+
+
+def _set_hanging_indent(paragraph, chars: float, size_pt: float) -> None:
+    """Hanging indent in *characters* (w:hangingChars), the same way Word's
+    「悬挂缩进 2 字符」 stores it, so it survives body-size changes."""
+    ppr = paragraph._p.get_or_add_pPr()
+    ind = ppr.find(qn("w:ind"))
+    if ind is None:
+        ind = OxmlElement("w:ind")
+        ppr.append(ind)
+    ind.set(qn("w:hangingChars"), str(int(chars * 100)))
+    ind.set(qn("w:hanging"), str(int(round(size_pt * chars * 20))))
+
+
 # --------------------------------------------------------------------------- #
 # spec plumbing
 # --------------------------------------------------------------------------- #
@@ -314,8 +426,88 @@ class Builder:
         self.warnings: list[str] = []
         self.table_no = 0
         self.figure_no = 0
+        # Cross-reference plumbing: table/figure numbers are assigned in a
+        # pre-scan (respecting explicit "number" fields and rejecting
+        # duplicates), so prose that cites [@tab:2] BEFORE the table block can
+        # still be checked and rendered as a REF field.
+        self._tab_numbers, self._fig_numbers = self._assign_numbers()
+        self._tab_idx = 0
+        self._fig_idx = 0
+        self._bookmark_ids = 0
+        self._validate_xrefs()
         self.doc = Document()
         self._page_setup()
+
+    # -- numbering pre-scan --------------------------------------------------
+    def _assign_numbers(self) -> tuple[list[int], list[int]]:
+        blocks = self.spec.get("blocks") or []
+        tabs: list[int] = []
+        figs: list[int] = []
+        seen_t: set[int] = set()
+        seen_f: set[int] = set()
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue  # build() reports non-object blocks with its own error
+            if block.get("type") == "table":
+                tabs_count = len(tabs) + 1
+                number = int(block.get("number") or tabs_count)
+                if number in seen_t:
+                    raise SpecError(f"table number {number} is used twice; "
+                                    f"explicit 'number' fields must stay unique")
+                seen_t.add(number)
+                tabs.append(number)
+            elif block.get("type") == "figure":
+                figs_count = len(figs) + 1
+                number = int(block.get("number") or figs_count)
+                if number in seen_f:
+                    raise SpecError(f"figure number {number} is used twice; "
+                                    f"explicit 'number' fields must stay unique")
+                seen_f.add(number)
+                figs.append(number)
+        # explicit + auto numbering can interleave into non-monotonic order
+        # (表5 then 表2); that is legal (verify_numbers checks reference
+        # coverage, not order) but almost always a typo, so say it loudly
+        for word, seq in (("表", tabs), ("图", figs)):
+            if seq != sorted(seq):
+                self.warnings.append(
+                    f"{word}号按 blocks 顺序非单调：{('、'.join(f'{word}{n}' for n in seq))}"
+                    f"——若非有意，请检查显式 number 字段")
+        return tabs, figs
+
+    def _validate_xrefs(self) -> None:
+        """Every [@tab:N] / [@fig:N] in any rendered text must name a real
+        table/figure number, and anything that merely LOOKS like a marker
+        (wrong case, stray space) must fail too: a typo'd reference shipping
+        literal bracket text is worse than a stopped build."""
+        blocks = self.spec.get("blocks") or []
+        for index, block in enumerate(blocks):
+            if not isinstance(block, dict):
+                continue
+            for key in ("text", "caption", "note", "title"):
+                raw = block.get(key)
+                if not isinstance(raw, str):
+                    continue
+                where = f"block {index} ({key})"
+                self._check_xref_text(raw, where)
+
+    def _check_xref_text(self, text: str, where: str) -> None:
+        for m in XREF.finditer(text):
+            kind, number = m.group(1), int(m.group(2))
+            known = self._tab_numbers if kind == "tab" else self._fig_numbers
+            if number not in known:
+                word = "表" if kind == "tab" else "图"
+                raise SpecError(
+                    f"{where}: {m.group(0)} cites {word}{number}, but the "
+                    f"manuscript has no {word} numbered {number}"
+                )
+        for m in XREF_NEAR_MISS.finditer(text):
+            token = m.group(0)
+            if not XREF.fullmatch(token):
+                raise SpecError(
+                    f"{where}: {token!r} looks like a cross-reference marker but "
+                    f"does not match [@tab:N] / [@fig:N] (lowercase, no spaces); "
+                    f"fix the marker or remove the brackets"
+                )
 
     # -- document scaffolding ------------------------------------------------
     def _page_setup(self) -> None:
@@ -353,6 +545,43 @@ class Builder:
         _set_fonts(run, cjk or self.style["body_cjk"], latin or self.style["body_latin"])
         return run
 
+    def _add_text(self, paragraph, text: str, size_pt: float, bold: bool = False,
+                  cjk: str | None = None, latin: str | None = None):
+        """Add ``text`` (already {key}-resolved) as runs, turning every
+        [@tab:N]/[@fig:N] marker into a REF field run group.
+
+        The runtime guard re-checks every marker against the assigned numbers
+        and rejects near-miss shapes: this is the path the references CSV
+        takes, and its rows never see the spec-level pre-scan.
+        """
+        if not text:
+            return
+        cjk = cjk or self.style["body_cjk"]
+        latin = latin or self.style["body_latin"]
+        pos = 0
+        for m in XREF.finditer(text):
+            if m.start() > pos:
+                self._run(paragraph, text[pos:m.start()], size_pt, bold=bold,
+                          cjk=cjk, latin=latin)
+            kind, number = m.group(1), int(m.group(2))
+            known = self._tab_numbers if kind == "tab" else self._fig_numbers
+            if number not in known:
+                word = "表" if kind == "tab" else "图"
+                raise SpecError(
+                    f"{word}{number} is cited here but the manuscript has no "
+                    f"{word} numbered {number}")
+            word = "表" if kind == "tab" else "图"
+            _add_ref_field(paragraph, f"_Ref{'Tab' if kind == 'tab' else 'Fig'}{number}",
+                           f"{word}{number}", size_pt, bold, cjk, latin)
+            pos = m.end()
+        if pos < len(text):
+            self._run(paragraph, text[pos:], size_pt, bold=bold, cjk=cjk, latin=latin)
+        for m in XREF_NEAR_MISS.finditer(text):
+            if not XREF.fullmatch(m.group(0)):
+                raise SpecError(
+                    f"{m.group(0)!r} looks like a cross-reference marker but "
+                    f"does not match [@tab:N] / [@fig:N]")
+
     def _para(self, text: str, *, size_pt: float, align: str = "justify",
               indent_chars: int = 0, space_before: float = 0.0,
               space_after: float = 0.0, line_spacing: float | None = None,
@@ -368,7 +597,7 @@ class Builder:
         if indent_chars:
             _set_indent_chars(paragraph, indent_chars, size_pt)
         if text:
-            self._run(paragraph, text, size_pt, bold=bold, cjk=cjk, latin=latin)
+            self._add_text(paragraph, text, size_pt, bold=bold, cjk=cjk, latin=latin)
         return paragraph
 
     # -- block types ---------------------------------------------------------
@@ -414,14 +643,16 @@ class Builder:
 
     def add_table(self, block: dict) -> None:
         rows, cols, path = read_table(block, self.base_dir, getattr(self, "root", None))
+        if self._tab_idx >= len(self._tab_numbers):
+            raise SpecError("table numbering desync: more table blocks than pre-scanned")
+        number = self._tab_numbers[self._tab_idx]
+        self._tab_idx += 1
         self.table_no += 1
-        number = int(block.get("number") or self.table_no)
         caption = self._text(block, "caption")
         n_value = self._n_value(block, f"表 {number}", f"table{number}_n")
-        self._caption(
-            f"表 {number}  {caption}" + (f"（N={n_value}）" if n_value else ""),
-            keep_with_next=True,
-        )
+        self._caption("tab", number,
+                      "  " + caption + (f"（N={n_value}）" if n_value else ""),
+                      keep_with_next=True)
 
         table = self.doc.add_table(rows=1, cols=len(cols))
         table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -474,8 +705,11 @@ class Builder:
         full = resolve_asset(path, getattr(self, "root", None) or self.base_dir, self.base_dir)
         if not os.path.exists(full):
             raise SpecError(f"figure image not found: {full}")
+        if self._fig_idx >= len(self._fig_numbers):
+            raise SpecError("figure numbering desync: more figure blocks than pre-scanned")
+        number = self._fig_numbers[self._fig_idx]
+        self._fig_idx += 1
         self.figure_no += 1
-        number = int(block.get("number") or self.figure_no)
         width_cm = block.get("width_cm")
         text_width = getattr(self, "text_width_cm", 15.0)
         if width_cm is None:
@@ -507,10 +741,9 @@ class Builder:
 
         caption = self._text(block, "caption")
         n_value = self._n_value(block, f"图 {number}", f"fig{number}_n")
-        self._caption(
-            f"图 {number}  {caption}" + (f"（N={n_value}）" if n_value else ""),
-            keep_with_next=bool(self._text(block, "note", required=False)),
-        )
+        self._caption("fig", number,
+                      "  " + caption + (f"（N={n_value}）" if n_value else ""),
+                      keep_with_next=bool(self._text(block, "note", required=False)))
         note = self._text(block, "note", required=False)
         if note:
             self._para(note, size_pt=self.style["note_size_pt"], align="left",
@@ -520,10 +753,109 @@ class Builder:
         )
 
     # -- helpers -------------------------------------------------------------
-    def _caption(self, text: str, keep_with_next: bool):
-        return self._para(text, size_pt=self.style["caption_size_pt"], align="center",
-                          space_before=6, space_after=3, line_spacing=1.15,
-                          keep_with_next=keep_with_next)
+    def _caption(self, kind: str, number: int, tail: str,
+                 keep_with_next: bool):
+        """A caption paragraph whose 「表 N」/「图 N」 prefix is bookmarked, so
+        prose REF fields can cite the number Word keeps current."""
+        word = "表" if kind == "tab" else "图"
+        paragraph = self.doc.add_paragraph()
+        pf = paragraph.paragraph_format
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        pf.space_before = Pt(6)
+        pf.space_after = Pt(3)
+        pf.line_spacing = 1.15
+        pf.keep_with_next = keep_with_next
+        size = self.style["caption_size_pt"]
+        self._run(paragraph, f"{word} {number}", size)
+        self._bookmark_ids += 1
+        _bookmark(paragraph, f"_Ref{'Tab' if kind == 'tab' else 'Fig'}{number}",
+                  self._bookmark_ids)
+        self._add_text(paragraph, tail, size)
+        return paragraph
+
+    def add_references(self, block: dict) -> None:
+        """A bibliography section from a CSV of already-formatted entries.
+
+        The engine typesets (hanging indent, optional [n] numbering) but does
+        not format citations: every entry's text is the researcher's own
+        GB/T 7714 / APA / Vancouver string, and the order is the CSV's order.
+        """
+        title = block.get("title")
+        if title:
+            self.add_heading({"level": int(block.get("level", 1)),
+                              "text": str(title)})
+        rows, path = self._read_reference_rows(block)
+        numbering = block.get("numbering", "bracket")
+        if numbering not in ("bracket", "none"):
+            raise SpecError("references numbering must be 'bracket' or 'none'")
+        hanging = float(block.get("hanging_chars", 2))
+        if not 0 <= hanging <= 10:
+            raise SpecError("references hanging_chars must be within 0-10")
+        size = float(block.get("size_pt") or self.style["note_size_pt"])
+        for i, text in enumerate(rows, start=1):
+            paragraph = self.doc.add_paragraph()
+            pf = paragraph.paragraph_format
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            pf.space_after = Pt(3)
+            pf.line_spacing = 1.2
+            _set_hanging_indent(paragraph, hanging, size)
+            prefix = f"[{i}] " if numbering == "bracket" else ""
+            if prefix:
+                self._run(paragraph, prefix, size)
+            self._add_text(paragraph, text, size)
+        if len(rows) > 1:
+            seen = {}
+            for i, text in enumerate(rows, start=1):
+                if text in seen:
+                    self.warnings.append(
+                        f"references rows {seen[text]} and {i} are identical: "
+                        f"{text[:60]}…")
+                else:
+                    seen[text] = i
+
+    def _read_reference_rows(self, block: dict) -> tuple[list[str], str]:
+        path = block.get("csv")
+        if not path:
+            raise SpecError("references block needs 'csv'")
+        full = resolve_asset(path, getattr(self, "root", None) or self.base_dir,
+                             self.base_dir)
+        if not os.path.exists(full):
+            raise SpecError(f"references CSV not found: {full}")
+        from verify_dataset import read_csv
+        try:
+            header, rows = read_csv(full)
+        except ValueError as exc:
+            raise SpecError(str(exc)) from exc
+        if "text" not in header:
+            raise SpecError(
+                f"references CSV needs a 'text' column; available: {', '.join(header)}")
+        texts = []
+        for i, row in enumerate(rows, start=2):
+            text = (row.get("text") or "").strip()
+            if not text:
+                raise SpecError(f"references CSV row {i} has an empty text")
+            where = f"references row {i}"
+            texts.append(resolve_text(text, self.numbers, where))
+        if not texts:
+            raise SpecError(f"references CSV has no rows: {full}")
+        return texts, full
+
+    def add_toc(self, block: dict) -> None:
+        """A Table of Contents field. Word fills it on field update; the
+        cached note says so instead of shipping a blank page."""
+        levels = str(block.get("levels", "1-3"))
+        if not re.fullmatch(r"[1-9]-[1-9]", levels) or int(levels[0]) > int(levels[-1]):
+            raise SpecError("toc levels must look like '1-3' with low <= high")
+        paragraph = self.doc.add_paragraph()
+        paragraph.paragraph_format.space_before = Pt(6)
+        paragraph.paragraph_format.space_after = Pt(3)
+        _add_toc_field(
+            paragraph, levels,
+            f"（目录域：打开文档后按 Ctrl+A 全选、F9 更新；域参数 {levels} 级标题）",
+            self.style["body_cjk"], self.style["body_latin"])
+        self._para("注：本页为 Word 目录域，导出 PDF 前务必先更新域，否则目录为空。",
+                   size_pt=self.style["note_size_pt"], align="left",
+                   space_after=6, line_spacing=1.15)
 
     def _text(self, block: dict, key: str, required: bool = True) -> str:
         raw = block.get(key)
@@ -557,6 +889,8 @@ class Builder:
                 "note": self.add_note,
                 "table": self.add_table,
                 "figure": self.add_figure,
+                "references": self.add_references,
+                "toc": self.add_toc,
                 "pagebreak": self.add_pagebreak,
             }.get(kind)
             if handler is None:

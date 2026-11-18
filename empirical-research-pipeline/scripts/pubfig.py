@@ -2371,3 +2371,215 @@ def kaplan_meier(ax, time: Iterable[float], event: Iterable,
     style_axis(ax, "both")
     if group is not None:
         ax.legend(frameon=False, fontsize=7.4, loc="best")
+
+
+def _fmt_total(v: float) -> str:
+    """A node total as text: integral counts stay integers (12, not 12.0);
+    genuinely fractional totals keep their digits (12.7, not 12)."""
+    v = float(v)
+    return str(int(v)) if v.is_integer() else f"{v:g}"
+
+
+def sankey(ax, left_labels: Sequence[str], right_labels: Sequence[str],
+           matrix: Sequence[Sequence[float]], colors: Sequence[str] | None = None,
+           gap: float = 0.035, alpha: float = 0.55,
+           label_totals: bool = True,
+           left_axis_label: str = "来源", right_axis_label: str = "去向") -> None:
+    """Two-column flow diagram (Sankey): ribbons between category columns.
+
+    ``matrix[i][j]`` is the count flowing from left node ``i`` to right node
+    ``j``. Ribbon and node heights are proportional to the counts; nothing is
+    smoothed, curved or interpolated — a ribbon's area is the data. The axis
+    labels default to a flow reading (来源/去向); callers override them when
+    the columns mean something else — the engine does not decide semantics.
+
+    Raises ValueError on negative/NaN counts, empty sides, a zero total, a
+    non-positive scale (too many nodes for this gap), or a shape mismatch:
+    those are statistics failures, not drawing decisions.
+    """
+    from matplotlib.patches import Polygon
+    mat = np.asarray(matrix, dtype=float)
+    if mat.ndim != 2 or mat.shape[0] != len(left_labels) or mat.shape[1] != len(right_labels):
+        raise ValueError("sankey matrix shape does not match the labels")
+    if mat.size == 0 or not len(left_labels) or not len(right_labels):
+        raise ValueError("sankey needs both sides non-empty")
+    if not np.isfinite(mat).all() or (mat < 0).any():
+        raise ValueError("sankey counts must be finite and non-negative")
+    if not 0 <= gap < 1:
+        raise ValueError("sankey gap must be within [0, 1)")
+    left_tot = mat.sum(axis=1)
+    right_tot = mat.sum(axis=0)
+    grand = float(mat.sum())
+    if grand <= 0:
+        raise ValueError("sankey total is zero; nothing to draw")
+    palette = list(colors or CATEGORICAL)
+    n_l, n_r = len(left_labels), len(right_labels)
+    gaps = gap * (n_l - 1), gap * (n_r - 1)
+    # scale: both columns share one value-per-height unit so widths are
+    # comparable across the two sides
+    scale = (1.0 - max(gaps)) / grand
+    if scale <= 0:
+        raise ValueError(
+            f"sankey scale is non-positive with {n_l} x {n_r} nodes at gap={gap}: "
+            f"reduce the node count or the gap")
+    left_h = left_tot * scale
+    right_h = right_tot * scale
+    left_y = np.empty(n_l)
+    right_y = np.empty(n_r)
+    cur = 1.0
+    for i in range(n_l):
+        left_y[i] = cur - left_h[i]
+        cur = cur - left_h[i] - gap
+    cur = 1.0
+    for j in range(n_r):
+        right_y[j] = cur - right_h[j]
+        cur = cur - right_h[j] - gap
+    node_w = 0.035
+    for i in range(n_l):
+        col = palette[i % len(palette)]
+        ax.add_patch(Polygon([[0, left_y[i]], [node_w, left_y[i]],
+                              [node_w, left_y[i] + left_h[i]], [0, left_y[i] + left_h[i]]],
+                             closed=True, facecolor=col, edgecolor="none", zorder=3))
+        label = str(left_labels[i])
+        if label_totals:
+            label = f"{label}（{_fmt_total(left_tot[i])}）"
+        ax.text(-0.03, left_y[i] + left_h[i] / 2, label, ha="right", va="center",
+                fontsize=7.4, color=INK)
+    # ribbons: stack each left node's outflows and each right node's inflows
+    cursor_l = left_y.copy()
+    cursor_r = right_y.copy()
+    for i in range(n_l):
+        for j in range(n_r):
+            v = float(mat[i, j])
+            if v <= 0:
+                continue
+            h = v * scale
+            y_l0, y_l1 = cursor_l[i], cursor_l[i] + h
+            y_r0, y_r1 = cursor_r[j], cursor_r[j] + h
+            cursor_l[i] += h
+            cursor_r[j] += h
+            col = palette[i % len(palette)]
+            ax.add_patch(Polygon([[node_w, y_l0], [1 - node_w, y_r0],
+                                  [1 - node_w, y_r1], [node_w, y_l1]],
+                                 closed=True, facecolor=col, edgecolor="none",
+                                 alpha=alpha, zorder=2))
+    for j in range(n_r):
+        col = GRAY
+        ax.add_patch(Polygon([[1 - node_w, right_y[j]], [1, right_y[j]],
+                              [1, right_y[j] + right_h[j]], [1 - node_w, right_y[j] + right_h[j]]],
+                             closed=True, facecolor=col, edgecolor="none", zorder=3))
+        label = str(right_labels[j])
+        if label_totals:
+            label = f"{label}（{_fmt_total(right_tot[j])}）"
+        ax.text(1.03, right_y[j] + right_h[j] / 2, label, ha="left", va="center",
+                fontsize=7.4, color=INK)
+    ax.set_xlim(-0.55, 1.55)
+    ax.set_ylim(-0.03, 1.03)
+    ax.set_xticks([0.0, 1.0])
+    ax.set_xticklabels([left_axis_label, right_axis_label])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(axis="x", length=0)
+
+
+def upset(ax_sizes, ax_matrix, ax_sets, set_labels: Sequence[str],
+           combos: Sequence[Sequence[int]], sizes: Iterable[int],
+           set_totals: Sequence[int] | None = None,
+           color: str = BLUE, dot_color: str = ORANGE,
+           max_label_chars: int = 28) -> None:
+    """UpSet plot: intersection-size bars, membership matrix, set-size bars.
+
+    ``combos[k]`` is the tuple of set indices present in intersection ``k``
+    (overlapping semantics: the other sets are "don't care"); ``sizes[k]`` its
+    count. The left panel shows **the true size of each set** — the caller,
+    who owns the data, passes ``set_totals``; when it is omitted the totals
+    are derived from singleton combos only, and a set whose singleton is not
+    among the combos is an error (summing overlapping combos would double
+    count rows 2^(|M|-1) times and print numbers that exceed the sample).
+
+    All three axes are mandatory; the caller owns the GridSpec. Sorting is
+    the caller's decision (usually descending size) — this function draws, it
+    does not rank.
+
+    Raises ValueError on negative/fractional sizes, empty or duplicated
+    combos, combos with a repeated set index, out-of-range indices, or
+    set_totals that cannot be drawn honestly.
+    """
+    raw_sizes = np.asarray(list(sizes), dtype=float)
+    if len(combos) != len(raw_sizes):
+        raise ValueError("upset needs one size per combo")
+    if len(set_labels) == 0 or not combos:
+        raise ValueError("upset needs sets and at least one intersection")
+    if not np.isfinite(raw_sizes).all() or (raw_sizes < 0).any():
+        raise ValueError("upset sizes must be finite and non-negative")
+    if any(abs(s - round(s)) > 1e-9 for s in raw_sizes):
+        raise ValueError("upset sizes must be whole counts")
+    sizes = raw_sizes.round().astype(int)
+    combos = [tuple(int(i) for i in c) for c in combos]
+    if any(len(c) == 0 for c in combos):
+        raise ValueError("upset combos must name at least one set")
+    if len(set(combos)) != len(combos):
+        raise ValueError("upset combos must be distinct")
+    for c in combos:
+        if len(set(c)) != len(c):
+            raise ValueError(f"upset combo {c} repeats a set index")
+        if any(i < 0 or i >= len(set_labels) for i in c):
+            raise ValueError("upset combo references a set that does not exist")
+    n_sets = len(set_labels)
+    if set_totals is None:
+        singleton = {c[0]: int(s) for c, s in zip(combos, sizes) if len(c) == 1}
+        missing = [str(set_labels[i]) for i in range(n_sets) if i not in singleton]
+        if missing:
+            raise ValueError(
+                "upset cannot derive set sizes for " + ", ".join(missing)
+                + ": their singleton combos are not among the displayed combos "
+                  "(summing overlapping combos would double-count rows); "
+                  "pass set_totals from the data")
+        totals = np.array([singleton[i] for i in range(n_sets)], dtype=int)
+    else:
+        given = np.asarray(list(set_totals), dtype=float)
+        if given.shape != (n_sets,):
+            raise ValueError("upset set_totals length does not match set_labels")
+        if not np.isfinite(given).all() or (given < 0).any() or \
+                any(abs(t - round(t)) > 1e-9 for t in given):
+            raise ValueError("upset set_totals must be finite non-negative whole counts")
+        totals = given.round().astype(int)
+    labels = [str(s)[:max_label_chars] for s in set_labels]
+    x = np.arange(len(combos))
+    # top: intersection sizes
+    ax_sizes.bar(x, sizes, width=0.62, color=color, edgecolor="none", zorder=2)
+    for xi, s in zip(x, sizes):
+        ax_sizes.text(xi, s, f"{int(s)}", ha="center", va="bottom", fontsize=7.2,
+                      color=INK)
+    ax_sizes.set_xticks([])
+    ax_sizes.set_ylabel("交集大小")
+    style_axis(ax_sizes, "y")
+    ax_sizes.set_xlim(-0.6, len(combos) - 0.4)
+    # bottom left: membership matrix
+    for k, c in enumerate(combos):
+        rows = list(c)
+        if len(rows) > 1:
+            ax_matrix.plot([k, k], [min(rows), max(rows)], color=LGRAY,
+                           linewidth=1.0, zorder=1)
+        ax_matrix.scatter([k] * len(rows), rows, s=16, color=dot_color, zorder=2,
+                          linewidths=0)
+    ax_matrix.set_yticks(np.arange(n_sets))
+    ax_matrix.set_yticklabels(labels, fontsize=7.4)
+    ax_matrix.set_xticks([])
+    ax_matrix.set_xlim(-0.6, len(combos) - 0.4)
+    ax_matrix.set_ylim(-0.6, n_sets - 0.4)
+    ax_matrix.invert_yaxis()
+    for spine in ax_matrix.spines.values():
+        spine.set_visible(False)
+    # bottom right: true set sizes (mirrored, growing leftwards)
+    y = np.arange(n_sets)
+    ax_sets.barh(y, -totals, height=0.62, color=color, edgecolor="none", zorder=2)
+    for yi, t in zip(y, totals):
+        ax_sets.text(-t - 0.1, yi, f"{int(t)}", ha="right", va="center",
+                     fontsize=7.2, color=INK)
+    ax_sets.set_yticks([])
+    ax_sets.set_xlim(-max(int(totals.max()), 1) * 1.28, 0)
+    ax_sets.set_xlabel("集合大小", fontsize=7.4)
+    ax_sets.tick_params(axis="x", labelsize=7.2)
+    style_axis(ax_sets, "x")

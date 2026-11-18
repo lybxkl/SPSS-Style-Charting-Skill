@@ -565,7 +565,7 @@ python scripts/assemble_manuscript.py --spec manuscript.json --out output/manusc
   --numbers output/manuscript_numbers.csv   # 你写：key,value 两列（{key} 的来源）
 ```
 
-`manuscript.json` 的 `blocks` 逐段声明 `title`/`authors`/`heading`/`para`/`note`/`table`/`figure`/`pagebreak`。表格与图都**引用文件而不是复制数值**：
+`manuscript.json` 的 `blocks` 逐段声明 `title`/`authors`/`heading`/`para`/`note`/`table`/`figure`/`references`/`toc`/`pagebreak`。表格与图都**引用文件而不是复制数值**：
 
 ```json
 {"type": "table", "csv": "output/tables/table1.csv", "caption": "罪名与修复责任",
@@ -579,6 +579,9 @@ python scripts/assemble_manuscript.py --spec manuscript.json --out output/manusc
 ```
 
 - `{key}` 从 `--numbers` 取；**取不到就报错停下**，不会印出半个 `N=`。
+- 正文里的 `[@tab:2]`/`[@fig:1]` 渲染成指向表/图题书签的 Word REF 域（支持前向引用；引用不存在的编号 exit 2）。导出 PDF 前记得全选+更新域。
+- `{"type": "references", "csv": "...", "title": "参考文献"}`：CSV 一列 `text`，每行一条你已排好版式的条目（GB/T 7714 / APA 由你定）；悬挂缩进+可选 `[n]` 编号，顺序=CSV 行序。
+- `{"type": "toc", "levels": "1-3"}`：Word 目录域；页码由 Word 更新域后生成，导 PDF 前必须 F9，否则目录页只有提示文字。
 - 脚本同时写 `<out>_numbers.csv`（本文档实际印出的每个 N，键为 `table1_n`/`fig1_n`）——这是**输出**，与输入的 `--numbers` 不是同一个文件；`verify_numbers.py --numbers` 吃的就是这个输出。
 - `figure_map.json` 供下一步回填 600 dpi 原图；图默认按**正文栏宽**放置（A4 + 3.17 cm 边距 = 14.66 cm，不是 15 cm），显式给 `width_cm` 超过栏宽会报错而不是悄悄压扁。
 - Word 排版细节（图题与下段同页、表格行不跨页、表头重复）由脚本写进 docx，不要手工再设一遍，否则会与脚本的设置打架。
@@ -660,7 +663,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source） |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |
-| `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |
+| `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；交叉引用 `[@tab:N]`/`[@fig:N]` 渲染为 Word REF 域（前向引用可查、坏引用 exit 2）、参考文献块（悬挂缩进+可选编号）、目录 TOC 域；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |
 | `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗按链单调（`note` 写 `funnel=名` 分链） |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
@@ -668,7 +671,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/auto_stats.py` | 自动描述统计、组间检验、相关、单变量模型（多分类自变量哑变量化）、完全分离检查；`--spec` 多变量层支持 logit/ols/mixed/cox/logrank + 交互项、抽样权重、多重插补（Rubin 合并） |
 | `scripts/methods_lib.py` | 十六种方法的统计内核（描述/正态性/卡方/t/ANOVA/事后/相关/OLS/Logit/PCA/EFA/信度/效度/聚类/判别/时序/中介/Kano/非参数）；SEM 显式拒绝 |
 | `scripts/methods_pack.py` | 按 `methods.json` 跑 1–16 号方法（另加非参数与二元 Logit）：前置条件不满足即 `skipped` 并给替代，产出 `methods_report.md`/`methods_manifest.csv`/每法一图 |
-| `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存图与 manifest；默认不设总图数上限 |
+| `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存/Sankey/UpSet 图与 manifest；默认不设总图数上限；`--width-cm` 全包统一改输出宽度（3–30，px_width 随宽度换算） |
 | `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型；`compose_figure()` 组装多面板并回读 PNG 校验 dpi |
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
 | `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |

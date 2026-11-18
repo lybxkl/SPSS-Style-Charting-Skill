@@ -13,7 +13,7 @@
 
 `auto_chart_pack.py` 默认 `--max-charts 0` **不限制总图数**，图数随变量、模型和跳过项变化，以 `chart_manifest.csv` 为准。正数预算是明确的试跑/分批选择，超出数会在 stdout 报 limited；交付前必须按完整模型清单继续补齐。自动图包是初始工具，Agent 按需要自写/选择其他图形实现。
 
-所有图统一 **15 cm 宽**（`FIG_W = 15/2.54 in`，600 dpi 下 `px_width = 3543`，方图也是一样），高度随内容变；默认三种格式 `png + pdf + tiff`，`--no-tiff` 可回到只出 `png + pdf`。
+所有图默认 **15 cm 宽**（`FIG_W = 15/2.54 in`，600 dpi 下 `px_width = 3543`，方图也是一样），高度随内容变；默认三种格式 `png + pdf + tiff`，`--no-tiff` 可回到只出 `png + pdf`。要按期刊栏宽改输出宽度时用 `--width-cm`（3–30；例如双栏排版的单栏图 `--width-cm 8.3`），全包统一生效，`px_width` 随宽度换算（600 dpi 不变）。
 
 下表就是脚本里的 `CHART_CATALOG`，`--list-charts` 打印的是同一份清单；改代码时请同步改这张表，**图型、slug、触发条件以代码为准**。
 
@@ -50,6 +50,8 @@
 | D | `pca_loadings` | PCA loadings heatmap | 哪些变量在主轴上的载荷最高？ | 数值变量 ≥3 |
 | D | `cluster_dendrogram` | dendrogram | 样本/变量是否形成自然聚类？ | 数值变量 ≥2 且 N≥min-n |
 | D | `cluster_mds` | classical MDS | 样本在低维相似性空间中是否分离？ | 同上且重复行 <25% |
+| D | `flow_sankey` | sankey | 两个类别之间的样本流向与规模如何？ | 两列类别变量（每侧 ≤8 类） |
+| D | `binary_upset` | UpSet | 多个二元状态的共现与交集结构如何？ | ≥2 个二元变量（≤5 个画全组合，更多只到两两） |
 | E 时间 | `sample_trend` | bar | 各年份样本量如何变化？ | 时间变量 |
 | E | `outcome_trend` | line + 95%CI | 结果比例随年份如何变化？ | 二分类结果 |
 | E | `outcome_control` | p control chart | 结果比例是否出现超出 3σ 的异常年份？ | 二分类结果且 ≥3 个年份 |
@@ -77,6 +79,8 @@
 - `--max-charts N` 限制张数（默认 0=不限制）；`--top-n` 控制图内类别展示，`--min-n` 控制最小分析单元；展示取舍不替代全量明细与模型覆盖。
 
 模型图需要 `--coef`（系数表）或 `--pred`（预测表）；没有就跳过，并在清单里写明原因。`--coef` 的列名同时接受 `term`/`estimate`+`ci_low`/`ci_high`、`or`/`or_low`/`or_high`（`beta`/`beta_low`/`beta_high` 亦可），建议带 `metric`（OR/HR/RR/beta）与 `n` —— 没有 `metric` 时按每一行实际填了哪族列来定：`or*`→OR（对数轴，参考线 1）、`hr*`→HR、`rr*`→RR，只有 `beta` 的行走线性轴（参考线 0）。**同一个文件里混排 logit 行与 OLS 行不会丢行**：按 `metric`（或按行实测的列族）分组，各自成图，图名在多尺度时追加后缀；该图的 `metric`、`rows_plotted`、`rows_dropped` 写进 `chart_pack.json` 与 `chart_pack.md`，有未绘行时图注也会注明。`--pred` 支持 0/1 与“是/否”标签，常数预测或单一类别会跳过 ROC/PR/校准/混淆矩阵/Lift。`term_labels` 可把模型项名映射为中文。双比例哑铃图需在 config 的 `dumbbell` 里指定两个 0/1 列。小样本下脚本宁可不画，也不画误导性组间比较。有随访时间与事件列时，用 `--survival-time`、`--survival-event`（可选 `--survival-group`）画 Kaplan–Meier；参数缺失、列名不存在或绘图失败只会在 manifest 的 `status` 里注明 skipped，不会中断整包。
+
+**Sankey 与 UpSet 的边界**：`flow_sankey` 画的是两个类别变量交叉表的完整计数（完整案例），条带与节点高度严格按计数成比例，不发明“其他”桶——每侧类别超过 8 个就拒绝并留痕，先看 `sample_by_group`。`binary_upset` 画二元状态共现：≤5 个二元变量画全部非空交集，更多只画单变量与两两交集并在图注声明；**左面板的「集合大小」是各状态的真实样本量（从数据逐列计数，不是把显示中的组合相加——组合是重叠语义，相加会把同一行计 2^k 次、印出超过 N 的数）**；含缺失的行按完整案例剔除并计数；“不属于任何集合”的观测不进图但写进图注；被 top-15 截断的组合名与大小记进 `chart_pack.json` 的 `dropped_combos`（`combos_total` 记**候选组合数**——>5 个二元变量时=单变量+两两，不是全部 2^k−1）。改过 `--width-cm` 的包，终检 `qa_outputs.py` 要同步传 `--figure-width-cm`（默认 15），否则按 15 cm 折算会误报 dpi。这两类图的语义对账（`figsemantics` 目前只覆盖柱高/误差线/散点数等基础图）不自动覆盖 Sankey/UpSet，交付前人工核对图与表的一致。
 
 **样本对齐**：配置里的 `filter_query` 必须和论文分析样本完全一致。示例：`in_analysis == 1 and stage > 0` 得到 1,200；漏掉 `stage > 0` 会得到 1,260。图 N 与表 N 不一致，通常就是这里漏了条件。
 
@@ -108,6 +112,8 @@
 | 聚类树状图/冰柱图 | 样本/变量聚类 | 分析→分类→系统聚类 | `scipy.cluster.hierarchy` | 说明距离/连接法 |
 | 多维尺度 MDS | 相似性空间 | 分析→降维→MDS | `classical_mds`（纯 numpy） | 解释解释率；不要声称应力值 |
 | 对应分析 | 类别×类别 | 分析→降维→对应分析 | `auto_chart_pack.correspondence` | 只作探索 |
+| Sankey 流向图 | 两类别间流向 | （SPSS 无原生入口） | `flow_sankey`（pubfig `sankey`） | 每侧 ≤8 类；条带高度=计数 |
+| UpSet 交集图 | 多集合共现 | （SPSS 无原生入口） | `binary_upset`（pubfig `upset`） | 优于维恩图（集合 >3 时） |
 | 多重对应分析 | 多类别变量 | 分析→降维→多重对应 | `prince`/`sklearn` | 类别多时慎用 |
 | TURF 分析 | 组合覆盖 | 自定义表/语法 | 自定义 | 市场研究常用 |
 | 词云/文本网络 | 文本主题 | 文本分析 | `wordcloud`/`networkx` | 不能替代编码 |
@@ -126,9 +132,10 @@ SPSS 原生没有“森林图/小提琴图/相关热图”的标准入口时，�
 | 连续×连续 | 散点+拟合 | hexbin、散点矩阵 | 大 N 不透明散点 |
 | 时间×连续 | 线图+CI | 面积图 | 平滑掩盖波动 |
 | 时间×分类 | 100% 堆叠柱/面积 | 分面线图 | 双 Y 轴误导 |
-| 多变量 | 相关热图、PCA、聚类 | 平行坐标 | 把相关当因果 |
+| 多变量 | 相关热图、PCA、聚类、UpSet（二元共现） | 平行坐标、Sankey（类别流向） | 把相关当因果 |
 | 二分类预测 | ROC、校准、混淆矩阵 | lift/gain | 只报准确率 |
 | 生存数据 | Kaplan-Meier、Cox | 累积风险 | 忽略删失 |
+| 两个类别之间的流动 | Sankey | 100% 堆叠（构成对比） | 3D 桑基、类别 >8 的桑基 |
 
 ## 4. 按分析问题扩展
 

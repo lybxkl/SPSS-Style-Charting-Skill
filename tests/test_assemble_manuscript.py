@@ -240,5 +240,246 @@ class TestSpecSurface(AssemblerCase):
         self.assertIn('w:firstLineChars="200"', xml)
 
 
+class TestCrossReferences(AssemblerCase):
+    def doc_xml(self, blocks):
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            return zf.read("word/document.xml").decode("utf-8")
+
+    def test_xref_becomes_ref_field_with_cached_text(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "para", "text": "结果见[@tab:1]，细节见[@tab:2]。"},
+            {"type": "table", "csv": csv_path, "caption": "其一"},
+            {"type": "table", "csv": csv_path, "caption": "其二"},
+        ]
+        xml = self.doc_xml(blocks)
+        self.assertIn('<w:instrText xml:space="preserve"> REF _RefTab1 \\h </w:instrText>', xml)
+        self.assertIn('<w:instrText xml:space="preserve"> REF _RefTab2 \\h </w:instrText>', xml)
+        # cached display text is a real run, so text readers see 表 1 before F9
+        self.assertIn("表1", xml)
+        self.assertIn('w:name="_RefTab1"', xml)
+        self.assertIn('w:name="_RefTab2"', xml)
+
+    def test_forward_reference_before_the_table_works(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "para", "text": "先说结论（[@fig:1]）。"},
+            {"type": "figure", "png": make_png(self.p("f.png"), 3543, 2000),
+             "caption": "主图"},
+        ]
+        xml = self.doc_xml(blocks)
+        self.assertIn('<w:instrText xml:space="preserve"> REF _RefFig1 \\h </w:instrText>', xml)
+        self.assertIn('w:name="_RefFig1"', xml)
+
+    def test_xref_to_missing_number_is_fatal(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "para", "text": "见[@tab:9]。"},
+            {"type": "table", "csv": csv_path, "caption": "唯一"},
+        ]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("[@tab:9]", result.stderr)
+        self.assertIn("表9", result.stderr)
+
+    def test_duplicate_explicit_table_numbers_are_fatal(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "table", "csv": csv_path, "caption": "a", "number": 3},
+            {"type": "table", "csv": csv_path, "caption": "b", "number": 3},
+        ]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("used twice", result.stderr)
+
+    def test_explicit_number_drives_bookmark_and_caption(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "para", "text": "见[@tab:5]。"},
+            {"type": "table", "csv": csv_path, "caption": "编号表", "number": 5},
+        ]
+        xml = self.doc_xml(blocks)
+        self.assertIn('w:name="_RefTab5"', xml)
+        self.assertIn("表5", xml)
+
+    def test_xref_after_placeholder_resolution(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "para", "text": "样本 {n_total} 人，见[@tab:1]。"},
+            {"type": "table", "csv": csv_path, "caption": "t"},
+        ]
+        argv = self.spec(blocks, numbers={"n_total": "1,689"})
+        result = run("assemble_manuscript.py", *argv)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+        self.assertIn("1,689", xml)
+        self.assertIn('<w:instrText xml:space="preserve"> REF _RefTab1 \\h </w:instrText>', xml)
+
+
+class TestReferences(AssemblerCase):
+    def refs_csv(self, rows, name="refs.csv"):
+        # each entry is ONE cell; csv.writer.writerow(string) would write
+        # every character as its own cell
+        return write_csv(self.p(name), ["text"], [[r] for r in rows])
+
+    def test_references_typeset_with_hanging_indent_and_numbering(self):
+        csv_path = self.refs_csv([
+            "作者A. 标题一[J]. 期刊, 2020, 1(1): 1-10.",
+            "作者B. 标题二[M]. 出版社, 2019.",
+        ])
+        blocks = [{"type": "references", "title": "参考文献", "csv": csv_path}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+        self.assertIn('w:hangingChars="200"', xml)
+        self.assertIn("参考文献", xml)
+        self.assertIn("[1] ", xml)
+        self.assertIn("[2] ", xml)
+
+    def test_numbering_none_omits_the_bracket(self):
+        csv_path = self.refs_csv(["一条参考文献。"])
+        blocks = [{"type": "references", "csv": csv_path, "numbering": "none"}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+        self.assertNotIn("[1] ", xml)
+        self.assertIn("一条参考文献", xml)
+
+    def test_reference_text_resolves_placeholders(self):
+        csv_path = self.refs_csv(["样本源于 {n_total} 份材料。"])
+        blocks = [{"type": "references", "csv": csv_path}]
+        argv = self.spec(blocks, numbers={"n_total": "500"})
+        result = run("assemble_manuscript.py", *argv)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+        self.assertIn("样本源于 500 份材料", xml)
+
+    def test_empty_reference_row_is_fatal(self):
+        csv_path = self.refs_csv(["", "第二条"])
+        blocks = [{"type": "references", "csv": csv_path}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("row 2", result.stderr)
+
+    def test_missing_text_column_is_fatal(self):
+        csv_path = write_csv(self.p("bad.csv"), ["cite"], [["x"]])
+        blocks = [{"type": "references", "csv": csv_path}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("'text' column", result.stderr)
+
+    def test_missing_references_csv_is_fatal(self):
+        blocks = [{"type": "references", "csv": "nope.csv"}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("nope.csv", result.stderr)
+
+    def test_duplicate_entries_warn_but_build(self):
+        csv_path = self.refs_csv(["同一条。", "同一条。"])
+        blocks = [{"type": "references", "csv": csv_path}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("identical", result.stderr)
+
+
+class TestToc(AssemblerCase):
+    def test_toc_field_is_written_with_levels(self):
+        blocks = [{"type": "toc", "levels": "1-2"},
+                  {"type": "heading", "level": 1, "text": "一、引言"},
+                  {"type": "para", "text": "正文。"}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+        self.assertIn('w:instr=" TOC \\o &quot;1-2&quot; \\h \\z \\u "', xml)
+        self.assertIn("更新", xml)
+
+    def test_bad_levels_range_is_fatal(self):
+        blocks = [{"type": "toc", "levels": "3-1"}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("levels", result.stderr)
+
+    def test_toc_hint_does_not_double_the_level_range(self):
+        blocks = [{"type": "toc"}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.p("out", "manuscript.docx")) as zf:
+            xml = zf.read("word/document.xml").decode("utf-8")
+        self.assertIn("域参数 1-3", xml)
+        self.assertNotIn("1-1-3", xml)
+
+
+class TestCrossReferenceStrictness(AssemblerCase):
+    """Audit round 1: typo'd markers must fail, not ship as bracket text."""
+
+    def near_miss(self, marker):
+        csv_path = self.table_csv()
+        blocks = [{"type": "para", "text": f"见{marker}。"},
+                  {"type": "table", "csv": csv_path, "caption": "t"}]
+        return run("assemble_manuscript.py", *self.spec(blocks))
+
+    def test_uppercase_marker_is_fatal(self):
+        result = self.near_miss("[@TAB:1]")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("[@TAB:1]", result.stderr)
+
+    def test_marker_with_space_is_fatal(self):
+        result = self.near_miss("[@tab: 1]")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("[@tab: 1]", result.stderr)
+
+    def test_marker_with_leading_space_is_fatal(self):
+        result = self.near_miss("[ @tab:1]")
+        self.assertEqual(result.returncode, 2)
+
+    def test_reference_row_xref_to_missing_table_is_fatal(self):
+        # references rows are rendered through the same REF machinery but
+        # are invisible to the spec-level pre-scan: the runtime guard there
+        # is what catches them
+        csv_path = self.table_csv()
+        refs = write_csv(self.p("refs.csv"), ["text"],
+                         [[f"某研究引用了[@tab:9]。"]])
+        blocks = [{"type": "references", "csv": refs},
+                  {"type": "table", "csv": csv_path, "caption": "t"}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("表9", result.stderr)
+
+    def test_reference_row_typoed_marker_is_fatal(self):
+        refs = write_csv(self.p("refs.csv"), ["text"],
+                         [[f"另见[@Fig:1]。"]])
+        blocks = [{"type": "references", "csv": refs}]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("[@Fig:1]", result.stderr)
+
+    def test_mixed_explicit_and_auto_numbering_warns(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "table", "csv": csv_path, "caption": "a", "number": 5},
+            {"type": "table", "csv": csv_path, "caption": "b"},
+        ]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("非单调", result.stderr)
+
+    def test_monotonic_explicit_numbering_does_not_warn(self):
+        csv_path = self.table_csv()
+        blocks = [
+            {"type": "table", "csv": csv_path, "caption": "a", "number": 2},
+            {"type": "table", "csv": csv_path, "caption": "b", "number": 3},
+        ]
+        result = run("assemble_manuscript.py", *self.spec(blocks))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("非单调", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

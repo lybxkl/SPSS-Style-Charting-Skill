@@ -987,9 +987,12 @@ def main() -> int:
     parser.add_argument("--figure-width-cm", type=float, default=15.0,
                         help="printed width used to compute figure dpi")
     parser.add_argument("--min-fontsize", type=float, default=None,
-                        help="minimum text size in pt after placement (default 7.2; "
-                             "giving it explicitly also turns bitmap/no_text_layer "
-                             "figures into errors, 0 disables)")
+                        help="minimum text size in pt after placement. Default: NOT "
+                             "enforced — the size is always measured and reported, but a "
+                             "run that was not asked about it must not fail on type. Pass "
+                             "7.2 to enforce the publication floor for the final QA "
+                             "(this also turns bitmap/no_text_layer figures into errors); "
+                             "0 disables")
     parser.add_argument("--target-width-cm", type=float, default=None,
                         help="width the PDF is placed at when computing effective pt "
                              "(default: --figure-width-cm; 0 disables scaling)")

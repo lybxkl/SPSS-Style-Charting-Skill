@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -44,6 +45,7 @@ from pubfig import (  # noqa: E402
     stacked_area, bubble,
     pie_chart, qq_plot, control_chart, dendrogram_plot, classical_mds,
     mds_plot, pr_curve, lift_chart, confusion_heatmap, kaplan_meier,
+    sankey, upset,
     short_label as _pubfig_short_label,
     BLUE, ORANGE, GRAY, LGRAY, INK, CATEGORICAL,
 )
@@ -53,6 +55,21 @@ from analysis_utils import (  # noqa: E402
 )
 
 FIG_W = 15 / 2.54  # 15 cm text width, A4 with standard margins
+
+
+def set_fig_width(cm: float) -> float:
+    """Override the pack's figure width (module-level ``FIG_W``).
+
+    Every ``figsize=(FIG_W, ...)`` in this module resolves the global at call
+    time, so one call before the stages run retargets the whole pack. 3-30 cm
+    keeps it on a printable page; anything else is a configuration error.
+    """
+    global FIG_W
+    cm = float(cm)
+    if not 3.0 <= cm <= 30.0:
+        raise ValueError(f"width must be 3-30 cm, got {cm}")
+    FIG_W = cm / 2.54
+    return FIG_W
 
 # No default cap. A positive --max-charts is an explicit preview budget.
 MAX_CHARTS = 0  # unlimited by default; a positive preview budget is explicit
@@ -307,6 +324,8 @@ CHART_CATALOG = [
     ("D", "pca_loadings", "PCA loadings heatmap", "哪些变量在主轴上的载荷最高？", "数值变量 ≥3"),
     ("D", "cluster_dendrogram", "dendrogram", "样本/变量是否形成自然聚类？", "数值变量 ≥2 且 N≥min-n"),
     ("D", "cluster_mds", "classical MDS", "样本在低维相似性空间中是否分离？", "同上且重复行 <25%"),
+    ("D", "flow_sankey", "sankey", "两个类别之间的样本流向与规模如何？", "两列类别变量（每侧 ≤8 类）"),
+    ("D", "binary_upset", "UpSet", "多个二元状态的共现与交集结构如何？", "≥2 个二元变量（≤5 个画全组合，更多只到两两）"),
     ("E", "sample_trend", "bar", "各年份样本量如何变化？", "时间变量"),
     ("E", "outcome_trend", "line + 95%CI", "结果比例随年份如何变化？", "二分类结果"),
     ("E", "outcome_control", "p control chart", "结果比例是否出现超出 3σ 的异常年份？", "二分类结果且 ≥3 个年份"),
@@ -1125,7 +1144,9 @@ class ChartPack:
                           [treatment, outcome], int(sum(x[4] for x in rows)),
                           self.caption(f"按 {self.vlabel(treatment)} 分组；误差线为 95% Wilson CI"))
 
-        if group and treatment:
+        if group and treatment and group != treatment:
+            # same-column group/treatment roles would make df[[group, treatment]]
+            # two same-named columns and every cell[...] a DataFrame
             cell = self.df[[group, treatment]].dropna()
             keep_g = cell[group].value_counts()
             keep_g = keep_g[keep_g >= self.min_n].head(self.top_n).index
@@ -1161,6 +1182,10 @@ class ChartPack:
                     cnt = cnt.loc[piv.index]
                     piv = piv.where(cnt >= self.min_n)
                     if piv.notna().sum().sum() >= 4:
+                        # absent group x treatment combinations leave NaN cells in
+                        # the count pivot; the manifest N is the complete-case
+                        # count of the three columns, not a sum over NaN
+                        n_cells = int(self.df[[group, treatment, outcome]].dropna().shape[0])
                         fig, ax = plt.subplots(figsize=(FIG_W, max(3.2, 0.42 * len(piv) + 1.2)))
                         heatmap(ax, piv.values * 100,
                                 [self.glabel(x, group) for x in piv.index],
@@ -1168,7 +1193,7 @@ class ChartPack:
                         ax.set_xlabel(self.vlabel(treatment))
                         self.save(fig, "outcome_group_treatment_heatmap", "C 双变量",
                                   "类别×阶段的结果率是否存在结构差异？", "heatmap",
-                                  [group, treatment, outcome], int(cnt.values.sum()),
+                                  [group, treatment, outcome], n_cells,
                                   self.caption(f"单元格为{self.vlabel(outcome)}比例（%）；n<{self.min_n} 的格子留空"))
 
         if outcome and region:
@@ -1522,9 +1547,144 @@ class ChartPack:
                   cols + ([group] if group else []), len(dat),
                   self.caption("经典 MDS（欧氏距离）；颜色为分组变量；仅作探索性展示"))
 
+    def flow_sankey(self, categorical, group, treatment):
+        """Two-column flow diagram of the crosstab between two category
+        variables. The counts are complete-case and include every level the
+        data has (no 'other' bucket is invented); >8 levels per side is
+        refused as unreadable rather than truncated."""
+        question = "两个类别之间的样本流向与规模如何？"
+        left, right = treatment, group
+        if not (left and right and left != right):
+            # one column may hold both the group and the treatment role; a
+            # duplicate in the pool would make df[[left, right]] two same-named
+            # columns and pd.Series(cell[left]) a DataFrame, so dedupe first
+            candidates = [c for c in categorical
+                          if 2 <= self.df[c].nunique(dropna=True) <= 8
+                          and c not in (left, right)]
+            pool = list(dict.fromkeys([c for c in (left, right) + tuple(candidates) if c]))
+            if len(pool) < 2:
+                self.skip("D 多变量", question, "没有两列都合适的类别变量")
+                return
+            left, right = pool[0], pool[1]
+        cell = self.df[[left, right]].dropna()
+        left_levels = list(pd.Series(cell[left]).value_counts().index)
+        right_levels = list(pd.Series(cell[right]).value_counts().index)
+        if len(left_levels) > 8 or len(right_levels) > 8:
+            self.skip("D 多变量", question,
+                      f"类别过多（{left}={len(left_levels)} 类 / {right}={len(right_levels)} 类，"
+                      f"Sankey 每侧最多 8 类；先看 sample_by_group 类别构成）")
+            return
+        if len(cell) < self.min_n or len(left_levels) < 2 or len(right_levels) < 2:
+            self.skip("D 多变量", question,
+                      f"完整案例不足（N={len(cell)} < {self.min_n}）或类别数不足")
+            return
+        tab = pd.crosstab(cell[left], cell[right])
+        tab = tab.reindex(index=left_levels, columns=right_levels, fill_value=0)
+        fig, ax = plt.subplots(figsize=(FIG_W, max(2.8, 0.55 * (len(left_levels) + len(right_levels)) + 1.0)))
+        sankey(ax,
+               [self.glabel(v, left) for v in left_levels],
+               [self.glabel(v, right) for v in right_levels],
+               tab.values,
+               colors=self.group_colors(left, left_levels))
+        self.save(fig, "flow_sankey", "D 多变量",
+                  question, "sankey",
+                  [left, right], len(cell),
+                  self.caption(f"{self.vlabel(left)} → {self.vlabel(right)} 的样本计数（完整案例）；"
+                               "条带高度与计数成比例"))
+
+    def binary_upsets(self, binaries):
+        """UpSet of binary co-occurrences. <=5 binaries get every non-empty
+        intersection; more are capped at singletons and pairwise (the note
+        says so). Rows with any missing value are dropped complete-case and
+        counted in the caption. The left panel shows each set's TRUE size
+        from the data (not a sum over overlapping combos, which double
+        counts)."""
+        question = "多个二元状态的共现与交集结构如何？"
+        cols = [c for c in binaries or [] if c in self.df.columns
+                and not is_constant(self.df[c])]
+        if len(cols) < 2:
+            self.skip("D 多变量", question, "二元变量不足 2 个")
+            return
+        raw = self.df[cols]
+        dat = raw.apply(pd.to_numeric, errors="coerce")
+        unreadable = [c for c in cols if dat[c].isna().all() and raw[c].notna().any()]
+        if unreadable:
+            self.skip("D 多变量", question,
+                      "二元列无法按数值读取（非 0/1 也不是数字）：" + "、".join(unreadable))
+            return
+        bad = [c for c in cols if dat[c].dropna().astype(float)
+               .apply(lambda v: v not in (0.0, 1.0)).any()]
+        if bad:
+            self.skip("D 多变量", question,
+                      "存在非 0/1 值，不能作为二元状态（与 binary_prevalence 同口径）：" + "、".join(bad))
+            return
+        dat = dat.dropna()
+        if len(dat) < self.min_n:
+            self.skip("D 多变量", question, f"完整案例不足（N={len(dat)} < {self.min_n}）")
+            return
+        if len(cols) <= 5:
+            combos = [tuple(c) for k in range(1, len(cols) + 1)
+                      for c in itertools.combinations(range(len(cols)), k)]
+            scope = "全部非空交集"
+        else:
+            combos = [(i,) for i in range(len(cols))]
+            combos += [tuple(c) for c in itertools.combinations(range(len(cols)), 2)]
+            scope = "单变量与两两交集（>5 个二元变量时不画高阶交集）"
+        memberships = dat.values.astype(int)
+        set_totals = memberships.sum(axis=0)  # true |S_i| from the data
+        sizes = []
+        for combo in combos:
+            m = np.ones(len(memberships), dtype=bool)
+            for i in combo:
+                m &= memberships[:, i] == 1
+            sizes.append(int(m.sum()))
+        combos_total = len(combos)
+        order = sorted(range(len(combos)), key=lambda k: -sizes[k])
+        shown = order[:15]
+        dropped = [
+            {"sets": "+".join(self.vlabel(cols[i]) for i in combos[k]),
+             "size": int(sizes[k])}
+            for k in order[15:]
+        ]
+        combos = [combos[k] for k in shown]
+        sizes = [sizes[k] for k in shown]
+        if not any(s > 0 for s in sizes):
+            self.skip("D 多变量", question, "所有交集大小均为 0")
+            return
+        none_count = int((memberships.sum(axis=1) == 0).sum())
+        fig = plt.figure(figsize=(FIG_W, max(3.0, 0.52 * len(cols) + 1.8)))
+        gs = fig.add_gridspec(2, 2, height_ratios=[3, 2],
+                              width_ratios=[1.15, 2.6],
+                              hspace=0.06, wspace=0.02)
+        ax_sizes = fig.add_subplot(gs[0, 1])
+        ax_matrix = fig.add_subplot(gs[1, 1])
+        ax_sets = fig.add_subplot(gs[1, 0])
+        upset(ax_sizes, ax_matrix, ax_sets,
+              [self.vlabel(c) for c in cols], combos, sizes,
+              set_totals=set_totals)
+        extra = {"combos_shown": len(combos), "combos_total": combos_total,
+                 "set_totals": [int(t) for t in set_totals]}
+        if dropped:
+            # the ledger the reader cannot see on the truncated figure
+            extra["dropped_combos"] = dropped
+        note = f"scope={scope}; combos_total={combos_total}（候选组合数）"
+        caption = self.caption(
+            f"二元状态交集结构（完整案例 N={len(dat)}"
+            + (f"，另有 {len(self.df) - len(dat)} 行含缺失被剔除" if len(dat) < len(self.df) else "")
+            + f"；{scope}"
+            + (f"；不属于任何集合的观测 {none_count} 行未入图" if none_count else "")
+            + "；左图为各状态的真实样本量）")
+        self.save(fig, "binary_upset", "D 多变量",
+                  question, "UpSet", cols, len(dat), caption,
+                  note=note, extra=extra)
+
     def correspondence(self, group, treatment):
         if not group or not treatment:
             self.skip("G 附录", "类别与处理阶段是否存在对应结构？", "缺少分组或处理变量")
+            return
+        if group == treatment:
+            self.skip("G 附录", "类别与处理阶段是否存在对应结构？",
+                      "分组与处理变量是同一列，交叉表无意义")
             return
         cell = self.df[[group, treatment]].dropna()
         keep_g = cell[group].value_counts()
@@ -2088,6 +2248,9 @@ def main() -> int:
     parser.add_argument("--survival-time", default=None, help="follow-up time column for Kaplan-Meier")
     parser.add_argument("--survival-event", default=None, help="event/censor column (1=event, 0=censor)")
     parser.add_argument("--survival-group", default=None, help="group column for Kaplan-Meier")
+    parser.add_argument("--width-cm", type=float, default=15.0,
+                        help="figure width in cm for every chart (3-30; "
+                             "default 15 = A4 text column at 3.17 cm margins)")
     parser.add_argument("--tiff", dest="tiff", action="store_true", default=True,
                         help="写 LZW TIFF（默认开启；这是默认行为，保留该开关只为兼容旧命令）")
     parser.add_argument("--no-tiff", dest="tiff", action="store_false",
@@ -2235,6 +2398,11 @@ def main() -> int:
     formats = ["png", "pdf"] + (["tiff"] if args.tiff else [])
     if args.n_scope:
         cfg["n_scope"] = args.n_scope
+    try:
+        set_fig_width(args.width_cm)
+    except (TypeError, ValueError) as exc:
+        print(f"ERROR: invalid --width-cm: {exc}", file=sys.stderr)
+        return 2
     set_style()
     key_cols = []
     for col in [outcome_col, group_col, treatment_col, time_col, id_col] + numeric[:4]:
@@ -2292,20 +2460,14 @@ def main() -> int:
     stage("D 多变量", pack.multivariate, multivariate_numeric, group_col, treatment_col)
     stage("D 多变量", pack.pca, numeric, group_col)
     stage("D 多变量", pack.clustering, numeric, group_col)
+    stage("D 多变量", pack.flow_sankey, categorical, group_col, treatment_col)
+    stage("D 多变量", pack.binary_upsets, prevalence_binaries)
     stage("E 时间", pack.time_trends, time_col, outcome_col, treatment_col)
     stage("F 模型", pack.model_charts, args.coef, args.pred)
     stage("F 模型", pack.survival, cfg)
     stage("G 附录", pack.correspondence, group_col, treatment_col)
     stage("G 附录", pack.appendix, group_col)
     counts = pack.status_counts()
-    if counts["ok"] == 0:
-        hint = ""
-        if pack.filtered:
-            hint = ("（--only/--sections 过滤掉了全部图："
-                    f"only={split_multi(args.only)} sections={split_multi(args.sections)}）")
-        print("ERROR: no charts could be generated; check data columns and filter"
-              + hint, file=sys.stderr)
-        return 3
 
     meta = {
         "data": os.path.abspath(args.data), "n": len(df),
@@ -2340,6 +2502,14 @@ def main() -> int:
           f"  manifest rows: {len(pack.manifest)}")
     print(f"manifest: {mpath}")
     print(f"figures: {pack.fig_dir}")
+    if counts["ok"] == 0:
+        hint = ""
+        if pack.filtered:
+            hint = ("（--only/--sections 过滤掉了全部图："
+                    f"only={split_multi(args.only)} sections={split_multi(args.sections)}）")
+        print("ERROR: no charts could be generated; check data columns and filter"
+              + hint, file=sys.stderr)
+        return 3
     return 2 if total_errors else 0
 
 

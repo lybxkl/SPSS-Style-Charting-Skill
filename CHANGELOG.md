@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-11-18 批次2：核实溯源强化
+
+- claims 语义硬化：子句级否定检查（长程否定中「并没有因此出现明显的上升」、英含缩合否定 didn't/wasn't 整族）与指代主语检查（该效应/此/it 开头的 cue 句）——机器解不开的 cue 从判定中拿掉，报 `cue_negation`/`anaphora` 警告（warning 级、不改论断状态）转人工读句；相邻否定窗对 never/缩合形统一路由到子句过滤器，宁可警告不可静默。因果检测力代价（否定词把因果判定降为警告）已在 14 文档点名，复核 `claims review` 须覆盖此类句子。
+- 新增 scripts/sample_review.py 结构化抽样复核协议：draw 种子必填、分层（--strata 列 + needs_review 强制第二维度）、--n/--rate 互斥、--min-per-stratum 保底（floor 先行按层规模封顶，再按剩余容量最大余额分配——无 trim 环，保底不破）；同 seed 重跑逐字节复现；每行带 rel_path/field/span/raw 回源锚。tally 三值裁决（保持/改判/无法核对），改判必须给 corrected_value（引擎强制 exit 2）、未知拼写拒绝、未填完拒绝；--fail-above 执行用户声明的改判率上限。
+- claims CLI review 子命令错误路径对齐 `FAIL:`+exit 2 契约（Path NameError 及 scopes 文件缺失/坏 JSON/语义覆盖机器矛盾均无裸 traceback）。
+- 三轮独立审计（行为+代码复检+修复复核）：Z1 缩合否定死分支、Z2 改判强制、C1/C2 抽样口径、F1 trim 环击穿保底、F2 预检同口径、F4 review 契约等全部修复；fuzz 2500 组抽样不变量零违例。测试 test_claims 31 + test_sample_review 22；全量 1165 OK。
+- 文档同步：02 新增「结构化抽样复核」节、SKILL.md 编码阶段第5条与脚本清单一行、14:49 扩写、evals id21/22。
+
 ## 2026-11-18 批次1：数据清洗引擎与全量报表（提交 182194a 之上）
 
 - 新增 `scripts/clean_data.py`：配方驱动清洗——七种步骤（去重/值映射/类型转换/越界标记/缺行剔除/重命名/弃列）全部执行项目自写的 `draft/cleaning.json`，不做任何未声明清洗；`max_drop_fraction` 必填护栏、`id_columns` 每步后与结束时查唯一、空串恒缺失（na_values 只追加）；`cleaning_log.jsonl` 记录行数入出/改格数/丢行 id 样本/sha_in→sha_out 内容指纹链，同一数据集+同一配方重放逐位相同；`--flow-out` 把清洗行幂等并入 sample_flow.csv（认 kind 列变体、gb18030/big5 解码）。

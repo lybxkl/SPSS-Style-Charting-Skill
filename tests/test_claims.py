@@ -550,3 +550,289 @@ class TestCli(ClaimsCase):
         self.assertIn("cl_cli", report["claims"])
         self.assertIn("b1", report["blocks"])
         self.assertEqual(self.status_of("claim", "cl_cli"), "stale")
+
+    def test_cli_review_records_and_refuses_cleanly(self):
+        text = "干预组的得分显著提高了 12.5 分（N = 64）。"
+        self.make_block(text)
+        self.make_claim("干预组的得分显著提高了 12.5 分",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_rev")
+        self.project.append("model_result", result_record("r1", "12.5"))
+        checked = run("claims.py", "--root", self.tmp, "check",
+                      "--claim", "cl_rev")
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+
+        scopes_path = os.path.join(self.tmp, "scopes.json")
+        material = os.path.join(self.tmp, "materials")
+        os.makedirs(material, exist_ok=True)
+        source = os.path.join(material, "a1.txt")
+        with open(source, "w", encoding="utf-8") as handle:
+            handle.write("干预组的得分显著提高了 12.5 分（N = 64）。\n")
+        import hashlib
+        with open(source, "rb") as handle:
+            source_sha = hashlib.sha256(handle.read()).hexdigest()
+        with open(scopes_path, "w", encoding="utf-8") as handle:
+            json.dump([{"path": "materials/a1.txt",
+                        "sha256": source_sha,
+                        "locator": "p1:c0-120"}], handle,
+                      ensure_ascii=False)
+        reviewed = run("claims.py", "--root", self.tmp, "review",
+                       "--claim", "cl_rev", "--decision", "supported",
+                       "--reviewer", "reviewer-1",
+                       "--note", "re-read the source span",
+                       "--scopes", scopes_path)
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        self.assertIn("semantic_review", reviewed.stdout)
+
+        # a machine-contradicted claim cannot be overridden: FAIL + 2
+        self.make_block("干预使得分提高了 0.32 分。")
+        self.make_claim("干预使得分提高了 0.32 分",
+                        [{"kind": "result", "id": "r2"}],
+                        claim_id="cl_rev_bad")
+        self.project.append("model_result", result_record("r2", "-0.32"))
+        run("claims.py", "--root", self.tmp, "check",
+            "--claim", "cl_rev_bad")
+        blocked = run("claims.py", "--root", self.tmp, "review",
+                      "--claim", "cl_rev_bad", "--decision", "supported",
+                      "--reviewer", "reviewer-1", "--note", "no",
+                      "--scopes", scopes_path)
+        self.assertEqual(blocked.returncode, 2)
+        self.assertIn("FAIL:", blocked.stderr)
+        self.assertNotIn("Traceback", blocked.stderr)
+
+        # a missing scopes file is a clean CLI error, not a traceback
+        missing = run("claims.py", "--root", self.tmp, "review",
+                      "--claim", "cl_rev", "--decision", "supported",
+                      "--reviewer", "reviewer-1", "--note", "x",
+                      "--scopes", os.path.join(self.tmp, "nope.json"))
+        self.assertEqual(missing.returncode, 2)
+        self.assertIn("FAIL: cannot read --scopes", missing.stderr)
+        self.assertNotIn("Traceback", missing.stderr)
+
+        # a malformed scopes file is also a clean CLI error
+        bad = os.path.join(self.tmp, "bad.json")
+        with open(bad, "w", encoding="utf-8") as handle:
+            handle.write("{not json")
+        malformed = run("claims.py", "--root", self.tmp, "review",
+                        "--claim", "cl_rev", "--decision", "supported",
+                        "--reviewer", "reviewer-1", "--note", "x",
+                        "--scopes", bad)
+        self.assertEqual(malformed.returncode, 2)
+        self.assertIn("not valid JSON", malformed.stderr)
+        self.assertNotIn("Traceback", malformed.stderr)
+
+
+# ---------------------------------------------------------------------------
+# batch 2: clause-level negation and anaphora the machine cannot resolve
+# ---------------------------------------------------------------------------
+def findings_named(result, name):
+    return [f for f in result["findings"] if f["check"] == name]
+
+
+class TestCueNegation(ClaimsCase):
+    def test_adjacent_negation_still_resolves_on_its_own(self):
+        # the four-character window handles this classic shape: the cue is
+        # skipped, nothing is ambiguous, and no warning fires
+        self.make_block("得分不再上升。")
+        self.make_claim("得分不再上升",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg1")
+        res = claims.check_claim(
+            self.project, "cl_neg1",
+            results=[result_record("r1", "-3.1")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(findings_named(res, "cue_negation"), [])
+        self.assertTrue(finding(res, "direction")["applicable"] is False)
+
+    def test_long_range_negation_is_a_warning_not_a_false_contradiction(self):
+        # the negator sits beyond the adjacent window; the old logic
+        # trusted the cue and fired a false contradiction against the
+        # negative estimate - now the cue is pulled out of the verdict and
+        # the sentence is routed to a human read
+        self.make_block("并没有因此出现明显的上升。")
+        self.make_claim("并没有因此出现明显的上升",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg2")
+        res = claims.check_claim(
+            self.project, "cl_neg2",
+            results=[result_record("r1", "-3.1")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(res["warnings"], 1)
+        neg = finding(res, "cue_negation")
+        self.assertFalse(neg["ok"])
+        self.assertEqual(neg["severity"], "warning")
+        self.assertIn("上升", neg["detail"]["families"]["direction"])
+        self.assertTrue(finding(res, "direction")["applicable"] is False)
+
+    def test_contrast_marker_keeps_the_cue_clean(self):
+        # the comma splits the clauses; the cue clause carries no negator
+        # and the rise is asserted exactly as before
+        self.make_block("增速没有回落，反而出现上升。")
+        self.make_claim("增速没有回落，反而出现上升",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg3")
+        res = claims.check_claim(
+            self.project, "cl_neg3",
+            results=[result_record("r1", "0.4")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertTrue(finding(res, "direction")["ok"])
+        self.assertEqual(findings_named(res, "cue_negation"), [])
+
+    def test_unresolved_negation_does_not_touch_true_contradictions(self):
+        # a clean cue with no clause negator still contradicts a negative
+        # estimate exactly as before (the extra failing finding is the
+        # numbers check: the printed 0.32 is a different token than the
+        # supplied estimate -0.32)
+        self.make_block("干预使得分提高了 0.32 分。")
+        self.make_claim("干预使得分提高了 0.32 分",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg4")
+        res = claims.check_claim(
+            self.project, "cl_neg4",
+            results=[result_record("r1", "-0.32")])
+        self.assertEqual(res["status"], "contradicted", failing_checks(res))
+        self.assertFalse(finding(res, "direction")["ok"])
+        self.assertEqual(finding(res, "direction")["severity"], "error")
+
+    def test_negated_causal_cue_is_not_a_causal_claim(self):
+        # the causal cue sits behind an unresolved negator, so the
+        # association-vs-causation check must not treat the sentence as
+        # asserting causation
+        self.make_block("不能说该政策导致了改善。")
+        self.make_claim("不能说该政策导致了改善",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg5")
+        res = claims.check_claim(
+            self.project, "cl_neg5",
+            results=[result_record("r1", "0.32",
+                                    result_type="ols_coefficient")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        causal = finding(res, "causal")
+        self.assertTrue(causal["ok"])
+        neg = finding(res, "cue_negation")
+        self.assertIn("导致", neg["detail"]["families"]["causal"])
+
+    def test_governed_contrast_inside_one_clause_keeps_the_cue(self):
+        # "增速没有下降反而扩大" keeps the negation on 下降 and the
+        # contrast rescues 扩大: the growth cue stays clean
+        self.make_block("增速没有下降反而扩大。")
+        self.make_claim("增速没有下降反而扩大",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg6")
+        res = claims.check_claim(
+            self.project, "cl_neg6",
+            results=[result_record("r1", "0.2")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertTrue(finding(res, "direction")["ok"])
+        self.assertEqual(findings_named(res, "cue_negation"), [])
+
+    def test_english_long_range_negation_warns(self):
+        self.make_block("The effect showed no significant increase.")
+        self.make_claim("The effect showed no significant increase",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg7")
+        res = claims.check_claim(
+            self.project, "cl_neg7",
+            results=[result_record("r1", "-1.2")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        neg = finding(res, "cue_negation")
+        self.assertIn("increase", neg["detail"]["families"]["direction"])
+        self.assertEqual(res["warnings"], 1)
+
+    def test_contracted_english_negation_is_never_decided(self):
+        # "didn't increase": the adjacent window once missed the
+        # contraction, the cue fired a false contradiction against a
+        # negative estimate, and no warning was raised - now the cue is
+        # pulled out and the sentence is routed to a human read
+        self.make_block("The model didn't show any increase.")
+        self.make_claim("The model didn't show any increase",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg8")
+        res = claims.check_claim(
+            self.project, "cl_neg8",
+            results=[result_record("r1", "-1.2")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(res["errors"], 0)
+        self.assertEqual(res["warnings"], 1)
+        neg = finding(res, "cue_negation")
+        self.assertIn("increase", neg["detail"]["families"]["direction"])
+        self.assertTrue(finding(res, "direction")["applicable"] is False)
+
+    def test_contracted_english_negation_cannot_falsely_support(self):
+        # the mirror bug: "didn't increase" with a positive estimate used
+        # to read as a clean supported rise; now the cue is pulled out of
+        # the verdict entirely and the sentence still needs a human read
+        self.make_block("The group's scores didn't increase.")
+        self.make_claim("The group's scores didn't increase",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg9")
+        res = claims.check_claim(
+            self.project, "cl_neg9",
+            results=[result_record("r1", "0.5")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(res["errors"], 0)
+        self.assertEqual(res["warnings"], 1)
+        self.assertTrue(finding(res, "direction")["applicable"] is False)
+
+    def test_contracted_english_causal_negation_warns(self):
+        self.make_block("The program didn't cause any improvement.")
+        self.make_claim("The program didn't cause any improvement",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg10")
+        res = claims.check_claim(
+            self.project, "cl_neg10",
+            results=[result_record("r1", "0.32",
+                                    result_type="ols_coefficient")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(res["errors"], 0)
+        self.assertEqual(res["warnings"], 1)
+        causal = finding(res, "causal")
+        self.assertTrue(causal["ok"])
+        neg = finding(res, "cue_negation")
+        self.assertIn("cause", neg["detail"]["families"]["causal"])
+
+    def test_contracted_negation_with_contrast_keeps_the_cue(self):
+        # "didn't decrease but increased": the contrast marker rescues
+        # the clean cue after the negator, and the increase contradicts a
+        # negative estimate exactly as a clean rise would
+        self.make_block("The scores didn't decrease but increased.")
+        self.make_claim("The scores didn't decrease but increased",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_neg11")
+        res = claims.check_claim(
+            self.project, "cl_neg11",
+            results=[result_record("r1", "-0.3")])
+        self.assertEqual(res["status"], "contradicted", failing_checks(res))
+        self.assertTrue(finding(res, "direction")["ok"] is False)
+        # the negated half is warned, the rescued half fires
+        neg = finding(res, "cue_negation")
+        self.assertIn("decrease", neg["detail"]["families"]["direction"])
+
+
+class TestAnaphora(ClaimsCase):
+    def test_pronoun_subject_on_cue_clause_warns(self):
+        self.make_block("该效应显著上升。")
+        self.make_claim("该效应显著上升",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_ana1")
+        res = claims.check_claim(
+            self.project, "cl_ana1",
+            results=[result_record("r1", "0.4")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(res["warnings"], 1)
+        ana = finding(res, "anaphora")
+        self.assertFalse(ana["ok"])
+        self.assertEqual(ana["severity"], "warning")
+        self.assertIn("该效应", json.dumps(ana["detail"],
+                                           ensure_ascii=False))
+
+    def test_named_subject_does_not_warn(self):
+        self.make_block("干预组的均值显著上升。")
+        self.make_claim("干预组的均值显著上升",
+                        [{"kind": "result", "id": "r1"}],
+                        claim_id="cl_ana2")
+        res = claims.check_claim(
+            self.project, "cl_ana2",
+            results=[result_record("r1", "0.4")])
+        self.assertEqual(res["status"], "supported", failing_checks(res))
+        self.assertEqual(findings_named(res, "anaphora"), [])

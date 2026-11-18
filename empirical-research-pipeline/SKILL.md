@@ -270,7 +270,8 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
    - CSV/TSV/JSON/XLSX 等表格会跳过并提示走统计流程；图片/音视频会提示先 OCR/转写。
 3. 人工/LLM 编码时，每条记录至少保存 `*_ev` 证据句；没有证据句的编码视为未完成。证据句的格式是 `<字段>=<原文片段>@<char_start>-<char_end>`（片段超 200 字会加「…」，但偏移量始终指向整句），同一句先判否定再判肯定，命中项带 `negated`/`polarity`——**两个编码员的结果可以逐条按字段+偏移对齐，不必人工翻原文**。
 4. 抽 10%–15% 资料双人/双轮编码，报告一致率或 Cohen's κ；分歧先裁决再改 codebook。用 `scripts/compute_kappa.py` 对齐两轮编码并计算：模型初编码与独立复读（或两名编码员）各产出一份 `dataset.csv`，脚本按文档+字段对齐，输出每变量 κ/一致率（`kappa_report.csv`）、逐条分歧及双方证据行（`disagreements.csv`）与 `coding-sample.md` 骨架；κ < 0.6 的变量自动点名。流程见 `references/02-coding-protocol.md` 的「信度检验」节。
-5. codebook 冻结后再全量编码；后续改动要记录版本与影响范围。
+5. 抽样复核用 `scripts/sample_review.py`，不要自己挑样本：`draw` 按声明种子分层抽样（`needs_review` 行强制单独成层），同一 seed 重跑逐字节复现，每行带 `rel_path/field/span/raw` 供回原文核对；复核者只填 `保持/改判/无法核对` 三值；`tally` 按层统计并列出改判项，一行没填就 exit 2，`--fail-above` 是你声明的改判率上限。详见 02 的「结构化抽样复核」节。
+6. codebook 冻结后再全量编码；后续改动要记录版本与影响范围。
 
 ### 2.2 字段抽取（`--extract`，一行一个观测）
 
@@ -639,6 +640,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/dedupe_corpus.py` | 基于审计结果生成去重计划；`--apply` 移动/复制到 `_duplicates/`，`--undo` 反演，写 `move_log.csv` |
 | `scripts/make_coding_sheet.py` | 从 PDF/Word/PPT/HTML/文本抽取全文与关键词证据句（对任何文体读法一致，不内置领域字段）；`--extract profile.json` 走字段抽取层（只接受项目剖面，拒绝包内示例），产出 `dataset.csv`/`evidence.jsonl`/`run.json` |
 | `scripts/compute_kappa.py` | 两轮独立编码对齐：按文档+字段算每变量一致率与 Cohen's κ，逐条分歧带双方证据行，生成 `kappa_report.csv`/`disagreements.csv`/`coding-sample.md` |
+| `scripts/sample_review.py` | 结构化抽样复核：种子必填、分层+强制 flagged 维度、同 seed 逐字节复现；`tally` 统计保持/改判/无法核对并列改判项，未裁决完 exit 2，`--fail-above` 守用户上限 |
 | `scripts/clean_data.py` | 按项目配方（draft/cleaning.json）执行清洗：去重/值映射/类型转换/越界标记/缺行剔除，逐步写台账（cleaning_log.jsonl 指纹链）与 flow.csv；未声明的清洗一律拒绝，max_drop_fraction 超限中止，`--emit-template` 起步 |
 | `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source） |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |

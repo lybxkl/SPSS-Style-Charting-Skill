@@ -16,7 +16,12 @@ denominator, or "caused" for an OLS association.  It therefore keeps three
 things apart:
 
 * **semantic checks** - direction / extremum / denominator / unit / time scope /
-  association vs causation / reference access / unresolved numbers;
+  association vs causation / reference access / unresolved numbers, plus two
+  honest limits reported as human-read warnings: ``cue_negation`` (a
+  clause-level negator before a direction/causal cue that the adjacent
+  window cannot resolve, Chinese or English - contracted "didn't" forms
+  included) and ``anaphora`` (a cue-bearing clause whose subject is a
+  pronoun that may resolve to a different result);
 * **identity** - a text fingerprint, so an edited sentence can never inherit the
   old support markers (``review_block`` re-computes it and also compares the
   *printed* text extracted from the final DOCX/PDF);
@@ -120,6 +125,42 @@ MIN_CUES = ("最低", "最小", "最弱", "最少", "lowest", "smallest", "least
 
 _NEGATORS = ("不", "未", "无", "没", "非")
 
+#: Clause-level negation.  ``_negated`` only looks at the four characters
+#: immediately before a cue, which resolves "不再上升" but misses
+#: "并没有因此出现明显的上升" (the negator sits five-plus characters away)
+#: and every English negator longer than the window ("didn't", "never"):
+#: the cue still reads as asserted.  A cue that passes the adjacent
+#: filter while its clause carries an unresolved negation *before* it
+#: cannot be machine-decided - the direction verdict would either miss
+#: the negation (false contradiction) or over-apply it ("不高的地区也有
+#: 增长" negates 高, not 增长).  Such hits are reported as
+#: ``cue_negation`` warnings for a human read instead of silently
+#: deciding either way.
+_CLAUSE_NEGATORS_ZH = ("不", "未", "无", "没", "非", "别", "莫", "难以",
+                       "无法", "未能", "并非", "排除", "未见", "缺乏",
+                       "缺少", "拒绝", "而不是")
+_EN_NEGATOR_RE = re.compile(
+    r"(?<![a-z])(?:[a-z]+n't|not|no|never|cannot|without|absent"
+    r"|lack(?:s|ed|ing)?|fail(?:s|ed|ing)?|instead of|rather than)"
+    r"(?![a-z0-9])", re.IGNORECASE)
+#: Contrast markers break an earlier negator's governance: a cue after
+#: 反而/但/却 is asserted even when the clause carries a negator before it
+#: ("增速没有回落，反而出现上升" - the rise is asserted).  Only a contrast
+#: *after the last negator* clears the cue; 反而没有上升 keeps the negation.
+_CLAUSE_CONTRASTS_ZH = ("反而", "但是", "却", "而是", "但", "不过", "然而",
+                        "倒是", "而是说")
+_EN_CONTRAST_RE = re.compile(
+    r"(?<![a-z])(?:however|but|yet|though|whereas|instead"
+    r"|in contrast)(?![a-z])", re.IGNORECASE)
+_CLAUSE_SPLIT_RE = re.compile(r"[。！？；!?;\n]|[，,]")
+
+#: Anaphoric subjects ("该效应显著上升", "it increased") - the pronoun may
+#: resolve to a different result than the cited one, so cue checks that
+#: depend on which result the sentence is about get a human-read warning.
+_ANAPHOR_RE = re.compile(
+    r"^(?:该|此|其|上述|前述|这(?:一|两|几)?个?|两者|二者|"
+    r"(?:the\s+)?above\b|this\b|it\b|they\b|both\b)", re.IGNORECASE)
+
 _RATIO_RE = re.compile(
     r"(?<![\d.])\d{1,3}(?:\.\d+)?\s*[/／]\s*\d{1,3}(?:\.\d+)?(?![\d.])")
 _PERCENT_RE = re.compile(
@@ -153,6 +194,8 @@ _SEVERITY = {
     "unit": "error",
     "time_scope": "warning",
     "causal": "error",
+    "cue_negation": "warning",
+    "anaphora": "warning",
     "reference_access": "error",
     "numbers": "error",
 }
@@ -306,20 +349,93 @@ def _cue_hits(text: str, cue: str) -> list[int]:
 
 
 def _negated(text: str, start: int) -> bool:
+    """Adjacent-negation window: the four characters before the cue.
+
+    Resolves Chinese negators and the English words not/no right before
+    the cue.  English contracted forms (didn't/wasn't) are deliberately
+    NOT resolved here - "n't" plus at most one letter cannot see the
+    verb - so they fall through to the clause-level filter and surface as
+    cue_negation warnings instead of a silent skip.  Longer negators like
+    "never" (six characters) also exceed the window and take the same
+    route.
+    """
     head = text[max(0, start - 4):start]
     if any(neg in head for neg in _NEGATORS):
         return True
-    return bool(re.search(r"(^|[^a-z])(not|no|never)\s*$", head))
+    return bool(re.search(r"(^|[^a-z])(not|no)\s*$", head))
 
 
-def _cues(text: str, words: Iterable[str]) -> list[str]:
-    found: list[str] = []
+def _segments(text: str) -> list[tuple[int, int]]:
+    """Clause spans (start, end) - split at sentence *and comma* level."""
+    bounds = [0]
+    for m in _CLAUSE_SPLIT_RE.finditer(text):
+        bounds.append(m.start())
+        bounds.append(m.end())
+    bounds.append(len(text))
+    spans = [(bounds[i], bounds[i + 1])
+             for i in range(0, len(bounds) - 1, 2)]
+    return [(s, e) for s, e in spans if e > s]
+
+
+def _segment_of(spans: list[tuple[int, int]], pos: int
+                ) -> tuple[int, int]:
+    for s, e in spans:
+        if s <= pos < e:
+            return s, e
+    return pos, pos + 1
+
+
+def _clause_negated(text: str, pos: int,
+                    spans: list[tuple[int, int]]) -> bool:
+    """True when a clause-level negator sits before the cue with no
+    contrast marker after it - a cue the machine cannot resolve."""
+    start, _end = _segment_of(spans, pos)
+    head = text[start:pos]
+    if not head.strip():
+        return False
+    neg_positions = [head.rfind(neg) for neg in _CLAUSE_NEGATORS_ZH]
+    en = list(_EN_NEGATOR_RE.finditer(head))
+    if en:
+        neg_positions.append(en[-1].start())
+    neg_positions = [p for p in neg_positions if p >= 0]
+    if not neg_positions:
+        return False
+    last_neg = max(neg_positions)
+    tail = head[last_neg:]
+    if any(con in tail for con in _CLAUSE_CONTRASTS_ZH):
+        return False
+    if _EN_CONTRAST_RE.search(tail):
+        return False
+    return True
+
+
+def _cues(text: str, words: Iterable[str]) -> tuple[list[str], dict[str, int]]:
+    """Clean cue list plus the hits the machine cannot resolve.
+
+    Returns ``(clean, ambiguous)``: ``clean`` lists cues with at least one
+    hit that survives both the adjacent filter and the clause filter;
+    ``ambiguous`` counts, per cue, the hits a clause-level negator puts
+    beyond mechanical reach (``{"上升": 1}``) so the caller can warn instead
+    of silently deciding.
+    """
+    spans = _segments(text)
+    clean: list[str] = []
+    ambiguous: dict[str, int] = {}
     for cue in words:
+        n_clean = 0
+        n_ambiguous = 0
         for pos in _cue_hits(text, cue):
-            if not _negated(text, pos):
-                found.append(cue)
-                break
-    return found
+            if _negated(text, pos):
+                continue
+            if _clause_negated(text, pos, spans):
+                n_ambiguous += 1
+                continue
+            n_clean += 1
+        if n_clean:
+            clean.append(cue)
+        if n_ambiguous:
+            ambiguous[cue] = n_ambiguous
+    return clean, ambiguous
 
 
 def _finding(check: str, ok: bool, detail, *, severity: str | None = None,
@@ -1032,8 +1148,8 @@ def check_claim(project, claim, *, numbers: Mapping | None = None,
              "note": "datasets are not resolved by this module"}, applicable=False))
 
     # -- 1. direction ------------------------------------------------------
-    ups = _cues(text, UP_CUES)
-    downs = _cues(text, DOWN_CUES)
+    ups, up_amb = _cues(text, UP_CUES)
+    downs, down_amb = _cues(text, DOWN_CUES)
     if not result_items:
         findings.append(_finding(
             "direction", True,
@@ -1084,8 +1200,8 @@ def check_claim(project, claim, *, numbers: Mapping | None = None,
                 applicable=False))
 
     # -- 2. extremum -------------------------------------------------------
-    max_hits = _cues(text, MAX_CUES)
-    min_hits = _cues(text, MIN_CUES)
+    max_hits, max_amb = _cues(text, MAX_CUES)
+    min_hits, min_amb = _cues(text, MIN_CUES)
     if not max_hits and not min_hits:
         findings.append(_finding("extremum", True,
                                  {"note": "no extremum cue"}, applicable=False))
@@ -1311,7 +1427,7 @@ def check_claim(project, claim, *, numbers: Mapping | None = None,
                                      {"time_scope": declared_time}))
 
     # -- 6. association vs causation --------------------------------------
-    causal = _cues(text, CAUSAL_CUES)
+    causal, causal_amb = _cues(text, CAUSAL_CUES)
     if not causal:
         findings.append(_finding("causal", True,
                                  {"note": "no causal cue"}, applicable=False))
@@ -1348,6 +1464,53 @@ def check_claim(project, claim, *, numbers: Mapping | None = None,
             findings.append(_finding("causal", True,
                                      {"note": "no resolvable result"},
                                      applicable=False))
+
+    # -- 6b. cue semantics the machine cannot resolve ----------------------
+    # Direction/extremum/causal verdicts are only machine-meaningful with a
+    # result behind them; without one they already route to a human read.
+    if result_items:
+        ambiguous_families = {
+            "direction": {k: v for k, v in
+                          {**up_amb, **down_amb}.items()},
+            "extremum": {**max_amb, **min_amb},
+            "causal": causal_amb,
+        }
+        ambiguous_families = {family: hits for family, hits
+                              in ambiguous_families.items() if hits}
+        if ambiguous_families:
+            findings.append(_finding(
+                "cue_negation", False,
+                {"families": ambiguous_families,
+                 "note": "a clause-level negator sits before these cues; the "
+                         "machine cannot resolve the negation's scope, so "
+                         "the verdict ignores them - read the sentence "
+                         "before trusting the clean cues that remain"},
+                severity="warning", outcome="supported"))
+        # an anaphoric subject on a cue-bearing clause: the pronoun may
+        # resolve to a different result than the cited one
+        spans = _segments(text)
+        anaphoric: list[str] = []
+        seen: set[tuple[int, int]] = set()
+        for words in (UP_CUES, DOWN_CUES, CAUSAL_CUES, MAX_CUES, MIN_CUES):
+            for cue in words:
+                for pos in _cue_hits(text, cue):
+                    if _negated(text, pos):
+                        continue
+                    s, e = _segment_of(spans, pos)
+                    if (s, e) in seen:
+                        continue
+                    seen.add((s, e))
+                    clause_head = text[s:e].lstrip()
+                    if _ANAPHOR_RE.match(clause_head):
+                        anaphoric.append(clause_head[:40])
+        if anaphoric:
+            findings.append(_finding(
+                "anaphora", False,
+                {"clauses": anaphoric,
+                 "note": "the cue-bearing clause starts with an anaphoric "
+                         "subject; confirm the pronoun resolves to the "
+                         "cited result before trusting the verdict"},
+                severity="warning", outcome="supported"))
 
     # -- 7. reference access ----------------------------------------------
     if not reference_items:
@@ -1611,8 +1774,28 @@ def _main(argv: list[str]) -> int:
     project = C.Project(args.root)
     if args.cmd == "review":
         from support_review import review
-        _print(review(project, args.claim, decision=args.decision, reviewer=args.reviewer, note=args.note,
-                      reread_scopes=json.loads(Path(args.scopes).read_text(encoding="utf-8"))))
+        try:
+            with open(args.scopes, encoding="utf-8") as fh:
+                scopes = json.load(fh)
+        except OSError as exc:
+            print(f"FAIL: cannot read --scopes {args.scopes}: {exc}",
+                  file=sys.stderr)
+            return 2
+        except json.JSONDecodeError as exc:
+            print(f"FAIL: --scopes {args.scopes} is not valid JSON: {exc}",
+                  file=sys.stderr)
+            return 2
+        try:
+            record = review(project, args.claim,
+                            decision=args.decision,
+                            reviewer=args.reviewer, note=args.note,
+                            reread_scopes=scopes)
+        except ValueError as exc:
+            # support_review refuses, among others, when a semantic review
+            # tries to override a machine-contradicted claim
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        _print(record)
         return 0
 
     if args.cmd == "check":

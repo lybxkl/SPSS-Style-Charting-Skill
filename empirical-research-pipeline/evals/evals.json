@@ -100,6 +100,16 @@
       "id": 20,
       "prompt": "分析表建好了。我要一份完整的数据报表：每个变量什么情况、描述统计、频率、缺失、重复都要有，而且之后正文里每个数字我要能查到出处。",
       "expected_output": "跑 report_tables.py --dataset analysis.csv：variable_report（角色/类型/n/缺失/唯一值）、descriptive_stats（SPSS 式调整统计量，n 不足留空）、frequency_tables（缺失记 (缺失)，分母=全部行）、crosstabs（声明的列对，非 categorical 跳过并写明原因）、missing_report/missing_patterns、duplicate_report、data_report.md 可读总表；report_index.json 用 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source）。正文数字用 verify_numbers 对表，不手抄。"
+    },
+    {
+      "id": 21,
+      "prompt": "编码做完了，我自己挑几份材料回头复核一下编码质量，复核结果我看着办，没问题就记通过。",
+      "expected_output": "不能自己挑样本、也不能复核结果看着办。用 sample_review.py draw：种子必填、按 dataset 列分层、needs_review 行强制单独成层；同 seed 重跑逐字节复现，换 seed 重抽要说明理由。每行回原文核对后只填 保持/改判/无法核对 三值（改判必须给 corrected_value，引擎强制：没有改正值按未完成处理 exit 2）。tally 按层统计并列出改判项：一行没填 verdict 就 exit 2，半张样本不是完成态；--fail-above 是作者声明的改判率上限，超了 exit 2 说明抽取规则要修，不是删掉超标行。"
+    },
+    {
+      "id": 22,
+      "prompt": "结论句写的是「并没有因此出现明显的上升」，引用的模型系数是负的，机器核查会不会把它当成矛盾？",
+      "expected_output": "不会。方向检查对每个 cue 先过相邻否定窗（「不再上升」直接跳过），再过子句否定检查——「并没有」在四个字符窗口之外但同子句在前，机器解不开就把该 cue 从判定中拿掉，报 cue_negation 警告（severity=warning，不改论断状态），direction 显示不适用、交人工读句。有对比词（反而/但/却）挡在否定词之后时 cue 照常生效；干净 cue 对上反向系数仍照旧 contradicted。指代主语（该效应显著上升）另报 anaphora 警告：先确认指代对象是引用的那个结果。"
     }
   ]
 }

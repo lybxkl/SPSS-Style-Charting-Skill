@@ -165,6 +165,34 @@ python scripts/compute_kappa.py --a output/coding-r1/dataset.csv \
 4. 分歧逐条裁决，记录裁决理由；codebook 升版本。
 5. 在论文方法部分报告抽样比例、κ 和分歧处理方式。没有第二轮编码时报告抽样设计和“不是 κ”；分层重读不能写成 κ。
 
+## 结构化抽样复核
+
+抽样复核的样本不能自己挑：同一双手既抽样本又复核对，等于没复核。用 `scripts/sample_review.py` 把抽样变成可复现的协议：
+
+```bash
+python scripts/sample_review.py draw \
+    --review output/coding/extraction_review.csv \
+    --dataset output/coding/dataset.csv --strata doc_type \
+    --seed 20261118 --rate 0.1 --min-per-stratum 2 \
+    --out output/review
+```
+
+口径：
+
+- **种子必填**：同一 review + 同一 dataset + 同一 seed 重跑得到逐字节相同的 `sample.csv`，「抽了哪些行」本身成为可核对的事实。换 seed 就换样本，别在复核发现问题后换 seed 重抽。
+- **分层**：`--strata` 按 dataset.csv 的列（默认 `doc_type`）分层；`needs_review` 是强制第二维度——被标记过的行是风险池，永远单独成层，不被大池稀释。`--n` 固定总量时先给每层保底（按层规模封顶，保底装不下就拒绝），再按剩余容量比例分配（最大余额法）；`--rate` 按比例抽，`--min-per-stratum` 给每层保底。
+- **锚定**：`sample.csv` 每行自带 `rel_path/field/span/raw`——复核者回原文核对，不凭印象。
+- **裁决三值**：`verdict` 只能写 `保持` / `改判` / `无法核对`；改判必须给 `corrected_value`（引擎强制：改判行没有改正值按未完成处理，exit 2）。空着就是没复核完。
+
+复核完跑 `tally`：
+
+```bash
+python scripts/sample_review.py tally \
+    --sample output/review/sample.csv --fail-above 0.10
+```
+
+`tally.json` 按层统计保持/改判/无法核对，列出全部改判项（含改正值）。有一行没填 verdict 就 exit 2——半张样本不是完成态。`--fail-above` 是你声明的改判率上限，超了 exit 2：这不是失败，是引擎替你守住你自己定的线（改判率超标说明抽取规则要修，不是删掉超标行）。
+
 ## LLM 辅助编码的边界
 
 LLM 可以：

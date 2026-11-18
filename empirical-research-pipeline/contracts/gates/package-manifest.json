@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "5ba8b92e3bb1326a4c0ab6d7c7fa3a73e34d1bd7045977811896705207313dd3"
+      "sha256": "98160f2b141597cba4eee5e839dbd631734c6989ae09bfeb991d72b224a75977"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -70,7 +70,7 @@
     },
     {
       "path": "contracts/workflow/workflow.json",
-      "sha256": "a9db7dd84b23f8985a970d9988885773bd23d6bd95bf69e03e0fd7ae43dd38f4"
+      "sha256": "37b74032dafe50d258975191bf8e4100127d2ec0ed3bbe75bc12f517446247f4"
     },
     {
       "path": "contracts/workflow/workflow.schema.json",
@@ -78,7 +78,7 @@
     },
     {
       "path": "evals/evals.json",
-      "sha256": "bacf19a46d8f5b6107eac569a3f8d12960225a83c61796b81c683199c1d2fdd1"
+      "sha256": "bdf8981adf84b3ec74f892fc18bb54250e7719e21267077c1676f8436a995e82"
     },
     {
       "path": "profiles/eldercare-interview.json",
@@ -98,7 +98,7 @@
     },
     {
       "path": "references/02-coding-protocol.md",
-      "sha256": "138cd911f4f294388247f4fd529e14d385247a780d99f2f6078289505a728e5a"
+      "sha256": "018a757e009698a7a5fb43a810af36271ea906af9406bb20769cefae0b6e4ce6"
     },
     {
       "path": "references/03-analysis-spss.md",
@@ -146,7 +146,7 @@
     },
     {
       "path": "references/14-reviewed-workflow.md",
-      "sha256": "ffb61f11e0a021b065198ba0735aba9bbb263bf9e11f9f192952e5b7b2aec104"
+      "sha256": "2c04f77e689446e9512521a2b692c77122a296075d4f27c0116a42aece632510"
     },
     {
       "path": "references/15-gate-reports.md",
@@ -186,7 +186,7 @@
     },
     {
       "path": "scripts/claims.py",
-      "sha256": "7c052cf3b28c7d14ac61d9277a1f9820aa8070be48d9aba51b6cc336ea1ca5d6"
+      "sha256": "3ebd407bf4311e7831834f259008563f547c42f34e418b5b4b0b5f93e0cefc27"
     },
     {
       "path": "scripts/clean_data.py",
@@ -351,6 +351,10 @@
     {
       "path": "scripts/run_model.py",
       "sha256": "1ce56e3f7cbf937f6a794c7b10ce7fae20b40c880bab7617770aedef8931b43b"
+    },
+    {
+      "path": "scripts/sample_review.py",
+      "sha256": "340d4eef1254095a2ad482549d59253a7c60cde7991d88a7d8d8e3c7faf421b8"
     },
     {
       "path": "scripts/search_index.py",

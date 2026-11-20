@@ -112,7 +112,8 @@
 ## 9. 成稿（manuscript）
 
 - 成稿由 `assemble_manuscript.py` 生成，**不手打表格**。规格文件 `manuscript.json` 的 `blocks` 引用 CSV 与 PNG；`{key}` 占位符只从 `--numbers` 取，取不到即 exit 2（禁止印出不完整数字）。
-- 组装器必须同时产出三件：`<name>.docx`、`<name>_numbers.csv`（列 `key,value,source`，键名 `table<N>_n` / `figure<N>_n`）、`figure_map.json`（列 `[{tag,title,image}]`，image 为绝对路径）。`verify_numbers.py --numbers` 直接吃 `_numbers.csv`，`export_pdf_hires.py --figure-map` 吃 `figure_map.json`。
+- 组装器必须同时产出三件：`<name>.docx`、`<name>_numbers.csv`（列 `key,value,source`，键名 `table<N>_n` / `figure<N>_n`）、`figure_map.json`（列 `[{tag,title,image}]`，image 为绝对路径）。`verify_numbers.py --numbers` 直接吃 `_numbers.csv`，`export_pdf_hires.py --figure-map` 吃 `figure_map.json`。**这是脚本无关的硬契约**：自编写稿脚本同样必须产出 `figure_map.json` 与 `manuscript.json`（含 title/table blocks）作为图/表/文稿的显示名来源；`qa_outputs.py --figure-map --manuscript-spec` 在终检校验二者存在且可解析，缺任一即 error。只产 docx 而跳过命名源，会让下游查看器把全部图/表回退成英文文件名。
+- 命名源不止正文引用的表/图：交付还必须含 `table_map.json` / `doc_map.json`（`[{tag,title,file}]`，file 可相对可绝对，默认位于 `output/` 根），覆盖**全部**交付表/文档（报表、稳健性表、复核包、修订说明等）。`report_tables.py` 自动登记其报表与 data_report.md，`assemble_manuscript.py` 自动登记正文表，`review_pack.py` 自动登记复核包；合并以归一化 file 路径为键，后写覆盖同名条目，不丢其他来源的条目。`qa_outputs.py --table-map --doc-map` 校验存在、可解析、有带标题条目（缺=error）；`layout_conformance.py` 另按目录骨架核覆盖（§17）。
 - 表：三线（顶 1.5 pt、表头下 0.75 pt、底 1.5 pt），无竖线；每行 `cantSplit`；首行 `tblHeader`；数字右对齐、首列左对齐。
 - 图：按**正文栏宽**放置（默认 `min(15, 页宽-左右边距)`），显式宽度超过栏宽是 exit 2 而不是静默压缩；图题与图同页（`keepNext`）；Word 不能嵌 PDF，给 PDF 是 exit 2。
 - 字体：每个 run 同时写 `w:rFonts/@w:ascii|@w:hAnsi|@w:eastAsia`，只写 ascii 会让中文回落主题字体；首行缩进用 `w:ind/@w:firstLineChars`（按字符），不要只写厘米。
@@ -183,6 +184,37 @@ V-05 当前按声明的 sample/subset 分组、按 n_scope 区分口径，对 `c
 - 其余约 30 个未被任何 step/导入链覆盖的脚本（`entities.py`、`validation.py`、`gates.py`、`claims.py` 等；`contract_v2.py` 有自己的精确规则，不在其中）落到通用 `scripts/` 前缀=全链重跑：引擎无法推断时的保守默认。
 - `recheck`/`publish` 不进任何规则（既有约定：归档档与宿主交接由引擎另行驱动）；`scope` 阶段同不进规则（范围界定永远人工发起）。
 - `data/` 前缀=全链（输入变了，一切下游作数）；各 `output/` 前缀=其消费者阶段。`output/mining/` 等无机器消费者的目录不加规则（与建议性工具同口径）。
+
+## 15. 范围符合性（scope conformance）
+
+**硬闸门，不是建议。** 分析样本里出现声明范围外的命名类别即数据错误，必须在进统计前排除或显式修订白名单；不得以"图已经画了""数字对得上"为由保留。
+
+- 每个数据集在 `scope.json`（或 `scope.md` 的机读段）为决定范围的分类列声明纳入白名单：`{"columns": {"<列>": {"include": [...]}}, "min_cell_n": N}`。纯通用契约，引擎不内置任何学科类别词。
+- 生成方：你在阶段 0/3 声明；消费方：`scripts/scope_conformance.py --data <分析表> --scope scope.json`。
+- 判据：分析表中**任何声明范围外的命名类别只要 n>0 即 error（exit 2）**；声明列在数据中缺失即 error；缺失值记 warning 并要求声明处理方式；`--cell-cols A,B` 对 n<min_cell_n 的单元格记 warning（率表/热图小样本格不稳定）。
+- 产出 `scope_conformance.csv`（`column,value,n,in_scope,severity,note`）。范围外类别须按声明排除或显式修订白名单并记录理由，不得静默留在分析样本。
+- 与样本漏斗（§2）互补：漏斗核"掉多少"，本契约核"留下的类别是否都在声明范围内"。两者都对任何学科适用。
+
+## 16. 阶段双遍审计（stage audit）
+
+**硬闸门，不是建议。** 每个阶段完成后必须≥2遍、角度互异的全方位审计，留台账并经机器校验，才能进下一阶段。
+
+- 台账 `output/qa/stage_audit.jsonl`，一行一遍：`{"stage","angle","evidence","findings","at"}`。`evidence` 为 `{"commands":[{"cmd","exit"}]}` 或 `{"samples":[...],"checks":[...]}`；`findings` 为 ` [{"detail","resolved"}]`。
+- 生成方：你在每阶段完成后追加两遍（第 1 遍机器/口径，第 2 遍独立/语义/漂移）；消费方：`scripts/stage_audit.py --ledger ... --require <阶段>`。
+- 判据：每阶段≥2遍、≥2个互异角度、每遍有真实证据、无 `resolved=false`；缺阶段/少遍/单角度/空证据/未解决 → exit 2。
+- 深度随验收档（submission 抽样、archive 逐格），但遍数≥2、角度互异、留台账三条任何档不豁免。第二遍必须独立于第一遍产出重新取证，防漏细节与跑偏。
+
+## 17. 目录骨架与全量命名覆盖（layout conformance）
+
+**硬闸门，不是建议。** 查看器与下游消费者需要跨运行/跨模式稳定的目录面：物理别名归入规范骨架，杂散目录与无标题交付件在交付时被卡住。「目录是脚本默认写出的」「别名目录历史上就这么叫」「表不在正文里」「查看器能显示英文就行」**都不是**跳过理由；交付说明必须写 `layout_conformance.py` 的实际命令与退出码，只写「已检查」视为未检查。
+
+- 规范骨架（闭合枚举，`scripts/layout_conformance.py` 是唯一知识源）：`output/audit`=审计；`output/coding`=编码（含 kappa）；`output/dataset`=数据（含 cleaning/datasets/data_verification）；`output/stats`=统计（含 models/methods/analysis_pack）；`output/figures`=图（含 chart_pack/paper_figs）；`output/tables`=表（含 reports）；`output/docs`=文档（含 review）；`output/qa`=质检；`output/verify`=溯源；`output/ledger`=台账（含 gates/v2/recheck/claims）；`output/mining`=挖掘。
+- 已知别名自动归组，无需声明；自定义目录在 `research_registry.json.layout` 声明“规范组 → 物理目录列表”，例如 `{"output/tables": ["output/custom_tables"]}`。未声明的杂散目录、非规范键、同一目录挂两个组均 error；空目录 warning。`artifact_paths` 保持原语义（门禁资源绑定），不替代 `layout`。
+- **已知别名目录不得经 `layout` 改挂其他组**（改挂即 error）：把表组目录挂去不核覆盖的组即可逃避命名契约，故堵死。交付表/文档一律写入表组/文档组目录，不得借统计/质检等不核覆盖的组目录存放交付件逃避命名；阶段双遍审计的第二遍必须专查此类逃避。多轮编码等额外目录放规范组子目录（`output/coding/r1`、`output/coding/r2`），不建 `coding-r1` 这类一级杂散目录。
+- 契约面同步：workflow.json 在 assemble/report_tables/review_pack 的 produces 声明 `table_map/doc_map`，qa 步骤带四个命名源旗标，rerunRules 为 `output/table_map.json`/`output/doc_map.json` 各加 exact 规则（manuscript,qa），与 figure_map 同口径。
+- 命名覆盖：表组内全部 `.csv/.tsv/.md`、文档组内全部 `.md/.docx/.pdf`、output 根同级 `.md/.docx/.pdf`（manuscript.docx/pdf 除外，由 manuscript.json title block 覆盖）必须在 `table_map.json`/`doc_map.json`（或 manuscript.json table block）有非空标题条目，否则 error。
+- 消费方：`scripts/layout_conformance.py --root <项目根>` 退出码 0 才能交付；分组与裁决写 `output/qa/layout_conformance.json`，只读查看器据此渲染规范组（插件不内嵌别名表，避免双份维护漂移）；无该报告的旧工作区回退物理目录显示。`--exit-zero` 交付禁用（同 qa_outputs）；扫描上限到达时 coverage 可能不完整，报告留 warning，不得据此宣称已核覆盖。
+- 终检 `qa_outputs.py --table-map --doc-map` 与 `--figure-map` 同语义：命名源缺失/不可解析/无带标题条目 = error。
 
 ---
 

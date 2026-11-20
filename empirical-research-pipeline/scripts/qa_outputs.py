@@ -649,6 +649,75 @@ def check_audit(path: str) -> dict:
     return result
 
 
+def check_name_sources(figure_map: str | None, manuscript_spec: str | None,
+                       table_map: str | None = None, doc_map: str | None = None) -> dict:
+    """The display/download name sources are a delivery contract independent of
+    which assembler produced the manuscript.  A custom writer that skips them
+    leaves every figure/table with an English filename downstream.  Require the
+    machine-readable name sources to exist and parse: ``figure_map.json``
+    (``[{tag,title,image}]``), ``manuscript.json`` (``blocks`` with a title),
+    ``table_map.json`` / ``doc_map.json`` (``[{tag,title,file}]``) covering
+    deliverable tables/documents beyond the manuscript-cited ones.
+    """
+    result = {"errors": [], "warnings": []}
+
+    def check_map(path: str, label: str, wrapper: str) -> None:
+        result[label] = path
+        if not os.path.isfile(path):
+            result["errors"].append(f"{label}.json not found; display names will fall back to filenames")
+            return
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+            items = data if isinstance(data, list) else (data.get(wrapper) if isinstance(data, dict) else None)
+            if not isinstance(items, list) or not items:
+                raise ValueError(f"expected a non-empty list of {{tag,title,file}}")
+            titled = sum(1 for it in items if isinstance(it, dict) and str(it.get("title") or "").strip())
+            result[f"{label}_entries"] = len(items)
+            if not titled:
+                result["errors"].append(f"{label}.json has no titled entries")
+        except (ValueError, OSError) as exc:
+            result["errors"].append(f"{label}.json unreadable: {type(exc).__name__}: {exc}"[:200])
+
+    if figure_map:
+        result["figure_map"] = figure_map
+        if not os.path.isfile(figure_map):
+            result["errors"].append("figure_map.json not found; figure display names will fall back to filenames")
+        else:
+            try:
+                with open(figure_map, encoding="utf-8-sig") as fh:
+                    data = json.load(fh)
+                items = data if isinstance(data, list) else data.get("figures")
+                if not isinstance(items, list) or not items:
+                    raise ValueError("expected a non-empty list of {tag,title,image}")
+                titled = sum(1 for it in items if isinstance(it, dict) and str(it.get("title") or "").strip())
+                result["figure_map_entries"] = len(items)
+                if not titled:
+                    result["errors"].append("figure_map.json has no titled entries")
+            except (ValueError, OSError) as exc:
+                result["errors"].append(f"figure_map.json unreadable: {type(exc).__name__}: {exc}"[:200])
+    if manuscript_spec:
+        result["manuscript_spec"] = manuscript_spec
+        if not os.path.isfile(manuscript_spec):
+            result["errors"].append("manuscript.json not found; document/table display names will fall back to filenames")
+        else:
+            try:
+                with open(manuscript_spec, encoding="utf-8-sig") as fh:
+                    spec = json.load(fh)
+                blocks = spec.get("blocks") if isinstance(spec, dict) else None
+                if not isinstance(blocks, list) or not blocks:
+                    raise ValueError("expected a non-empty 'blocks' list")
+                if not any(isinstance(b, dict) and b.get("type") == "title" and str(b.get("text") or "").strip() for b in blocks):
+                    result["errors"].append("manuscript.json has no title block; document name source missing")
+            except (ValueError, OSError) as exc:
+                result["errors"].append(f"manuscript.json unreadable: {type(exc).__name__}: {exc}"[:200])
+    if table_map:
+        check_map(table_map, "table_map", "tables")
+    if doc_map:
+        check_map(doc_map, "doc_map", "docs")
+    return result
+
+
 def check_manifest(path: str, data_rows: int | None = None,
                    graycheck: bool = True, colorblind: bool = False,
                    min_delta_l: float = MIN_DELTA_L,
@@ -978,6 +1047,14 @@ def main() -> int:
                         help="unique key column (default auto: " + "/".join(KEY_ALIASES) + ")")
     parser.add_argument("--flag", default="in_analysis", help="analysis flag column")
     parser.add_argument("--audit", default=None)
+    parser.add_argument("--figure-map", default=None,
+                        help="figure_map.json name source; required at final delivery so figures keep titled names")
+    parser.add_argument("--manuscript-spec", default=None,
+                        help="manuscript.json name source; required at final delivery so doc/tables keep titled names")
+    parser.add_argument("--table-map", default=None,
+                        help="table_map.json name source; required at final delivery so all deliverable tables keep titled names")
+    parser.add_argument("--doc-map", default=None,
+                        help="doc_map.json name source; required at final delivery so all deliverable documents keep titled names")
     parser.add_argument("--manifest", default=None, help="chart_manifest.csv")
     parser.add_argument("--min-dpi", type=int, default=600,
                         help="required effective resolution of figures (0 disables)")
@@ -1033,6 +1110,9 @@ def main() -> int:
         report["checks"]["data"] = check_data(args.data, args.key, args.flag)
     if args.audit:
         report["checks"]["audit"] = check_audit(args.audit)
+    if args.figure_map or args.manuscript_spec or args.table_map or args.doc_map:
+        report["checks"]["name_sources"] = check_name_sources(
+            args.figure_map, args.manuscript_spec, args.table_map, args.doc_map)
     if args.manifest:
         data_rows = None
         if args.data:

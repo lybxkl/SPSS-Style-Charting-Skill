@@ -19,7 +19,7 @@ python scripts/assemble_manuscript.py --spec manuscript.json --out output/manusc
   --numbers output/manuscript_numbers.csv   # 你写的 key,value 表（{key} 从这取）
 ```
 
-它同时产出 `<out>_numbers.csv`（本文档实际印出的每个 N，喂给 `verify_numbers.py --numbers`）与 `figure_map.json`（给 `export_pdf_hires.py` 回填原图用）。注意区分：`--numbers` 是**输入**（你提供的 key,value 表），`<out>_numbers.csv` 是**输出**（脚本记录了实际印出的值）。下面的排版参数是**脚本的默认值**，改 `style` 段即可覆盖。
+它同时产出 `<out>_numbers.csv`（本文档实际印出的每个 N，喂给 `verify_numbers.py --numbers`）与 `figure_map.json`（给 `export_pdf_hires.py` 回填原图用），并把正文表合并进 `output/table_map.json`（表的中文显示名来源，见 10-contracts §9/§17）。注意区分：`--numbers` 是**输入**（你提供的 key,value 表），`<out>_numbers.csv` 是**输出**（脚本记录了实际印出的值）。下面的排版参数是**脚本的默认值**，改 `style` 段即可覆盖。
 
 ## 交叉引用、参考文献与目录（脚本能做的部分）
 

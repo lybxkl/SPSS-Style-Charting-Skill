@@ -5,6 +5,7 @@
   "source_coverage": "output/source_coverage.jsonl",
   "discovery_report": "output/discovery_report.md",
   "model_plan": "output/model_plan.jsonl",
+  "layout": {},
   "datasets": [
     {
       "id": "person_wave",

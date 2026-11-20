@@ -484,6 +484,31 @@ def build_pack(args) -> dict:
     }
 
 
+def merge_name_map(path: str, entries: list, wrapper: str) -> None:
+    """Merge titled display-name entries into a map, keyed by normalized file path."""
+    existing = []
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+            existing = data if isinstance(data, list) else (data.get(wrapper) or [])
+        except (OSError, ValueError) as exc:
+            print(f"WARNING: {path} unreadable ({exc}); left untouched", file=sys.stderr)
+            return
+
+    def norm(p: str) -> str:
+        return os.path.normpath(str(p)).replace("\\", "/")
+
+    merged = {norm(it.get("file") or it.get("image") or ""): it
+              for it in existing if isinstance(it, dict)}
+    for it in entries:
+        if it.get("file"):
+            merged[norm(it["file"])] = it
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(list(merged.values()), fh, ensure_ascii=False, indent=2)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build a factual pre-delivery review packet.")
@@ -518,6 +543,8 @@ def main(argv: list[str] | None = None) -> int:
     json_path = os.path.splitext(args.out)[0] + ".json"
     with open(json_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
+    merge_name_map(os.path.join("output", "doc_map.json"),
+                   [{"tag": "", "title": "复核包", "file": args.out}], "docs")
     print(f"review pack: {args.out}")
     print(f"review json: {json_path}")
     print(f"questions: {len(payload['questions'])}")

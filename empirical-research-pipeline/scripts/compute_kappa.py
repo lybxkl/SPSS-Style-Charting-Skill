@@ -20,10 +20,10 @@ Two codings that agree on nothing still exit 0; only structural problems
 (missing files, no alignable key, duplicate keys) exit 2.
 
 Usage:
-    python compute_kappa.py --a output/coding-r1/dataset.csv \\
-        --b output/coding-r2/dataset.csv \\
-        [--a-evidence output/coding-r1/evidence.jsonl] \\
-        [--b-evidence output/coding-r2/evidence.jsonl] \\
+    python compute_kappa.py --a output/coding/r1/dataset.csv \\
+        --b output/coding/r2/dataset.csv \\
+        [--a-evidence output/coding/r1/evidence.jsonl] \\
+        [--b-evidence output/coding/r2/evidence.jsonl] \\
         --out output/kappa
 """
 from __future__ import annotations

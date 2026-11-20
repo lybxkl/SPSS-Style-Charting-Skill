@@ -423,6 +423,7 @@ class Builder:
         self.style.update(spec.get("style") or {})
         self.numbers_used: dict[str, str] = {}
         self.figure_map: list[dict] = []
+        self.table_map: list[dict] = []
         self.warnings: list[str] = []
         self.table_no = 0
         self.figure_no = 0
@@ -649,6 +650,7 @@ class Builder:
         self._tab_idx += 1
         self.table_no += 1
         caption = self._text(block, "caption")
+        self.table_map.append({"tag": f"表{number}", "title": caption, "file": path})
         n_value = self._n_value(block, f"表 {number}", f"table{number}_n")
         self._caption("tab", number,
                       "  " + caption + (f"（N={n_value}）" if n_value else ""),
@@ -918,6 +920,31 @@ def write_numbers(path: str, used: dict) -> None:
             writer.writerow([key, used[key], "assemble_manuscript.py"])
 
 
+def merge_name_map(path: str, entries: list, wrapper: str) -> None:
+    """Merge titled display-name entries into a map, keyed by normalized file path."""
+    existing = []
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+            existing = data if isinstance(data, list) else (data.get(wrapper) or [])
+        except (OSError, ValueError) as exc:
+            print(f"WARNING: {path} unreadable ({exc}); left untouched", file=sys.stderr)
+            return
+
+    def norm(p: str) -> str:
+        return os.path.normpath(str(p)).replace("\\", "/")
+
+    merged = {norm(it.get("file") or it.get("image") or ""): it
+              for it in existing if isinstance(it, dict)}
+    for it in entries:
+        if it.get("file"):
+            merged[norm(it["file"])] = it
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(list(merged.values()), fh, ensure_ascii=False, indent=2)
+
+
 def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(
         description="Build a Word manuscript from a JSON spec (stage 6).")
@@ -976,11 +1003,14 @@ def main(argv: "list[str] | None" = None) -> int:
     map_path = args.figure_map or os.path.join(out_dir or ".", "figure_map.json")
     with open(map_path, "w", encoding="utf-8") as fh:
         json.dump(builder.figure_map, fh, ensure_ascii=False, indent=2)
+    table_map_path = os.path.join(root, "output", "table_map.json")
+    merge_name_map(table_map_path, builder.table_map, "tables")
 
     print(f"wrote {args.out}")
     print(f"tables: {builder.table_no}  figures: {builder.figure_no}")
     print(f"numbers: {numbers_path}")
     print(f"figure map: {map_path}")
+    print(f"table map: {table_map_path}")
     return 0
 
 

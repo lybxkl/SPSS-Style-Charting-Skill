@@ -129,7 +129,13 @@ python scripts/qa_outputs.py \
   --data "data/analysis.csv" \
   --audit "output/audit/corpus_files.csv" \
   --manifest "output/chart_pack/chart_manifest.csv" \
+  --figure-map "output/figure_map.json" \
+  --manuscript-spec "manuscript.json" \
+  --table-map "output/table_map.json" \
+  --doc-map "output/doc_map.json" \
   --min-dpi 600
+
+python scripts/layout_conformance.py --root .
 ```
 
 **退出码**：0 = 通过；2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--exit-zero` 可把 2 降级为 0（只用于中间流程，不要用在交付前）。旧的 `--strict`/`--min-width` 旗标已删除：传入会直接报无法识别的参数（exit 2），错误本来就进退出码，分辨率只看有效 dpi。

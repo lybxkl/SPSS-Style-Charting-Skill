@@ -150,6 +150,11 @@
       "id": 30,
       "prompt": "这套 skill 是不是有 v1 和 v2 两个版本？统计该用 models.py 还是 auto_stats.py？成稿该用 manuscript.py 还是 assemble_manuscript.py？",
       "expected_output": "只有一个版本、一条流水线。统计与成稿永远用主链引擎：auto_stats（含 mixed/cox/logrank/交互项/插补/权重）与 assemble_manuscript + export_pdf_hires。contract_v2/models/manuscript 这些名字带 2 的模块不是第二套引擎，而是归档档的契约账本层：数据面（source_units/OCR/ASR/表格恢复）、多输入模型的登记与独立校核、印后数字溯源与实印核对、发布事务。models.py 不会替代 auto_stats 跑主链统计；manuscript.py 不排版——DOCX 只由 assemble_manuscript 生成，它只验「印出的数字可溯源、印出的文本=审核过的文本」。不存在 v1→v2 迁移路径，也没有「不启用就退回旧链路」的双轨：账本要么按当前契约建立，要么该档不需要它。"
+    },
+    {
+      "id": 31,
+      "prompt": "项目 output/ 下出现 analysis_pack、chart_pack、reports、review、coding-r1、custom 等目录，交付时查看器侧栏和表/文档中文名应该怎么处理？",
+      "expected_output": "已知别名（analysis_pack/chart_pack/reports/review 等）由 layout_conformance.py 自动归入规范骨架（统计/图/表/文档），侧栏按 output/qa/layout_conformance.json 渲染规范组；coding-r1 这类一级杂散目录必须改放规范组子目录（output/coding/r1）或经注册表 layout 声明，custom 未声明即 exit 2；已知别名不得经 layout 改挂其他组逃避命名覆盖；交付表/文档一律放表组/文档组并在 table_map/doc_map 登记中文标题，终检 --table-map --doc-map 与 layout_conformance.py 退出 0 才能交付，「目录是脚本默认写的」「表不在正文里」都不是跳过理由。"
     }
   ]
 }

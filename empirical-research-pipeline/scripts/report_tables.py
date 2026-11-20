@@ -403,6 +403,31 @@ def read_missing_reasons(path: str) -> list[dict]:
 # main
 # ---------------------------------------------------------------------------
 
+def merge_name_map(path: str, entries: list, wrapper: str) -> None:
+    """Merge titled display-name entries into a map, keyed by normalized file path."""
+    existing = []
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8-sig") as fh:
+                data = json.load(fh)
+            existing = data if isinstance(data, list) else (data.get(wrapper) or [])
+        except (OSError, ValueError) as exc:
+            print(f"WARNING: {path} unreadable ({exc}); left untouched", file=sys.stderr)
+            return
+
+    def norm(p: str) -> str:
+        return os.path.normpath(str(p)).replace("\\", "/")
+
+    merged = {norm(it.get("file") or it.get("image") or ""): it
+              for it in existing if isinstance(it, dict)}
+    for it in entries:
+        if it.get("file"):
+            merged[norm(it["file"])] = it
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(list(merged.values()), fh, ensure_ascii=False, indent=2)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Emit the full data report pack for one dataset, "
@@ -606,6 +631,24 @@ def main(argv=None) -> int:
     with open(index_path, "w", encoding="utf-8") as handle:
         json.dump(index, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
+
+    # 报表也是交付表：自动登记中文显示名，避免查看器回退英文文件名
+    report_titles = {
+        "variable_report.csv": "变量报告",
+        "descriptive_stats.csv": "描述统计",
+        "frequency_tables.csv": "频数表",
+        "crosstabs.csv": "交叉表",
+        "missing_report.csv": "缺失报告",
+        "missing_patterns.csv": "缺失模式",
+        "duplicate_report.csv": "重复报告",
+        "missing_reasons_by_field.csv": "缺失原因（按字段）",
+    }
+    merge_name_map(os.path.join("output", "table_map.json"),
+                   [{"tag": "报表", "title": report_titles[w["file"]],
+                     "file": os.path.join(args.out, w["file"])}
+                    for w in written if w["file"] in report_titles], "tables")
+    merge_name_map(os.path.join("output", "doc_map.json"),
+                   [{"tag": "", "title": "数据报告", "file": md_path}], "docs")
 
     print(f"reports: {len(written)} report files + report_index.json "
           f"-> {args.out}")

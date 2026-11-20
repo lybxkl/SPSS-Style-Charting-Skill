@@ -7,13 +7,39 @@ description: 从混合研究资料中尽可能完整地发现、整合任意数�
 
 在 DSH 中使用且工具表里看得到 `data_analysis_status` 和 `data_analysis_start` 时：用户明确调用本技能或要求开始研究后，先用可见文字说明正在启动，并调用 `data_analysis_start`。启动后以每一回合的任务卡为唯一规程，只做卡上的下一步。完整工作流要用 `data_analysis_workflow(action="describe", full=true)` 才返回。未关联时不要静默改走手工 Python。启动失败应立即说明具体原因；已有成果只作待验证输入，不能冒充本次执行。工具表里没有这两个名字时，当前宿主没有挂上工作台，不要反复寻找它们；按本文件后面的命令行流程做，并在范围说明里写明交付方式。
 
+在 DSH 中工具表里看得到 `data_analysis_workspace`（实证研究查看器的只读绑定工具）时：**确定产物目录后立即调用它绑定本会话**（默认 `<cwd>/research`，或你实际使用的产物根目录），让用户在查看器里实时看到产出；**禁止**要求用户手动新建工作区或手动绑定目录。该工具只登记"会话↔目录"、不写目录、不跑脚本，绑定不改变研究流程与验收档；同一目录重复绑定会复用已有工作区，不会重复新建。产物目录中途变更时重新绑定一次。看不到该工具时跳过本条，不影响命令行流程。
+
 工作台的阶段、顺序、依赖、命令、条件步骤、检查点、工具动作、任务说明和重跑范围由本技能的 [workflow.json](contracts/workflow/workflow.json) 唯一声明，结构契约见 [workflow.schema.json](contracts/workflow/workflow.schema.json)。修改研究流程时维护这份声明并重新构建发布清单，插件按当前契约读取；不要另在插件中维护一份阶段表。
 
 验收档写在项目里，默认是可投稿（submission）。explore 只核审计和数据集骨架；submission 增加文件级来源处置、模型登记、数字回溯、图表和文稿；archive 才要求逐格全覆盖。低于当前档的判据标为不适用。降低档位要由用户自己改 `.workbench/acceptance.json`，不要调用工具把降档说成已经确认。有工作台时，下面的阶段图只供对照，不代替任务卡。
 
 工作台门禁报告的入口、覆盖范围、迁移与恢复见 [门禁报告与兼容状态](references/15-gate-reports.md)。技能是研究质量判定的唯一实现来源，工作台保留挂载、工作流与真实裁定。报告只证明实际检查过的事实；缺失或失效证据保持未判。校验器读错原文时用 `data_analysis_dispute_gate` 登记争议，争议不把判据改成通过，也不再当作下一步。
 
-自定义脚本、任意引擎、项目覆盖和兼容模式均可使用。选用兼容/对照模式时说明原因和实际验收范围，模式迁移成功不等于研究质量通过。自定义产物不必迁回默认目录：在 `research_registry.json.artifact_paths` 声明“默认逻辑路径 → 实际项目相对路径”，例如 `{"output/chart_pack/chart_manifest.csv":"output/figures/chart_manifest.csv","output/models":"output/analysis_pack","output/qa/qa_report.json":"output/qa"}`。审计清单和生成文件放在产物目录，保留原材料扫描范围；材料通过已登记挂载读取。
+自定义脚本、任意引擎、项目覆盖和兼容模式均可使用，**但下列契约在任何模式下一律不可省略：阶段 1 审计产物、范围符合性核对、命名源（figure_map/manuscript/table_map/doc_map）、目录骨架与全量命名覆盖、数字溯源**。选用兼容/对照模式时说明原因和实际验收范围，模式迁移成功不等于研究质量通过。自定义产物不必迁回默认目录：在 `research_registry.json.artifact_paths` 声明“默认逻辑路径 → 实际项目相对路径”，例如 `{"output/chart_pack/chart_manifest.csv":"output/figures/chart_manifest.csv","output/models":"output/analysis_pack","output/qa/qa_report.json":"output/qa"}`。`output/` 一级目录由 `layout_conformance.py` 归入规范骨架（审计/编码/数据/统计/图/表/文档/质检/溯源/台账/挖掘）：已知别名目录（analysis_pack、chart_pack、models、methods、reports、review 等）自动归组；自定义目录必须在 `research_registry.json.layout` 声明“规范组 → 物理目录”，否则交付时判杂散目录；表/文档组内的交付件必须都有中文标题来源。审计清单和生成文件放在产物目录，保留原材料扫描范围；材料通过已登记挂载读取。
+
+## 手工模式硬闸门（无工作台时同样强制，不可跳）
+
+没有工作台**不等于**没有闸门。下列检查在手工 CLI 模式**必须实际执行并通过**——可运行的检查退出码必须 0，产物类的检查（命名源/审计产物）必须实际存在且可解析——才能进入下一步；"已有成果""自定义脚本""材料太杂""时间不够"**都不是**跳过理由。未执行、退出码非 0 或产物缺失，即视为该阶段未完成：**禁止**进入下一阶段，**禁止**交付。
+
+1. **审计先行**：先跑 `audit_corpus.py` 产出 `corpus_files.csv` + `sample_flow.csv` 并逐档对账。**在此之前禁止任何统计、建模、出图**。自写解析器只产一份 diagnostics.json **不算**完成审计。
+2. **范围符合性**：每个数据集声明 `scope.json` 纳入白名单并跑 `scope_conformance.py`，退出码 0 才能进统计。范围外命名类别**必须**排除，或显式修订白名单并记录理由；**不得**静默留在分析样本。
+3. **命名源齐备**：交付**必须**含 `figure_map.json` + `manuscript.json` + `table_map.json` + `doc_map.json`（无论通用组装器还是自编写稿脚本）；后两者覆盖全部交付表/文档，不只是正文引用的。
+4. **终检**：`qa_outputs.py` 带 `--audit --figure-map --manuscript-spec --table-map --doc-map --min-fontsize 7.2`，退出码 0 才能交付。**禁止**用 `--exit-zero` / `--allow-empty` 把失败伪装成通过。
+5. **阶段双遍审计**：每个阶段完成后必须做≥2遍、角度互异的全方位审计并记入 `output/qa/stage_audit.jsonl`，`stage_audit.py` 退出码 0 才能进下一阶段（见下节）。
+6. **目录骨架与命名覆盖**：`layout_conformance.py` 退出码 0——无未声明杂散目录、别名目录不得改挂、表/文档组内交付件均有中文标题来源；分组结果 `output/qa/layout_conformance.json` 供查看器渲染规范目录。「目录是脚本默认写出的」「表不在正文里引用」「查看器能显示英文就行」「时间不够」**都不是**跳过理由；交付表/文档一律放表组/文档组目录，不得借其他组目录逃避覆盖；**禁止**用 `--exit-zero` 把失败伪装成通过。
+
+每道闸门把**实际命令与退出码**写进交付说明；只写"已检查"而不给退出码，视为未检查。
+
+## 阶段完成后双遍多角度审计（每阶段强制，≥2 遍）
+
+每个阶段（范围/审计/编码/数据集/统计/图表/文稿/终检）执行完成后，**必须**做至少 2 遍、**角度互不相同**的全方位审计，把每遍记入 `output/qa/stage_audit.jsonl`（一行一遍：`stage/angle/evidence/findings`），并跑 `python scripts/stage_audit.py --ledger output/qa/stage_audit.jsonl --require <本阶段>` 退出码 0，**才能进入下一阶段**。一遍都不许少，两遍不许同角度。
+
+- **第 1 遍·机器/口径**：跑本阶段相关校验脚本（审计对账、`report_tables`、`scope_conformance`、`layout_conformance`、模型诊断、`verify_numbers`、`qa_outputs` 等），核对数字、N、口径、范围、命名源与目录骨架；`evidence` 记命令+退出码。
+- **第 2 遍·独立/语义/漂移**：换一条独立路径复核——回原材料抽样重读（submission 按声明抽样、archive 逐格）、对照 `scope.md` 研究问题检查是否跑偏、检查有无遗漏字段/单位/子样本、图与文方向是否一致；`evidence` 记抽样 `rel_path` 与检查项。
+- 两遍发现的任何问题**必须**修复后重审；`findings` 里 `resolved=false` 的条目会被 `stage_audit.py` 判 error。
+- 深度随验收档（submission 抽样、archive 逐格），**但"遍数≥2、角度互异、留台账"三条任何档都不豁免**。
+
+这不是"跑两遍同一脚本"凑数：两遍必须方法/视角不同，第二遍必须独立于第一遍的产出重新取证，专门抓第一遍漏掉的细节和偏离研究问题的跑偏。
 
 归档档才使用逐格复算适配器。可在注册表 `verification.adapters` 声明名称与脚本，供 CLI 与工作台共享，例如 `{"envcell":"scripts/envcell_adapter.py"}`。解析器重放可登记 `method=parser_replay`，如实说明它能核一致性、不能独立证明语义；`independent_reextract` 只描述实际独立实施的检查。适配器自动绑定已导入的本项目代码，其他依赖可在适配器的 `verification_dependencies` 列出。归档档里注册表、codebook、解析器或数据在 final 后改变时，重新 prepare/final。最终答复同时列出当前通过、未通过和未评估项。可投稿档不要为了这些句子去跑 prepare/final。
 
@@ -61,13 +87,16 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 
 归档档的深度核验任务才读取 [references/14-reviewed-workflow.md](references/14-reviewed-workflow.md)。它规定该档的复核签名、搜索范围、执行绑定、独立校核、语境复读和发布行为；不能用台账里的 `verified/passed` 字样代替这些实际检查。可投稿档不要打开这份文档来补做全格复核。
 
-1. **先审计，再编码/建模。** 没弄清文件数、可读文本数、重复数、字段缺失和排除原因之前，不要开始统计。
+1. **先审计，再编码/建模。** 没弄清文件数、可读文本数、重复数、字段缺失和排除原因之前，不要开始统计。没有工作台时同样必须先跑 `audit_corpus.py`（或等价产出 `corpus_files.csv` + `sample_flow.csv` 并逐档对账）；自写解析器只产一份 diagnostics.json 不等于完成阶段 1 审计，也不能据此跳过审计直接建模。
 2. **按内容去重，不按文件名。** 同名不同文、同文不同名都很常见；至少用 MD5，再用标题/关键字段/正文抽样复核。
 3. **每个数据集各有明确单位和主键。** 文书、个人、事件、个人-时期、题项、节点/边或其他形态按资料决定；新增形态就新增数据集和关联规则，禁止把不同单位混成无法对账的一张表。
 4. **每个编码/抽取值要有证据。** 原文没有记载就记 `NA/未记载`，不要默认记 0；否定表述、他人建议、转述不能当作最终事实。
 5. **描述样本 N ≠ 模型样本 N。** 每个模型单独报告 N 和筛选条件；正文、表、图、摘要必须用同一套口径。
 6. **关联 ≠ 因果。** 写“关联/对应/更可能”，不写“导致/使得/证明有效”。
 7. **按验收档复核，可投稿档不做全格回源。** explore 与 submission 的正式结果以注册表、抽样复核、模型回执、数字和图表为准。submission 把脚本抽出的语义值当作候选：写 `docs/decisions/coding-sample.md`，正文包含「抽样复核：」，记下抽查原文、脚本值是否一致和残留误差。archive 才要求主键、空值、标记、编码和派生值逐格回源，prepare 之后实际重读原材料再跑 final；这一档禁止用十行抽查、只看 flags、批量盖 verified 或旧复核代替全检。脚本不可能证明所有语义正确。可投稿档不要调用 `verify_dataset.py`、`verify_source` 或 `research_gate.py` 来换取统计或交付通过。
+8. **查看器可用即自动绑定，不让用户动手。** 工具表见 `data_analysis_workspace` 就在确定产物目录后立即绑定本会话；禁止把"新建工作区/绑定目录"留给用户手动操作。绑定是只读登记，不影响流程。
+9. **每阶段完成后双遍多角度审计。** 任何阶段做完必须≥2遍、角度互异的全方位审计并留 `stage_audit.jsonl` 台账，`stage_audit.py` 通过才能进下一阶段；防漏细节、防跑偏。遍数与角度互异任何验收档都不豁免。
+10. **目录骨架与全量命名源。** `output/` 一级目录归入规范骨架，自定义目录在注册表 `layout` 声明，已知别名不得改挂；多轮编码等额外目录放规范组子目录（`output/coding/r1`），不建一级杂散目录；交付表/文档一律放表组/文档组并在 `table_map.json`/`doc_map.json` 登记中文标题，`layout_conformance.py` 通过才能交付，缺一项即视为该阶段未完成。
 
 ## 判断权：谁决定，谁举证
 
@@ -131,7 +160,7 @@ python scripts/check_decisions.py --decisions decisions.jsonl --root "资料目�
 
 并行数量由模型按材料规模与机器情况自定。支持 `--resume` 的阶段（语料审计、编码抽取）有逐字节等价的回归测试钉住，合并后应当抽查复跑验证；OCR/ASR/账本类分片产物没有等价的机器保证，靠护栏 3 的显式合并与对账兜底。
 
-这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段。可投稿档补数后重跑受影响的统计、图表和文稿，并更新抽样复核。归档档才在补数后做全格复核。内置脚本可被等价、自选实现替换，但来源、样本与运行回执契约不能省略。
+这不是只走一遍的直线：模型缺字段/样本时回到原材料与数据集阶段。可投稿档补数后重跑受影响的统计、图表和文稿，并更新抽样复核。归档档才在补数后做全格复核。内置脚本可被等价、自选实现替换，**但阶段 1 审计、范围符合性、命名源与目录骨架、来源/样本/运行回执契约在任何实现下都不能省略**——换脚本不换契约。
 
 ### 归档档深度核验链（契约账本层）
 
@@ -244,7 +273,7 @@ python scripts/dedupe_corpus.py --undo "output/audit/move_log.csv"
 
 `--apply` 前会逐组校验 keeper 真的在盘（keeper 被删或改名就整组跳过并在 `move_log.csv` 记 `skipped`，不会把唯一副本搬走）。`move_log.csv` 记 `group/src/dest/action/status/reason`，`--undo` 靠它反演。**移动失败、跳过、或日志里有 conflict 时返回 2**，不能当成功处理；`--undo` 发现没有任何可复原条目时也返回 2（日志全是 copied 时会明确报 `nothing to undo`）。
 
-**闸门**：`sample_flow.md` 能对账：
+**闸门**（未过**禁止**编码/建模/出图）：`corpus_files.csv` + `sample_flow.csv` 已实际产出，且 `sample_flow.md` 能对账：
 
 ```
 原始文件数（含 .DS_Store/无扩展名文件）
@@ -386,11 +415,20 @@ python scripts/make_coding_sheet.py --root "资料目录" --out "output/coding" 
 | `exclusion_reason` | 排除原因，便于写样本流程 | **你在编码时加**；`make_coding_sheet.py` 把被 `--audit`/`--dedupe-plan` 排除的文件逐条写进 `skipped_documents.csv`（含 reason），不靠这一列 |
 | `<字段>_src` | 非直接抽取字段的来源（`year_src`/`charge_src`/`court_level_src` 等） | **编码时加**；`make_coding_sheet.py --extract` 会为抽取字段写 `*_src` |
 
-`in_scope`/`in_analysis`/`model*_sample`/`exclusion_reason` 目前没有任何脚本自动生成或校验——它们是**约定**，写不写由你决定，但样本流程对不上时第一件事就是查这几列。`sample_flow.csv`（列 `stage,n,note`）应由 `make_coding_sheet.py` 生成并逐档对账，不要手写正文里的漏斗数字。
+`in_scope`/`in_analysis`/`model*_sample`/`exclusion_reason` 这几列由你在编码/建模时写入（脚本不代写），**但写它们不是可选项**：每个分析数据集必须有 `in_scope` 与 `in_analysis`，且范围必须由 `scope.json` 白名单声明、经 `scope_conformance.py` 核对通过（见下）。样本流程对不上时第一件事就是查这几列。`sample_flow.csv`（列 `stage,n,note`）应由 `make_coding_sheet.py` 生成并逐档对账，**不要**手写正文里的漏斗数字。
+
+**范围符合性必须机器核对，不能只靠 `in_scope` 自觉。** 每个数据集在 `scope.md`/`scope.json` 里为决定范围的分类列声明纳入白名单（`columns.<列>.include`，纯通用：类别、分层、地区族等任何分类字段都适用），进入统计前跑：
+
+```bash
+python scripts/scope_conformance.py --data output/dataset/analysis.csv --scope scope.json \
+  --cell-cols "<分类列>,<时间列>" --out output/qa/scope_conformance.csv
+```
+
+它把分析表的实际类别分布对照白名单：**任何声明范围外的命名类别只要 n>0 就 exit 2**（子样本/并案/混入的无关类别在这一步暴露，而不是画进图里才发现）；缺失值记 warning 并要求声明处理方式；`--cell-cols` 另报小样本单元格（率表/热图在 n 极小的格子上会出现不稳定的 0%/100%）。范围外类别要么按声明排除、要么显式修订白名单并记录理由，不能静默留在分析样本里。这一步对任何学科都一样，引擎不内置任何领域的类别词。
 
 用 `scripts/csv_to_spss_syntax.py` 生成 `.sps`，避免手写 `GET DATA` 时列类型错位。CSV 里若是“是/否、有/无、支持/不支持”等二值文本，脚本会自动追加 `RECODE ... ('是'=1) ('否'=0) INTO *_num`，Logistic 直接用数值列；不需要时加 `--no-recode`。
 
-**闸门**：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释。可投稿档在注册表和抽样复核完成后进入统计，不运行 `verify_dataset.py`。归档档才先 prepare、逐格复读、再 final，通过后才把该版本用于正式结果。每个模型 N 从实际样本键与筛选条件重算。
+**闸门**（范围符合性未过**禁止**进统计）：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释；`scope_conformance.py` 退出码 0。可投稿档在注册表和抽样复核完成后进入统计，不运行 `verify_dataset.py`。归档档才先 prepare、逐格复读、再 final，通过后才把该版本用于正式结果。每个模型 N 从实际样本键与筛选条件重算。
 
 ---
 
@@ -605,7 +643,7 @@ python scripts/assemble_manuscript.py --spec manuscript.json --out output/manusc
 - `figure_map.json` 供下一步回填 600 dpi 原图；图默认按**正文栏宽**放置（A4 + 3.17 cm 边距 = 14.66 cm，不是 15 cm），显式给 `width_cm` 超过栏宽会报错而不是悄悄压扁。
 - Word 排版细节（图题与下段同页、表格行不跨页、表头重复）由脚本写进 docx，不要手工再设一遍，否则会与脚本的设置打架。
 
-**闸门**：`assemble_manuscript.py` 退出码 0；docx 里表格是三条线且无竖线；每张图有图题、图题与图同页；`manuscript_numbers.csv` 与正文/表/图注逐个对得上。
+**闸门**：`assemble_manuscript.py` 退出码 0；docx 里表格是三条线且无竖线；每张图有图题、图题与图同页；`manuscript_numbers.csv` 与正文/表/图注逐个对得上。**无论用通用组装器还是自编写稿脚本**，交付必须同时含 `figure_map.json`（`[{tag,title,image}]`）与 `manuscript.json`（含 title/table blocks）作为图/表/文稿的显示名来源，以及覆盖全部交付表/文档的 `table_map.json`/`doc_map.json`（`[{tag,title,file}]`；report_tables/assemble/review_pack 自动合并写入，自写脚本自备）——这是脚本无关的硬契约（`references/10-contracts.md` §9/§17），缺任一则终检 error，否则下游查看器只能回退英文文件名。
 
 Word 导 PDF 时，Word 会把 600 dpi 图压到约 200 dpi。用 `scripts/export_pdf_hires.py` 导出后回填原图：
 
@@ -626,10 +664,12 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 运行：
 
 ```bash
-python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --min-dpi 600
+python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --figure-map "output/figure_map.json" --manuscript-spec "manuscript.json" --table-map "output/table_map.json" --doc-map "output/doc_map.json" --min-dpi 600
 ```
 
-退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据）。`--exit-zero` 只在中间流程用。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）给分类色板灰度建议，`--colorblind` 另加protanopia/deuteranopia 色觉模拟提示；这些默认不拦截配色选择，只有显式 `--strict-palette` 才将声明的分类色板低灰度间隔作为错误。
+`--figure-map`/`--manuscript-spec`/`--table-map`/`--doc-map` 在终检校验显示名来源存在且可解析（缺=error）；`--audit` 指向阶段 1 的 `corpus_files.csv`，缺失即 error——把"审计先跑"和"命名源齐备"变成终检能卡住的事实，而不是口头约定。目录骨架与命名覆盖另跑 `python scripts/layout_conformance.py --root .`，退出码 0 才能交付（杂散目录、表/文档组无标题交付件均 error）。
+
+退出码：0 = 通过，2 = 有 error（低分辨率图、键列缺失、`n` 非法、`sample` 范围下 N 超过数据行数、文件缺失、空数据、命名源/审计缺失）。`--exit-zero` **只允许**中间调试，**交付终检禁止使用**；用它把 error 压成 0 再交付，视为伪造通过。`--key` 默认 `auto`：按 `rel_path → relpath → file → path → doc_id → id` 找主键，一个都没有就报错，不会静默跳过重复检查。**终稿必须带 `--min-fontsize 7.2`**：不带这个参数时脚本仍会测量并在报告里写出实测最小字号，但不会判错（图和正文因此不会因字号失败）；带上之后才真正卡闸门（按实际安置宽度折算）。带上之后查字号（按实际安置宽度折算），`--graycheck`（默认开）给分类色板灰度建议，`--colorblind` 另加protanopia/deuteranopia 色觉模拟提示；这些默认不拦截配色选择，只有显式 `--strict-palette` 才将声明的分类色板低灰度间隔作为错误。
 
 **数字溯源另跑一条** `scripts/verify_numbers.py`：
 
@@ -679,10 +719,13 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/sample_review.py` | 结构化抽样复核：种子必填、分层+强制 flagged 维度、同 seed 逐字节复现；`tally` 统计保持/改判/无法核对并列改判项，未裁决完 exit 2，`--fail-above` 守用户上限 |
 | `scripts/clean_data.py` | 按项目配方（draft/cleaning.json）执行清洗：去重/值映射/类型转换/越界标记/缺行剔除，逐步写台账（cleaning_log.jsonl 指纹链）与 flow.csv；未声明的清洗一律拒绝，max_drop_fraction 超限中止，`--emit-template` 起步 |
 | `scripts/mine_candidates.py` | 材料挖掘候选层：TF-IDF 关键词/共现词对(PMI)/NMF 主题，候选行带 rel_path+行号证据锚；产出候选表+mine_receipt.json（corpus/停用词 sha256、seed 入账）；候选不是事实，采纳归研究者；需 scikit-learn，可选 jieba |
-| `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source） |
+| `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source）；报表与数据报告自动登记进 table_map/doc_map |
+| `scripts/scope_conformance.py` | 通用范围符合性：分析表分类列的实际分布对照 scope.json 的 include 白名单，范围外命名类别 n>0 退出 2，缺失值 warning，`--cell-cols` 报小样本单元格；不含任何学科词 |
+| `scripts/stage_audit.py` | 通用阶段双遍审计台账校验：读 stage_audit.jsonl，每阶段≥2遍、角度互异、每遍有证据（命令+退出码/抽样/检查项）、无未解决 finding，否则退出 2；不含任何学科词 |
+| `scripts/layout_conformance.py` | 通用目录骨架与命名覆盖：output/ 一级目录归入闭合规范骨架（已知别名自动归组，自定义目录须注册表 layout 声明），表/文档组交付件须有 table_map/doc_map 中文标题；杂散目录/无标题交付件退出 2，分组结果写 output/qa/layout_conformance.json 供查看器读取；不含任何学科词 |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |
-| `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；交叉引用 `[@tab:N]`/`[@fig:N]` 渲染为 Word REF 域（前向引用可查、坏引用 exit 2）、参考文献块（悬挂缩进+可选编号）、目录 TOC 域；同时写 `*_numbers.csv`（文档实际印出的每个 N）与 `figure_map.json` |
+| `scripts/assemble_manuscript.py` | 按 `manuscript.json` 组装 Word 成稿：三线表（1.5/0.75/1.5 pt）、行不跨页、表头重复、图按栏宽嵌入、图题不可分页、中西文字体分别设置、首行缩进按字符；交叉引用 `[@tab:N]`/`[@fig:N]` 渲染为 Word REF 域（前向引用可查、坏引用 exit 2）、参考文献块（悬挂缩进+可选编号）、目录 TOC 域；同时写 `*_numbers.csv`（文档实际印出的每个 N）、`figure_map.json` 并把正文表合并进 `output/table_map.json` |
 | `scripts/verify_numbers.py` | 数字溯源：表内合计、表图同值、正文数字找回表（`--numbers`/`--figure-data` 承接叙述数与图内数）、图号引用、样本 N 一致、漏斗按链单调（`note` 写 `funnel=名` 分链） |
 | `scripts/text_extract.py` | 通用文本抽取与文件检查（PDF/DOCX/ODT/PPTX/XLSX/HTML/文本/图片/音视频）；有 CLI（`--root`/`--file`/`--out csv\|jsonl`/`--text`） |
 | `scripts/analysis_utils.py` | 内部共享函数：样本筛选、结果类型识别、二值标签编码；由自动统计/图表脚本导入 |
@@ -695,7 +738,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
 | `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |
 | `scripts/check_decisions.py` | 校验 `decisions.jsonl`：schema、证据 span/引文、候选值是否真的出现过、重复 target、`needs_human` 未决；有 error 退出 2 |
-| `scripts/review_pack.py` | 交付前审稿包：样本/缺失、模型 N、图表状态、数字溯源、未决 decisions、五个审稿人问题；Markdown + JSON 双出 |
+| `scripts/review_pack.py` | 交付前审稿包：样本/缺失、模型 N、图表状态、数字溯源、未决 decisions、五个审稿人问题；Markdown + JSON 双出，自动登记进 doc_map |
 | `scripts/verify_dataset.py` | 仅归档档：对 CSV 审计视图逐格回读来源、哈希、位置并复算派生值。可投稿档不要运行 |
 | `scripts/run_model.py` | 执行 Agent 自选的任意分析命令，记录实际输入、代码、输出的 SHA256、退出码与日志；不限制引擎或模型族 |
 | `scripts/research_gate.py` | 检查原始文件全覆盖、数据复核版本、开放模型清单、缺数回查、样本键与实际运行回执 |
@@ -744,4 +787,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 8. **结果是“是/否”文本却直接当连续变量。** 用 `outcome_map` 明确正类，或在 CSV 里编码为 0/1；脚本不会猜正负方向。
 9. **审计只数某一种格式，静默漏掉其他文件。** 所有文件都要有状态；`total_files` 要能和资源管理器对账。
 10. **把表格数据塞进文本编码。** CSV/Excel 直接走 `auto_stats`/SPSS 流程；文本编码适合文档、访谈、网页等非结构化资料。
+11. **子样本/并案混入无关类别。** 分析样本的类别分布必须用 `scope_conformance.py` 对照声明的纳入白名单核对（任何学科）；只给主数据集加范围过滤、却让另一数据集"字段非空就入组"，会把无关类别画进图里。
+12. **自编写稿脚本跳过命名源。** 不用 `assemble_manuscript.py` 时也要产出 `figure_map.json`/`manuscript.json`/`table_map.json`/`doc_map.json`，否则图/表/文稿在查看器里全是英文文件名；终检 `--figure-map`/`--manuscript-spec`/`--table-map`/`--doc-map` 与 `layout_conformance.py` 的命名覆盖会卡住。
+13. **自定义目录不声明就交付。** `output/` 下超出已知别名的目录必须在注册表 `layout` 挂到规范组，否则 `layout_conformance.py` 判杂散目录 exit 2；查看器也只按分组报告渲染规范目录。
 

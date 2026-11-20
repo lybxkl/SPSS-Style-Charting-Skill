@@ -148,14 +148,14 @@
 用 `scripts/compute_kappa.py` 对齐两轮独立编码并计算一致率与 Cohen's κ。两轮各产出一份 `dataset.csv`（同一个项目剖面、同一批抽样材料）：模型初编码与之后的独立复读算两轮；有两名编码员更好。
 
 ```bash
-python scripts/compute_kappa.py --a output/coding-r1/dataset.csv \
-    --b output/coding-r2/dataset.csv \
-    --a-evidence output/coding-r1/evidence.jsonl \
-    --b-evidence output/coding-r2/evidence.jsonl \
+python scripts/compute_kappa.py --a output/coding/r1/dataset.csv \
+    --b output/coding/r2/dataset.csv \
+    --a-evidence output/coding/r1/evidence.jsonl \
+    --b-evidence output/coding/r2/evidence.jsonl \
     --out output/kappa
 ```
 
-产出三件：`kappa_report.csv`（每变量 n/一致数/一致率/κ）、`disagreements.csv`（逐条分歧 + 双方证据行，裁决从这里开始）、`coding-sample.md`（抽样复核记录骨架）。脚本不判断谁对：分歧只列出来，裁决仍由人/模型做并记录理由。
+产出三件：`kappa_report.csv`（每变量 n/一致数/一致率/κ）、`disagreements.csv`（逐条分歧 + 双方证据行，裁决从这里开始）、`coding-sample.md`（抽样复核记录骨架）。脚本不判断谁对：分歧只列出来，裁决仍由人/模型做并记录理由。多轮编码目录放规范组子目录（`output/coding/r1`、`output/coding/r2`），**不得**建 `coding-r1` 这类一级目录——目录骨架闸门会判杂散。
 
 空值与列不对齐的约定：单元格写 `（未编码）` 表示该变量在这份材料上没有编码（不算「无/0」，也不算缺失一致）；两轮都会跳过这种单元格。`rel_path`/`relpath`/`file`/`doc_id`/`id`/`name`/`filename` 只作对齐键，`*_src`、`doc_type`、`run_order` 是溯源列，这些列一律不进 κ。只有一轮编了的变量不会静默消失：stdout 和 `coding-sample.md` 会点名「仅 A 编了 / 仅 B 编了」。
 

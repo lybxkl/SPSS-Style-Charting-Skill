@@ -341,7 +341,9 @@
             "output/reports/missing_report.csv",
             "output/reports/missing_patterns.csv",
             "output/reports/duplicate_report.csv",
-            "output/reports/data_report.md"
+            "output/reports/data_report.md",
+            "output/table_map.json",
+            "output/doc_map.json"
           ],
           "continueOnError": true
         }
@@ -677,7 +679,8 @@
           "produces": [
             "output/manuscript.docx",
             "output/manuscript_numbers.csv",
-            "output/figure_map.json"
+            "output/figure_map.json",
+            "output/table_map.json"
           ]
         },
         {
@@ -700,7 +703,8 @@
       "artifacts": [
         "output/manuscript.docx",
         "output/manuscript_numbers.csv",
-        "output/figure_map.json"
+        "output/figure_map.json",
+        "output/table_map.json"
       ],
       "dependsOn": [
         "figures"
@@ -840,7 +844,12 @@
             }
           ],
           "whenFile": "research_registry.json",
-          "continueOnError": true
+          "continueOnError": true,
+          "produces": [
+            "output/review/review_pack.md",
+            "output/review/review_pack.json",
+            "output/doc_map.json"
+          ]
         }
       ],
       "args": [
@@ -854,6 +863,14 @@
         "output/chart_pack/chart_manifest.csv",
         "--audit",
         "output/audit/corpus_files.csv",
+        "--figure-map",
+        "output/figure_map.json",
+        "--manuscript-spec",
+        "manuscript.json",
+        "--table-map",
+        "output/table_map.json",
+        "--doc-map",
+        "output/doc_map.json",
         "--min-dpi",
         "600",
         "--min-fontsize",
@@ -1908,6 +1925,22 @@
     {
       "match": "exact",
       "pattern": "output/figure_map.json",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "output/table_map.json",
+      "stages": [
+        "manuscript",
+        "qa"
+      ]
+    },
+    {
+      "match": "exact",
+      "pattern": "output/doc_map.json",
       "stages": [
         "manuscript",
         "qa"

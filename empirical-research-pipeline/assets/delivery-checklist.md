@@ -10,6 +10,10 @@
 - [ ] 整合后的逐格回源复读记录（含键/空值/派生值）；prepare 后实际完成，禁止批量盖章
 - [ ] `dataset_verification.json`：stage=final、status=verified、0 error，版本仍有效
 - [ ] 各数据集的排除/去重记录、样本流程、关联基数核对
+- [ ] 阶段 1 审计产物 `corpus_files.csv` + `sample_flow.csv` 存在并逐档对账（自写 diagnostics 不算审计）
+- [ ] `scope_conformance.py` 通过：每个数据集分类列分布对照 scope.json 白名单，无范围外命名类别；小样本单元格已声明
+- [ ] 每个阶段≥2遍、角度互异审计，`stage_audit.jsonl` 台账齐备且 `stage_audit.py --require <全部已完成阶段>` 退出 0，无未解决 finding
+- [ ] `layout_conformance.py` 退出 0：无未声明杂散目录（自定义目录已在注册表 `layout` 挂到规范组），表/文档组交付件均有中文标题来源
 - [ ] 如需 SPSS：实际执行 `.sps` 得到 SAV 并复核；其他任务不强制 SAV
 
 ## 语法与结果
@@ -37,6 +41,7 @@
 
 - [ ] `output/*.docx`
 - [ ] `output/*.pdf`（需要时交付；按实际安置尺寸有效 dpi ≥600）
+- [ ] 命名源 `figure_map.json` + `manuscript.json` + `table_map.json` + `doc_map.json` 齐备（无论通用或自写组装器；后两者覆盖全部交付表/文档）；`qa_outputs.py --figure-map --manuscript-spec --table-map --doc-map` 通过
 - [ ] `output/修订说明.md`：旧数字→新数字对照
 - [ ] `output/qa_report.json`：终检结果
 - [ ] `verify_numbers` 数字溯源报告；DOCX/PDF 已渲染逐页核对排版、字体、表图与引用

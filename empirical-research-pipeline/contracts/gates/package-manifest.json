@@ -2,7 +2,7 @@
   "members": [
     {
       "path": "SKILL.md",
-      "sha256": "f2d2cd2b47aff228d49d71ad5c43508a00e742173d99c3e042a9ee777ed9fed5"
+      "sha256": "92972e5925781d91ede538338ed22abe3ee8ac53976af2dd368db892d5fd186f"
     },
     {
       "path": "assets/analysis-manifest-template.md",
@@ -22,7 +22,7 @@
     },
     {
       "path": "assets/delivery-checklist.md",
-      "sha256": "57f17985bbc3a32dce30df610a306c10a9cfc534db6710b96cf0c95d6d6f8db7"
+      "sha256": "a9429d5bef93a202d1e0ba56bd5026615b6c4a78de2a4bcf828a163ecae174dc"
     },
     {
       "path": "assets/figure-spec-template.md",

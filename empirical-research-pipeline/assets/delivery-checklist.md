@@ -12,7 +12,9 @@
 - [ ] 各数据集的排除/去重记录、样本流程、关联基数核对
 - [ ] 阶段 1 审计产物 `corpus_files.csv` + `sample_flow.csv` 存在并逐档对账（自写 diagnostics 不算审计）
 - [ ] `scope_conformance.py` 通过：每个数据集分类列分布对照 scope.json 白名单，无范围外命名类别；小样本单元格已声明
-- [ ] 每个阶段≥2遍、角度互异审计，`stage_audit.jsonl` 台账齐备且 `stage_audit.py --require <全部已完成阶段>` 退出 0，无未解决 finding
+- [ ] 每个阶段≥2遍、角度互异、方法互异审计，`stage_audit.jsonl` 台账齐备且 `stage_audit.py --ledger output/qa/stage_audit.jsonl --require <全部已完成阶段> --root .` 退出 0：产物哈希绑定未变、证据命令已实际重跑、样本已机器回读、至少一遍回读原始资料、无未解决/无 resolution 的 finding（交付禁用 --no-rerun/--no-recompute/--exit-zero）
+- [ ] 零信任独立复核器（适用即跑且退出 0）：`evidence_replay.py`（有抽取层）、`relation_conformance.py`（声明了 joins）、`cleaning_replay.py`（做过清洗）、`rescan_corpus.py`（交付前语料新鲜度）
+- [ ] `gate_canary.py` 退出 0：各闸门 clean=0、植入错误=2（安装/升级后必跑，证明闸门有牙）
 - [ ] `layout_conformance.py` 退出 0：无未声明杂散目录（自定义目录已在注册表 `layout` 挂到规范组），表/文档组交付件均有中文标题来源
 - [ ] 如需 SPSS：实际执行 `.sps` 得到 SAV 并复核；其他任务不强制 SAV
 

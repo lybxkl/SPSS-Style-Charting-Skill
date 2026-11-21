@@ -628,6 +628,26 @@ def check_data(path: str, key: str, flag: str | None) -> dict:
     return result
 
 
+def _rescan_audit(audit_path: str) -> dict:
+    """Freshness: re-walk the audited corpus and reconcile (opt-in --rescan)."""
+    import audit_probe as AP
+    audit_out = os.path.dirname(os.path.abspath(audit_path))
+    summary = os.path.join(audit_out, "corpus_summary.json")
+    if not os.path.isfile(summary):
+        return {"errors": ["corpus_summary.json missing next to audit; cannot rescan"],
+                "warnings": []}
+    try:
+        with open(summary, encoding="utf-8") as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return {"errors": [f"cannot read corpus_summary.json: {exc}"], "warnings": []}
+    root = meta.get("root")
+    if not root or not os.path.isdir(root):
+        return {"errors": [f"audit root missing/unreadable: {root!r}"], "warnings": []}
+    scratch = os.path.join(audit_out, "rescan_scratch")
+    return AP.rescan_corpus(root, audit_out, scratch)
+
+
 def check_audit(path: str) -> dict:
     result = {"path": path, "exists": os.path.isfile(path), "errors": [], "warnings": []}
     if not result["exists"]:
@@ -1047,6 +1067,9 @@ def main() -> int:
                         help="unique key column (default auto: " + "/".join(KEY_ALIASES) + ")")
     parser.add_argument("--flag", default="in_analysis", help="analysis flag column")
     parser.add_argument("--audit", default=None)
+    parser.add_argument("--rescan", action="store_true",
+                        help="with --audit: re-walk the corpus and reconcile against the "
+                             "audit fingerprint (freshness); new/vanished/changed files are errors")
     parser.add_argument("--figure-map", default=None,
                         help="figure_map.json name source; required at final delivery so figures keep titled names")
     parser.add_argument("--manuscript-spec", default=None,
@@ -1110,6 +1133,8 @@ def main() -> int:
         report["checks"]["data"] = check_data(args.data, args.key, args.flag)
     if args.audit:
         report["checks"]["audit"] = check_audit(args.audit)
+        if args.rescan:
+            report["checks"]["rescan"] = _rescan_audit(args.audit)
     if args.figure_map or args.manuscript_spec or args.table_map or args.doc_map:
         report["checks"]["name_sources"] = check_name_sources(
             args.figure_map, args.manuscript_spec, args.table_map, args.doc_map)

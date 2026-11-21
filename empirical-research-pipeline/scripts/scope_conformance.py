@@ -141,6 +141,22 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
+    # temporal rules (date bounds / per-key interval overlap) are part of scope
+    # conformance too: a categorical-only check would let out-of-range dates or
+    # doubly-valid records pass. Generic; the values live in the project scope.
+    try:
+        import audit_probe as AP
+        spec = load_scope(args.scope)
+        if spec.get("temporal") or spec.get("intervals"):
+            tres = AP.check_temporal(spec, args.data)
+            result["temporal"] = tres
+            result["errors"].extend(tres["errors"])
+            result["warnings"].extend(tres["warnings"])
+            result["error_count"] = len(result["errors"])
+            result["warning_count"] = len(result["warnings"])
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: temporal check: {exc}", file=sys.stderr)
+        return 2
     out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.data)), "scope_conformance.csv")
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with io.open(out, "w", encoding="utf-8-sig", newline="") as fh:

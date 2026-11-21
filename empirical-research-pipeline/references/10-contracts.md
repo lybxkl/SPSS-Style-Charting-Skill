@@ -195,14 +195,20 @@ V-05 当前按声明的 sample/subset 分组、按 n_scope 区分口径，对 `c
 - 产出 `scope_conformance.csv`（`column,value,n,in_scope,severity,note`）。范围外类别须按声明排除或显式修订白名单并记录理由，不得静默留在分析样本。
 - 与样本漏斗（§2）互补：漏斗核"掉多少"，本契约核"留下的类别是否都在声明范围内"。两者都对任何学科适用。
 
-## 16. 阶段双遍审计（stage audit）
+## 16. 阶段双遍审计（stage audit，零信任）
 
-**硬闸门，不是建议。** 每个阶段完成后必须≥2遍、角度互异的全方位审计，留台账并经机器校验，才能进下一阶段。
+**硬闸门，不是建议。** 每个阶段完成后必须≥2遍、角度互异、**方法互异**的全方位审计，留台账并经**零信任**机器校验，才能进下一阶段。审计器不信任被审计步骤的任何自报：退出码、证据字符串、中间 CSV 都要被重跑/回读/重算验证。
 
-- 台账 `output/qa/stage_audit.jsonl`，一行一遍：`{"stage","angle","evidence","findings","at"}`。`evidence` 为 `{"commands":[{"cmd","exit"}]}` 或 `{"samples":[...],"checks":[...]}`；`findings` 为 ` [{"detail","resolved"}]`。
-- 生成方：你在每阶段完成后追加两遍（第 1 遍机器/口径，第 2 遍独立/语义/漂移）；消费方：`scripts/stage_audit.py --ledger ... --require <阶段>`。
-- 判据：每阶段≥2遍、≥2个互异角度、每遍有真实证据、无 `resolved=false`；缺阶段/少遍/单角度/空证据/未解决 → exit 2。
-- 深度随验收档（submission 抽样、archive 逐格），但遍数≥2、角度互异、留台账三条任何档不豁免。第二遍必须独立于第一遍产出重新取证，防漏细节与跑偏。
+- 台账 `output/qa/stage_audit.jsonl`，一行一遍：`{"stage","angle","method","artifacts","evidence","findings","at"}`。
+  - `method ∈ recompute|rerun|rescan|replay|reextract|reread|mutation`（必填）。
+  - `artifacts`：`{相对路径: sha256}`，本遍审计过的产物快照（必填，≥1 项）。审计器重算哈希，字节变过即该遍作废。
+  - `evidence.commands`：`[{"cmd","exit"}]`。审计器用 shlex 解析、**无 shell 实际重跑**，真实退出码与声明比对；命令必须是幂等校验命令，且**必须能从 `--root` 直接运行**（在项目目录运行时写 skill 脚本的绝对路径，不要写相对 `scripts/`，否则重跑会因找不到脚本而假失败）。**白名单（零信任）**：台账本身是不可信输入，审计器只重跑 `audit_probe.CHECKER_ALLOWLIST` 里的已知校验脚本，拒绝 `python -c/-m` 与任何非校验脚本——伪造台账不能把审计器当武器去执行任意/破坏性代码。
+  - `evidence.samples`：`[{"rel_path","span":[s,e],"quote"?,"field"?,"value"?}]`（结构化，自由文本不算证据）。审计器自己回读原文（二进制走 `text_extract`、CRLF 归一），核 span，**quote 必须 ⊆ span**；给 field+value 时比对 `--data` 单元格。
+  - `findings`：`[{"detail","resolved","resolution"?}]`。`resolved=false` 报错；`resolved=true` 必须带 `resolution`（`{"cmd","exit"}` 或 `{"artifacts":...}`），命令同样被重跑。
+- 生成方：你在每阶段完成后追加两遍（第 1 遍机器/口径，第 2 遍独立/语义/漂移）；消费方：`scripts/stage_audit.py --ledger ... --require <阶段> --root . [--data ... --scope ... --registry ... --flow ...]`。
+- 判据：每阶段≥2遍、≥2互异角度、≥2互异方法、每遍产物哈希绑定且未变、命令重跑退出码一致（且命令在白名单内）、样本机器回读通过、**至少一遍回读原始资料**、方法标签与证据一致、无未解决/无 resolution 的 finding；审计器另从表本身重算漏斗单调（含 excluded/model 边界）、范围/时间符合性、声明关联基数。任一不满足 → exit 2。**自动探测**：未显式给 `--scope/--registry/--data` 时，自动探测项目根的 `scope.json`/`research_registry.json` 与 `output/dataset/analysis.csv`，使默认 `--root .` 调用即触发重算，而非靠可选旗标才生效。
+- 深度随验收档（submission 抽样、archive 逐格），但遍数≥2、角度互异、方法互异、留台账、零信任验证任何档不豁免。`--no-rerun`/`--no-recompute`/`--exit-zero` 仅调试，交付禁用。
+- 原语库 `scripts/audit_probe.py` 是哈希绑定/命令重跑/原文回读/span-quote/漏斗/键唯一/重扫/重放/关系/时间的唯一实现；测试与审计都调用它，不得各写一份。
 
 ## 17. 目录骨架与全量命名覆盖（layout conformance）
 
@@ -215,6 +221,53 @@ V-05 当前按声明的 sample/subset 分组、按 n_scope 区分口径，对 `c
 - 命名覆盖：表组内全部 `.csv/.tsv/.md`、文档组内全部 `.md/.docx/.pdf`、output 根同级 `.md/.docx/.pdf`（manuscript.docx/pdf 除外，由 manuscript.json title block 覆盖）必须在 `table_map.json`/`doc_map.json`（或 manuscript.json table block）有非空标题条目，否则 error。
 - 消费方：`scripts/layout_conformance.py --root <项目根>` 退出码 0 才能交付；分组与裁决写 `output/qa/layout_conformance.json`，只读查看器据此渲染规范组（插件不内嵌别名表，避免双份维护漂移）；无该报告的旧工作区回退物理目录显示。`--exit-zero` 交付禁用（同 qa_outputs）；扫描上限到达时 coverage 可能不完整，报告留 warning，不得据此宣称已核覆盖。
 - 终检 `qa_outputs.py --table-map --doc-map` 与 `--figure-map` 同语义：命名源缺失/不可解析/无带标题条目 = error。
+
+## 18. 关系与单位符合性（relation conformance）
+
+**硬闸门（声明了跨数据集关联时）。** 关联是*声明*，不是引擎虚构的外键。提交档用轻量检查补上跨表关系的机器核对，与归档档 `entities.py` 的 join 账本互补。
+
+- 注册表 `research_registry.json` 除 `datasets`（各自 `id/path/key/unit`）外，可声明 `joins`：`[{"left","right","on","how","expect","result_n"?,"unit"?}]`。`on` 为列名或 `[左列,右列]` 对；`expect ∈ 1:1|1:N|N:1`；`how ∈ left|inner`。
+- 消费方：`scripts/relation_conformance.py --registry ... --root .`。判据（从表本身重算）：每个数据集 key 列存在且唯一（重复键=error，单位声明不符）；**join 列必须在两表都存在**（缺列=error——否则空键会把每行伪匹配在一起）；`how ∈ left|inner`、`expect ∈ 1:1|1:N|N:1`（非法值=error）；join 的孤儿键、fan-out（`expect=1:1/N:1` 时一个左键匹配多右键=error）、**声明基数中“1”侧的连接键必须唯一**（1:N 的左键、N:1 的右键重复=error）、`result_n` 行数对账（声明≠重算=error）。
+- 粒度不一致强行建模（个人-时期并进个人、many-to-many 放大 N）在此暴露，而不是画进图里才发现。不声明 joins 不报错，但等于把关系正确性完全交给模型自觉——审计第二遍必须专查。
+
+## 19. 时间规则（temporal scope）
+
+范围符合性不止分类白名单。`scope.json` 可声明通用时间规则，引擎不内置任何领域日期：
+
+```json
+{"columns": {"...": {"include": ["..."]}},
+ "temporal": [{"col": "date", "min": "2021-01-01", "max": "2021-12-31"}],
+ "intervals": [{"key": "id", "start": "valid_from", "end": "valid_to"}]}
+```
+
+- `temporal`：日期列越界（含未解析 warning）即 error；`intervals`：同一主键的生效区间重叠（同一时刻两条记录都有效，SCD/拉链合法性）即 error，**区间 end 早于 start 即 error**，不可解析的区间日期记 warning。**月精度边界按整月展开**：`max: 2021-12` 含到 2021-12-31，`min: 2021-01` 从 2021-01-01 起（不是 12-01/01-01 截断）。
+- 消费方：`scope_conformance.py`（声明了 temporal/intervals 时自动核）与 `audit_probe.check_temporal`（stage_audit 重算用）。日期解析支持 `YYYY-MM-DD`/`YYYY-MM`；区间 end 缺失按开放区间处理。
+- 业务状态机的*转移合法性*属领域逻辑，写进项目剖面/代码book，不写死在引擎；本契约只提供通用的时间边界与区间重叠核。
+
+## 20. 全量证据回验（evidence replay）
+
+**硬闸门（有抽取层时）。** 把 references/09 §5 的"证据 100% 可回验"从夹具测试变成可交付闸门。
+
+- 消费方：`scripts/evidence_replay.py --evidence output/coding/evidence.jsonl --root <资料根> [--dataset ...] [--profile ...]`。逐条 evidence 行回读原文（二进制走 `text_extract`、CRLF 归一）跑 `extract_lib.verify_evidence`；给 dataset 时再核字段 span 与单元格值，并核**覆盖率**——每个数据集行都必须有对应证据记录，缺记录的行=error（coverage gap）。
+- receipt 绑定 `extract_lib.py`/`text_extract.py` 的 sha256 与 profile sha256——换解析器不能沿用旧"verified"。任何失败/缺源/空输入 exit 2。
+
+## 21. 语料重扫（rescan / freshness）
+
+**交付前必跑。** 审计台账是审计时刻的陈述，证明不了目录还是那个目录。
+
+- 消费方：`scripts/rescan_corpus.py --root <资料根> --audit-out output/audit`，或终检 `qa_outputs.py --audit output/audit/corpus_files.csv --rescan`（从 `corpus_summary.json` 读 root 自动重扫）。用同一抽样框复用 `audit_corpus` 重扫到 scratch，比对 `corpus_fingerprint` 与逐文件 `rel_path/bytes/md5`。新增/消失/内容变更 = error，须重审。方法复用原审计，不另写一份会漂移的实现。**诚实边界**：原审计用了 `--no-hash` 时 md5 不可用，内容变更只能按字节数判（同尺寸改动证不出），报告留 warning——要铁证就带哈希重审。
+
+## 22. 清洗重放（cleaning replay）
+
+**硬闸门（做过清洗时）。** "复核靠重放"落成命令。
+
+- 消费方：`scripts/cleaning_replay.py --dataset ... --recipe draft/cleaning.json --audited-out output/cleaning`。同 dataset+recipe 重跑到 scratch，比对 `clean_dataset.csv` 字节与 `cleaning_log.jsonl` 的 `sha_in/sha_out` 链；并枚举**完整**丢行集——声明了 `id_columns` 按 id 枚举，未声明则按整行内容枚举（不止日志里的 20 条样本，也不因没声明 id 就返回空）。分歧 exit 2。
+
+## 23. 闸门金丝雀（gate canary，元审计）
+
+审计器本身也要被审计：恒返回 0 的闸门等于没有闸门。
+
+- 消费方：`scripts/gate_canary.py [--only ...]`。在合成夹具上跑各闸门：clean 副本必须 exit 0，植入已知错误的副本必须 exit 2。漏抓或误报即判该闸门坏，exit 2。安装/升级后或 CI 中跑，确认装上的闸门真能抓错。覆盖 scope_conformance/check_decisions/relation_conformance/clean_data/evidence_replay/stage_audit/rescan_corpus/cleaning_replay/temporal。
 
 ---
 

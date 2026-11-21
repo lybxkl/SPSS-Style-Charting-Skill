@@ -8,6 +8,14 @@
   "layout": {},
   "datasets": [
     {
+      "id": "person",
+      "path": "data/person.csv",
+      "key": "person_id",
+      "unit": "一位受访者",
+      "codebook": "data/person_codebook.md",
+      "artifacts": []
+    },
+    {
       "id": "person_wave",
       "path": "data/person_wave.csv",
       "key": ["person_id", "wave"],
@@ -16,6 +24,16 @@
       "provenance": "data/person_wave_provenance.jsonl",
       "review": "data/person_wave_review.jsonl",
       "artifacts": []
+    }
+  ],
+  "joins": [
+    {
+      "left": "person",
+      "right": "person_wave",
+      "on": "person_id",
+      "how": "left",
+      "expect": "1:N",
+      "unit": "一位受访者的一次测量；relation_conformance.py 核孤儿/fan-out/行数对账"
     }
   ]
 }

@@ -163,10 +163,13 @@ def _check_evidence(item: dict, root: str) -> list[dict]:
         if quote:
             slice_n = _norm(text[start:end])
             quote_n = _norm(quote)
-            if quote_n not in slice_n and slice_n not in quote_n:
+            # quote must sit INSIDE the span. Allowing the reverse (span inside
+            # quote) would let a fabricated paragraph that merely contains the
+            # real span pass as a verbatim quote.
+            if quote_n not in slice_n:
                 issues.append(_issue(
                     "error", "evidence", item,
-                    f"quote does not match {ref}: {quote_n[:40]!r} vs {slice_n[:40]!r}"))
+                    f"quote not contained in span {ref}: {quote_n[:40]!r} vs {slice_n[:40]!r}"))
     return issues
 
 

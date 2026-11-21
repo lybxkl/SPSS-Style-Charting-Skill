@@ -33,22 +33,57 @@ description: 从混合研究资料中尽可能完整地发现、整合任意数�
 1. **审计先行**：先跑 `audit_corpus.py` 产出 `corpus_files.csv` + `sample_flow.csv` 并逐档对账。**在此之前禁止任何统计、建模、出图**。自写解析器只产一份 diagnostics.json **不算**完成审计。
 2. **范围符合性**：每个数据集声明 `scope.json` 纳入白名单并跑 `scope_conformance.py`，退出码 0 才能进统计。范围外命名类别**必须**排除，或显式修订白名单并记录理由；**不得**静默留在分析样本。
 3. **命名源齐备**：交付**必须**含 `figure_map.json` + `manuscript.json` + `table_map.json` + `doc_map.json`（无论通用组装器还是自编写稿脚本）；后两者覆盖全部交付表/文档，不只是正文引用的。
-4. **终检**：`qa_outputs.py` 带 `--audit --figure-map --manuscript-spec --table-map --doc-map --min-fontsize 7.2`，退出码 0 才能交付。**禁止**用 `--exit-zero` / `--allow-empty` 把失败伪装成通过。
-5. **阶段双遍审计**：每个阶段完成后必须做≥2遍、角度互异的全方位审计并记入 `output/qa/stage_audit.jsonl`，`stage_audit.py` 退出码 0 才能进下一阶段（见下节）。
+4. **终检**：`qa_outputs.py` 带 `--audit --rescan --figure-map --manuscript-spec --table-map --doc-map --min-fontsize 7.2`，退出码 0 才能交付。`--rescan` 重扫语料核新鲜度（新增/改动文件须重审）。**禁止**用 `--exit-zero` / `--allow-empty` 把失败伪装成通过。
+5. **阶段双遍审计（零信任）**：每个阶段完成后必须做≥2遍、角度互异、**方法互异**的全方位审计并记入 `output/qa/stage_audit.jsonl`，`stage_audit.py --ledger output/qa/stage_audit.jsonl --require <本阶段> --root .` 退出码 0 才能进下一阶段（见下节）。审计器**不信任被审计步骤的任何自报**：产物哈希需要重算绑定、证据命令需要实际重跑比对退出码、样本需要机器回读原文、漏斗/范围/关系需要自己重算。交付禁用 `--no-rerun`/`--no-recompute`/`--exit-zero`。
 6. **目录骨架与命名覆盖**：`layout_conformance.py` 退出码 0——无未声明杂散目录、别名目录不得改挂、表/文档组内交付件均有中文标题来源；分组结果 `output/qa/layout_conformance.json` 供查看器渲染规范目录。「目录是脚本默认写出的」「表不在正文里引用」「查看器能显示英文就行」「时间不够」**都不是**跳过理由；交付表/文档一律放表组/文档组目录，不得借其他组目录逃避覆盖；**禁止**用 `--exit-zero` 把失败伪装成通过。
+7. **零信任独立复核器**：适用即必须跑且退出码 0——`evidence_replay.py`（全量证据回验，有抽取层时）、`relation_conformance.py`（注册表声明了跨数据集关联时）、`cleaning_replay.py`（做过清洗时）、`rescan_corpus.py`（交付前语料新鲜度）。这些检查从原始输入重算，不吃被审计步骤的中间报告。安装/升级后跑 `gate_canary.py` 确认各闸门真能抓住植入错误（clean=0/mutated=2）。
 
 每道闸门把**实际命令与退出码**写进交付说明；只写"已检查"而不给退出码，视为未检查。
 
-## 阶段完成后双遍多角度审计（每阶段强制，≥2 遍）
+## 阶段完成后双遍多角度审计（每阶段强制，≥2 遍，零信任）
 
-每个阶段（范围/审计/编码/数据集/统计/图表/文稿/终检）执行完成后，**必须**做至少 2 遍、**角度互不相同**的全方位审计，把每遍记入 `output/qa/stage_audit.jsonl`（一行一遍：`stage/angle/evidence/findings`），并跑 `python scripts/stage_audit.py --ledger output/qa/stage_audit.jsonl --require <本阶段>` 退出码 0，**才能进入下一阶段**。一遍都不许少，两遍不许同角度。
+每个阶段（范围/审计/编码/数据集/统计/图表/文稿/终检）执行完成后，**必须**做至少 2 遍、**角度互异且方法互异**的全方位审计，把每遍记入 `output/qa/stage_audit.jsonl`，并跑 `python scripts/stage_audit.py --ledger output/qa/stage_audit.jsonl --require <本阶段> --root .` 退出码 0，**才能进入下一阶段**。一遍都不许少，两遍不许同角度或同方法。
 
-- **第 1 遍·机器/口径**：跑本阶段相关校验脚本（审计对账、`report_tables`、`scope_conformance`、`layout_conformance`、模型诊断、`verify_numbers`、`qa_outputs` 等），核对数字、N、口径、范围、命名源与目录骨架；`evidence` 记命令+退出码。
-- **第 2 遍·独立/语义/漂移**：换一条独立路径复核——回原材料抽样重读（submission 按声明抽样、archive 逐格）、对照 `scope.md` 研究问题检查是否跑偏、检查有无遗漏字段/单位/子样本、图与文方向是否一致；`evidence` 记抽样 `rel_path` 与检查项。
-- 两遍发现的任何问题**必须**修复后重审；`findings` 里 `resolved=false` 的条目会被 `stage_audit.py` 判 error。
-- 深度随验收档（submission 抽样、archive 逐格），**但"遍数≥2、角度互异、留台账"三条任何档都不豁免**。
+**审计器不信任被审计步骤的任何东西。** 台账里的每一遍是一组*声明*，`stage_audit.py` 逐条机器验证，而不是读一遍就盖章：
 
-这不是"跑两遍同一脚本"凑数：两遍必须方法/视角不同，第二遍必须独立于第一遍的产出重新取证，专门抓第一遍漏掉的细节和偏离研究问题的跑偏。
+- **产物哈希绑定**：每遍声明 `artifacts`（被审计产物的 sha256）。审计器现在重算这些哈希；字节在审计后变过，该遍即作废须重审。审计是对*这些字节*的陈述，不是漂浮的断言。
+- **命令实际重跑**：`evidence.commands` 的每条命令由审计器用 shlex 解析后**无 shell 实际执行**，真实退出码与声明比对。自报的"exit 0"不是证据。命令必须是幂等的校验命令，且**能从 `--root` 直接运行**（项目目录里用 skill 脚本绝对路径，别写相对 `scripts/`）。**白名单**：台账是不可信输入，审计器只重跑已知校验脚本（`audit_probe.CHECKER_ALLOWLIST`），拒绝 `python -c/-m` 与任何非校验脚本——伪造台账不能把审计器当武器执行任意代码。
+- **样本机器回读**：`evidence.samples` 必须是结构化 `{rel_path, span, quote?, field?, value?}`；审计器自己回读原文（二进制走 `text_extract`、CRLF 归一），核 span，并要求 **quote 落在 span 内部**（比 span 宽的引文可能把真实核心包在编造上下文里）。给了 field+value 还会比对 `--data` 里的单元格。自由文本样本不算证据。
+- **独立性**：≥2 个互异角度 **且** ≥2 个互异方法（`recompute/rerun/rescan/replay/reextract/reread/mutation`），且至少一遍回读了**原始资料**（sample 的 rel_path 在 output/ 与 data/ 之外）。把同一个检查器跑两遍不算独立。方法须与证据一致：`reread/reextract` 遍必须有结构化样本，纯命令遍不能冒称回读。
+- **自行重算**：审计器从表本身重算漏斗单调（含 excluded/model 边界）、范围与时间符合性、声明关联的基数（含 join 列存在性、1 侧键唯一、fan-out、行数对账），不吃被审计步骤写的 QA 报告。未显式给 `--scope/--registry/--data` 时自动探测项目根的 `scope.json`/`research_registry.json`/`output/dataset/analysis.csv`，默认 `--root .` 调用即触发重算。
+- **改判须有证据**：finding 标 `resolved=true` 必须带 `resolution`（重跑命令或产物哈希变更）；只写"resolved": true 不接受。
+
+台账一行一遍：
+
+```
+{"stage":"dataset","angle":"machine","method":"recompute","artifacts":{"output/dataset/analysis.csv":"<sha256>"},"evidence":{"commands":[{"cmd":"python scripts/scope_conformance.py --data output/dataset/analysis.csv --scope scope.json --out output/qa/scope.csv","exit":0}]},"findings":[],"at":"..."}
+{"stage":"dataset","angle":"independent","method":"reread","artifacts":{"output/dataset/analysis.csv":"<sha256>"},"evidence":{"samples":[{"rel_path":"materials/a.pdf","span":[244,268],"quote":"原文片段","field":"wait_minutes","value":30}]},"findings":[],"at":"..."}
+```
+
+- **第 1 遍·机器/口径**（method=recompute/rerun）：跑本阶段校验脚本（审计对账、`report_tables`、`scope_conformance`、`layout_conformance`、模型诊断、`verify_numbers`、`qa_outputs` 等），命令会被审计器重跑。
+- **第 2 遍·独立/语义/漂移**（method=reread/reextract/rescan/replay/mutation）：换一条独立路径——回原材料抽样重读（submission 按声明抽样、archive 逐格）、对照 `scope.md` 检查跑偏、查遗漏字段/单位/子样本、图文方向一致；样本会被审计器机器回读。
+- 两遍发现的任何问题**必须**修复后重审；`findings` 里 `resolved=false` 或缺 resolution 证据的条目会被判 error。
+- 深度随验收档（submission 抽样、archive 逐格），**但"遍数≥2、角度互异、方法互异、留台账、零信任验证"任何档都不豁免**。
+
+这不是"跑两遍同一脚本"凑数，也不是"写两行台账"凑数：两遍必须方法/视角不同，第二遍必须独立于第一遍产出重新取证，且取证本身被审计器机器复核。`--no-rerun`/`--no-recompute`/`--exit-zero` 只供调试，交付禁用——用了就是把零信任降级回自报。
+
+### 零信任独立复核器（适用即必须跑，从原始输入重算）
+
+这些检查不吃被审计步骤的中间报告，自己回读/重跑/重算：
+
+```bash
+python scripts/evidence_replay.py --evidence output/coding/evidence.jsonl --root "资料目录" --dataset output/coding/dataset.csv --out output/qa/evidence_replay.json
+python scripts/relation_conformance.py --registry research_registry.json --root . --out output/qa/relation_conformance.json
+python scripts/cleaning_replay.py --dataset output/coding/dataset.csv --recipe draft/cleaning.json --audited-out output/cleaning --out output/qa/cleaning_replay.json
+python scripts/rescan_corpus.py --root "资料目录" --audit-out output/audit --out output/qa/rescan.json
+python scripts/gate_canary.py --out output/qa/gate_canary.json
+```
+
+- `evidence_replay`：有抽取层就跑，全量证据逐条回验（把 references/09 的"100% 可回验"从夹具测试变成可交付闸门）。
+- `relation_conformance`：注册表声明了 `joins` 就跑，核键唯一/孤儿/fan-out/行数对账（提交档补上跨表关系机器核对）。
+- `cleaning_replay`：做过清洗就跑，重放对账并看完整丢行集。
+- `rescan_corpus`：交付前跑，证明语料仍是审计时那个语料（新增/改动文件须重审）。
+- `gate_canary`：安装/升级后跑，确认装上的闸门真能抓错（clean=0、植入错误=2）。
 
 归档档才使用逐格复算适配器。可在注册表 `verification.adapters` 声明名称与脚本，供 CLI 与工作台共享，例如 `{"envcell":"scripts/envcell_adapter.py"}`。解析器重放可登记 `method=parser_replay`，如实说明它能核一致性、不能独立证明语义；`independent_reextract` 只描述实际独立实施的检查。适配器自动绑定已导入的本项目代码，其他依赖可在适配器的 `verification_dependencies` 列出。归档档里注册表、codebook、解析器或数据在 final 后改变时，重新 prepare/final。最终答复同时列出当前通过、未通过和未评估项。可投稿档不要为了这些句子去跑 prepare/final。
 
@@ -104,7 +139,7 @@ Agent 负责发现单位/字段/关联键，自选或编写工具，广泛提出
 6. **关联 ≠ 因果。** 写“关联/对应/更可能”，不写“导致/使得/证明有效”。
 7. **按验收档复核，可投稿档不做全格回源。** explore 与 submission 的正式结果以注册表、抽样复核、模型回执、数字和图表为准。submission 把脚本抽出的语义值当作候选：写 `docs/decisions/coding-sample.md`，正文包含「抽样复核：」，记下抽查原文、脚本值是否一致和残留误差。archive 才要求主键、空值、标记、编码和派生值逐格回源，prepare 之后实际重读原材料再跑 final；这一档禁止用十行抽查、只看 flags、批量盖 verified 或旧复核代替全检。脚本不可能证明所有语义正确。可投稿档不要调用 `verify_dataset.py`、`verify_source` 或 `research_gate.py` 来换取统计或交付通过。
 8. **查看器可用即自动绑定，不让用户动手。** 工具表见 `data_analysis_workspace` 就在确定产物目录后立即绑定本会话；禁止把"新建工作区/绑定目录"留给用户手动操作。绑定是只读登记，不影响流程。
-9. **每阶段完成后双遍多角度审计。** 任何阶段做完必须≥2遍、角度互异的全方位审计并留 `stage_audit.jsonl` 台账，`stage_audit.py` 通过才能进下一阶段；防漏细节、防跑偏。遍数与角度互异任何验收档都不豁免。
+9. **每阶段完成后双遍多角度审计（零信任）。** 任何阶段做完必须≥2遍、角度互异、方法互异的全方位审计并留 `stage_audit.jsonl` 台账，`stage_audit.py` 通过才能进下一阶段；审计器重算产物哈希、重跑证据命令、机器回读样本、自行重算漏斗/范围/关系，不信任被审计步骤的自报。遍数/角度互异/方法互异任何验收档都不豁免。
 10. **目录骨架与全量命名源。** `output/` 一级目录归入规范骨架，自定义目录在注册表 `layout` 声明，已知别名不得改挂；多轮编码等额外目录放规范组子目录（`output/coding/r1`），不建一级杂散目录；交付表/文档一律放表组/文档组并在 `table_map.json`/`doc_map.json` 登记中文标题，`layout_conformance.py` 通过才能交付，缺一项即视为该阶段未完成。
 11. **宿主支持即走计划模式+目标模式。** 看得到计划/目标工具就必须用：开工前计划经用户批准再执行，任务开始即建目标，全部闸门通过才许标 complete；宿主不支持时书面计划+任务清单降级并在范围说明写明原因。禁止长流水线无计划、无目标跟踪地推进（见顶部「计划模式与目标模式」节）。
 
@@ -440,7 +475,7 @@ python scripts/scope_conformance.py --data output/dataset/analysis.csv --scope s
 
 用 `scripts/csv_to_spss_syntax.py` 生成 `.sps`，避免手写 `GET DATA` 时列类型错位。CSV 里若是“是/否、有/无、支持/不支持”等二值文本，脚本会自动追加 `RECODE ... ('是'=1) ('否'=0) INTO *_num`，Logistic 直接用数值列；不需要时加 `--no-recode`。
 
-**闸门**（范围符合性未过**禁止**进统计）：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释；`scope_conformance.py` 退出码 0。可投稿档在注册表和抽样复核完成后进入统计，不运行 `verify_dataset.py`。归档档才先 prepare、逐格复读、再 final，通过后才把该版本用于正式结果。每个模型 N 从实际样本键与筛选条件重算。
+**闸门**（范围符合性未过**禁止**进统计）：每个数据集按自己的单位与键核对源记录、转换和样本流程；不同粒度的数据集行数不必相等，关联基数必须可解释；`scope_conformance.py` 退出码 0；注册表声明了跨数据集 `joins` 时 `relation_conformance.py` 退出码 0（键唯一/孤儿/fan-out/行数对账机器核，虚构外键或粒度漂移在此暴露）。可投稿档在注册表和抽样复核完成后进入统计，不运行 `verify_dataset.py`。归档档才先 prepare、逐格复读、再 final，通过后才把该版本用于正式结果。每个模型 N 从实际样本键与筛选条件重算。
 
 ---
 
@@ -676,7 +711,7 @@ python scripts/export_pdf_hires.py --docx "manuscript.docx" --out-pdf "manuscrip
 运行：
 
 ```bash
-python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --manifest "output/chart_pack/chart_manifest.csv" --figure-map "output/figure_map.json" --manuscript-spec "manuscript.json" --table-map "output/table_map.json" --doc-map "output/doc_map.json" --min-dpi 600
+python scripts/qa_outputs.py --docx "manuscript.docx" --pdf "manuscript.pdf" --figures "figures" --data "data/analysis.csv" --audit "output/audit/corpus_files.csv" --rescan --manifest "output/chart_pack/chart_manifest.csv" --figure-map "output/figure_map.json" --manuscript-spec "manuscript.json" --table-map "output/table_map.json" --doc-map "output/doc_map.json" --min-dpi 600
 ```
 
 `--figure-map`/`--manuscript-spec`/`--table-map`/`--doc-map` 在终检校验显示名来源存在且可解析（缺=error）；`--audit` 指向阶段 1 的 `corpus_files.csv`，缺失即 error——把"审计先跑"和"命名源齐备"变成终检能卡住的事实，而不是口头约定。目录骨架与命名覆盖另跑 `python scripts/layout_conformance.py --root .`，退出码 0 才能交付（杂散目录、表/文档组无标题交付件均 error）。
@@ -733,7 +768,13 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/mine_candidates.py` | 材料挖掘候选层：TF-IDF 关键词/共现词对(PMI)/NMF 主题，候选行带 rel_path+行号证据锚；产出候选表+mine_receipt.json（corpus/停用词 sha256、seed 入账）；候选不是事实，采纳归研究者；需 scikit-learn，可选 jieba |
 | `scripts/report_tables.py` | 全量数据报表：变量/描述统计/频率/交叉/缺失/重复 + data_report.md；report_index.json 以 sha256 把每张表锚到数据集字节（可接 cleaning_log 与 missing_by_source）；报表与数据报告自动登记进 table_map/doc_map |
 | `scripts/scope_conformance.py` | 通用范围符合性：分析表分类列的实际分布对照 scope.json 的 include 白名单，范围外命名类别 n>0 退出 2，缺失值 warning，`--cell-cols` 报小样本单元格；不含任何学科词 |
-| `scripts/stage_audit.py` | 通用阶段双遍审计台账校验：读 stage_audit.jsonl，每阶段≥2遍、角度互异、每遍有证据（命令+退出码/抽样/检查项）、无未解决 finding，否则退出 2；不含任何学科词 |
+| `scripts/stage_audit.py` | 零信任阶段双遍审计校验：产物哈希重算绑定、证据命令无 shell 实际重跑比对退出码、结构化样本机器回读原文（quote⊆span）、角度+方法互异、至少一遍回读原始资料、漏斗/范围/时间/关系自行重算、改判须 resolution 证据；不满足退出 2；`--no-rerun/--no-recompute/--exit-zero` 仅调试；不含任何学科词 |
+| `scripts/audit_probe.py` | 零信任审计原语库：sha256 绑定、命令重跑、原文回读（二进制走 text_extract+CRLF 归一）、span/quote 校验、漏斗/键唯一重算、语料重扫对账、清洗重放+完整丢行枚举、关系基数、时间区间重叠；供 stage_audit 与各复核器调用 |
+| `scripts/evidence_replay.py` | 全量证据回验闸门：逐条 evidence.jsonl 回读原文跑 verify_evidence，二进制锚定抽取归一文本；receipt 绑定 extract_lib/text_extract/profile 的 sha256；任何失败退出 2 |
+| `scripts/relation_conformance.py` | 提交档关系/单位符合性：按注册表声明的 key/joins 重算键唯一、孤儿键、fan-out、连接行数对账；虚构外键或粒度漂移的关联退出 2；与归档档 entities.py 互补 |
+| `scripts/rescan_corpus.py` | 语料新鲜度：用同一抽样框重扫（复用 audit_corpus）比对 corpus_fingerprint 与逐文件 rel_path/bytes/md5；新增/消失/内容变更退出 2 |
+| `scripts/cleaning_replay.py` | 清洗重放对账：同 dataset+recipe 重跑比对 clean_dataset 字节与指纹链，并枚举完整丢行 id（非 20 条样本）；分歧退出 2 |
+| `scripts/gate_canary.py` | 元审计（审计审计器）：合成夹具上跑各闸门 clean 必须 0、植入已知错误必须 2；漏抓或误报即判该闸门坏，退出 2 |
 | `scripts/layout_conformance.py` | 通用目录骨架与命名覆盖：output/ 一级目录归入闭合规范骨架（已知别名自动归组，自定义目录须注册表 layout 声明），表/文档组交付件须有 table_map/doc_map 中文标题；杂散目录/无标题交付件退出 2，分组结果写 output/qa/layout_conformance.json 供查看器读取；不含任何学科词 |
 | `scripts/extract_lib.py` | 字段抽取层的通用原语（数值/数量/日期/时长/键值块/段落/枚举/证据窗口/否定/同义词/去重计数）+ profile 校验；**不含任何学科词** |
 | `scripts/paper_figures.py` | 按 `paper.json` 组装多面板正文图（GridSpec + 面板字母），产出 `FigureN.*` 与图表 manifest（可注明配色用途） |
@@ -748,7 +789,7 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 | `scripts/auto_chart_pack.py` | 按列角色自动生成数据质量/分布/双变量/聚类/时间/模型诊断/生存/Sankey/UpSet 图与 manifest；默认不设总图数上限；`--width-cm` 全包统一改输出宽度（3–30，px_width 随宽度换算） |
 | `scripts/pubfig.py` | 出版图统一风格、Wilson CI、森林图、热图、提琴、ROC/PR、PCA、MDS、聚类、KM、控制图等 30+ 图型；`compose_figure()` 组装多面板并回读 PNG 校验 dpi |
 | `scripts/export_pdf_hires.py` | Word→PDF 并回填 600 dpi 原图 |
-| `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性 |
+| `scripts/qa_outputs.py` | 检查 PDF 有效 dpi 与**最小字号**、docx 图表数量、空数据、重复键、manifest 的 N/图注/路径、分类色灰度与色盲可分性；`--rescan` 配合 `--audit` 重扫语料核新鲜度 |
 | `scripts/check_decisions.py` | 校验 `decisions.jsonl`：schema、证据 span/引文、候选值是否真的出现过、重复 target、`needs_human` 未决；有 error 退出 2 |
 | `scripts/review_pack.py` | 交付前审稿包：样本/缺失、模型 N、图表状态、数字溯源、未决 decisions、五个审稿人问题；Markdown + JSON 双出，自动登记进 doc_map |
 | `scripts/verify_dataset.py` | 仅归档档：对 CSV 审计视图逐格回读来源、哈希、位置并复算派生值。可投稿档不要运行 |
@@ -803,4 +844,8 @@ python scripts/review_pack.py --data output/dataset/analysis.csv --stats output/
 12. **自编写稿脚本跳过命名源。** 不用 `assemble_manuscript.py` 时也要产出 `figure_map.json`/`manuscript.json`/`table_map.json`/`doc_map.json`，否则图/表/文稿在查看器里全是英文文件名；终检 `--figure-map`/`--manuscript-spec`/`--table-map`/`--doc-map` 与 `layout_conformance.py` 的命名覆盖会卡住。
 13. **自定义目录不声明就交付。** `output/` 下超出已知别名的目录必须在注册表 `layout` 挂到规范组，否则 `layout_conformance.py` 判杂散目录 exit 2；查看器也只按分组报告渲染规范目录。
 14. **宿主有计划/目标工具却不用。** 长流水线没有经批准的计划、没有目标跟踪，跑到一半跑偏，或闸门未过就把目标标成完成——顶部「计划模式与目标模式」节明确禁止；宿主不支持时也要书面计划+任务清单，不是什么都不做。
+15. **把自报台账当审计证据。** 写两行"已检查 exit 0"、把同一个检查器跑两遍、或样本只写文件名字符串，都不是审计。零信任审计器会重跑命令、重算哈希、机器回读原文；`--no-rerun`/`--no-recompute` 交付禁用。
+16. **虚构外键/粒度不一致强行建模。** 猜一个键做 many-to-many 连接、把个人-时期并进个人表，N 被一致放大却全闸门绿灯。注册表声明 `joins` 的期望基数，`relation_conformance.py` 核孤儿/fan-out/行数对账；不声明关联就等于把关系正确性完全押在模型自觉上。
+17. **引文比 span 宽却当逐字证据。** 把真实片段包在编造上下文里当 quote，旧双向包含校验会放行。现在 quote 必须落在 span 内部（`check_decisions`/`audit_probe` 同向）；时间范围/生效区间也要在 scope.json 声明并由机器核，分类白名单核不出日期越界。
+18. **伪造台账把审计器当武器。** 台账命令是不可信输入；零信任审计器只重跑白名单内的校验脚本，拒绝 `python -c/-m` 与任意脚本。往 evidence.commands 塞破坏性命令不会被执行，只会判该遍证据无效。方法标签也要与证据一致——纯命令遍冒称 reread 会被拒。
 
